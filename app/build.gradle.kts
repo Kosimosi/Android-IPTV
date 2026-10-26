@@ -12,8 +12,26 @@ android {
         applicationId = "com.retro.iptv"
         minSdk = 26
         targetSdk = 35
-        versionCode = 3
-        versionName = "1.2"
+        versionCode = 4
+        versionName = "1.3"
+    }
+
+    // Fixed debug key (restored by CI from debug.keystore.b64) so new APKs install over old ones
+    val sharedKeystore = file("debug.keystore")
+    if (sharedKeystore.exists()) {
+        signingConfigs {
+            create("shared") {
+                storeFile = sharedKeystore
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+            }
+        }
+        buildTypes {
+            getByName("debug") {
+                signingConfig = signingConfigs.getByName("shared")
+            }
+        }
     }
 
     compileOptions {
