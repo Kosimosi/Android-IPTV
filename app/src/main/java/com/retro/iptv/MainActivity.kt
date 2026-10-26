@@ -1,10 +1,8 @@
 package com.retro.iptv
 
 import android.content.Context
-import android.content.Intent
 import android.graphics.Color as AndroidColor
 import android.media.AudioManager
-import android.net.Uri
 import android.os.Bundle
 import android.view.KeyEvent
 import android.widget.Toast
@@ -59,9 +57,6 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
 import java.net.URL
-
-const val GITHUB_REPO_API = "https://api.github.com/repos/Kosimosi/Android-IPTV/releases/latest"
-const val APK_DOWNLOAD_URL = "https://github.com/Kosimosi/Android-IPTV/releases/latest/download/RetroIPTV.apk"
 
 // --- COLOR PALETTE (Modern Oak) ---
 val OakDarkBackground = Color(0xFF140F0C)
@@ -235,7 +230,7 @@ fun ChannelSidebar(
     isOpen: Boolean,
     channels: List<Channel>,
     currentIndex: Int,
-    favoriteUrls: Set<String>,
+    favoriteUrls: List<String>,
     onToggleFavorite: (String) -> Unit,
     onClose: () -> Unit,
     onChannelSelected: (Int) -> Unit
@@ -245,7 +240,7 @@ fun ChannelSidebar(
 
     val listState = rememberLazyListState()
 
-    val filteredList = remember(searchQuery, channels, showOnlyFavorites, favoriteUrls) {
+    val filteredList = remember(searchQuery, channels, showOnlyFavorites, favoriteUrls.toList()) {
         var base = if (showOnlyFavorites) channels.filter { favoriteUrls.contains(it.url) } else channels
         if (searchQuery.isNotBlank()) {
             base = base.filter { it.title.contains(searchQuery, ignoreCase = true) }
@@ -253,7 +248,7 @@ fun ChannelSidebar(
         base
     }
 
-    // Auto-scroll to currently playing channel when sidebar opens (Doesn't start from #1)
+    // Auto-scrolls to the playing channel when opening (Doesn't start from channel 1)
     LaunchedEffect(isOpen) {
         if (isOpen && channels.isNotEmpty()) {
             val targetInFiltered = filteredList.indexOfFirst { it.url == channels.getOrNull(currentIndex)?.url }
@@ -286,7 +281,6 @@ fun ChannelSidebar(
                 .padding(20.dp)
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
-                // Top Header + Tabs
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -294,7 +288,6 @@ fun ChannelSidebar(
                 ) {
                     Text(text = "CHANNELS", color = AmberDial, fontSize = 15.sp, fontWeight = FontWeight.Black, letterSpacing = 2.sp)
 
-                    // ALL / FAVORITES Toggle
                     Row(
                         modifier = Modifier
                             .clip(RoundedCornerShape(20.dp))
@@ -369,7 +362,6 @@ fun ChannelSidebar(
                                 )
                                 .onFocusChanged { isFocused = it.isFocused }
                                 .focusable()
-                                // Click to play, Long-press to toggle favorite!
                                 .combinedClickable(
                                     onClick = { onChannelSelected(originalIndex) },
                                     onLongClick = { onToggleFavorite(channel.url) }
@@ -397,7 +389,6 @@ fun ChannelSidebar(
                                 modifier = Modifier.weight(1f)
                             )
 
-                            // Star icon if favorited
                             if (isFav) {
                                 Text(text = "★", color = AmberDial, fontSize = 14.sp)
                             }
@@ -427,7 +418,8 @@ class MainActivity : ComponentActivity() {
     private val isBuffering = mutableStateOf(true)
     private val errorMessage = mutableStateOf<String?>(null)
 
-    private val favoriteUrls = mutableStateSetOf<String>()
+    // Using mutableStateListOf so Compose can track additions and removals
+    private val favoriteUrls = mutableStateListOf<String>()
     private val channels = mutableStateListOf<Channel>()
 
     private var watchdogJob: Job? = null
@@ -443,7 +435,6 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
 
-        // Load favorites from local device storage
         loadFavoritesFromStorage()
 
         player = ExoPlayer.Builder(this).build().apply {
@@ -462,7 +453,6 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                // Video Resolution Listener
                 override fun onVideoSizeChanged(videoSize: VideoSize) {
                     if (videoSize.width > 0 && videoSize.height > 0) {
                         currentResolution.value = when {
@@ -506,7 +496,6 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier
                         .fillMaxSize()
                         .background(Color.Black)
-                        // Tapping screen toggles Menu button visibility & sidebar
                         .clickable {
                             isMenuButtonVisible.value = true
                             startMenuAutoHideTimer()
@@ -576,7 +565,7 @@ class MainActivity : ComponentActivity() {
                         notice = osdNotice.value
                     )
 
-                    // Bottom-Right Resolution Badge (Disappears with banner)
+                    // Bottom-Right Resolution Badge
                     ResolutionBadge(
                         visible = isResolutionVisible.value,
                         resolution = currentResolution.value
@@ -601,7 +590,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // --- FAVORITES STORAGE HELPERS ---
     private fun loadFavoritesFromStorage() {
         val prefs = getSharedPreferences("retro_iptv_prefs", Context.MODE_PRIVATE)
         val savedFavs = prefs.getStringSet("fav_urls", emptySet()) ?: emptySet()
@@ -610,22 +598,18 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun toggleFavorite(url: String) {
-        val updated = favoriteUrls.toMutableSet()
-        if (updated.contains(url)) {
-            updated.remove(url)
+        if (favoriteUrls.contains(url)) {
+            favoriteUrls.remove(url)
             Toast.makeText(this, "Removed from Favorites", Toast.LENGTH_SHORT).show()
         } else {
-            updated.add(url)
+            favoriteUrls.add(url)
             Toast.makeText(this, "Added to Favorites ★", Toast.LENGTH_SHORT).show()
         }
-        favoriteUrls.clear()
-        favoriteUrls.addAll(updated)
 
         val prefs = getSharedPreferences("retro_iptv_prefs", Context.MODE_PRIVATE)
-        prefs.edit().putStringSet("fav_urls", updated).apply()
+        prefs.edit().putStringSet("fav_urls", favoriteUrls.toSet()).apply()
     }
 
-    // Auto-hide menu button after 4 seconds of inactivity
     private fun startMenuAutoHideTimer() {
         menuHideJob?.cancel()
         menuHideJob = lifecycleScope.launch {
