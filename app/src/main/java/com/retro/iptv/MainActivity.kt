@@ -6,6 +6,8 @@ import android.media.AudioManager
 import android.net.Uri
 import android.os.Bundle
 import android.view.KeyEvent
+import android.view.LayoutInflater
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -16,6 +18,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -42,6 +46,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
@@ -459,6 +464,7 @@ class MainActivity : ComponentActivity() {
     private val isBuffering = mutableStateOf(true)
     private val errorMessage = mutableStateOf<String?>(null)
     private val settingsMessage = mutableStateOf<String?>(null)
+    private val statusText = mutableStateOf<String?>("Loading playlist...")
     private val playlistUrlState = mutableStateOf(DEFAULT_PLAYLIST_URL)
     private val sourceLabel = mutableStateOf("URL")
 
@@ -484,6 +490,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         playlistUrlState.value = playlistUrl
         sourceLabel.value = if (prefs.getBoolean(KEY_USE_LOCAL, false)) "Local file" else "URL"
@@ -516,8 +523,8 @@ class MainActivity : ComponentActivity() {
                     // Video View
                     AndroidView(
                         factory = { ctx ->
-                            PlayerView(ctx).apply {
-                                useController = false
+                            // TextureView surface renders correctly inside Compose layers
+                            (LayoutInflater.from(ctx).inflate(R.layout.player_view, null) as PlayerView).apply {
                                 setShutterBackgroundColor(AndroidColor.TRANSPARENT)
                                 isFocusable = false
                                 isClickable = false
@@ -527,13 +534,38 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.fillMaxSize()
                     )
 
+                    // Touch controls (phones/tablets): tap = sidebar, swipe = change channel
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .pointerInput(Unit) {
+                                detectTapGestures(onTap = { onScreenTap() })
+                            }
+                            .pointerInput(Unit) {
+                                var total = 0f
+                                detectHorizontalDragGestures(
+                                    onDragStart = { total = 0f },
+                                    onDragEnd = {
+                                        if (total < -120f) onSwipe(1) else if (total > 120f) onSwipe(-1)
+                                    },
+                                    onHorizontalDrag = { _, dx -> total += dx }
+                                )
+                            }
+                    )
+
                     // Loading Indicator
                     if (isBuffering.value) {
                         Box(
                             modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.Center
                         ) {
-                            CircularProgressIndicator(color = AmberDial)
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                CircularProgressIndicator(color = AmberDial)
+                                statusText.value?.let {
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    Text(text = it, color = WarmAshMuted, fontSize = 14.sp)
+                                }
+                            }
                         }
                     }
 
@@ -649,6 +681,18 @@ class MainActivity : ComponentActivity() {
             }
             else -> super.onKeyDown(keyCode, event)
         }
+    }
+
+    private fun onScreenTap() {
+        when {
+            isSettingsOpen.value -> Unit
+            isSidebarOpen.value -> isSidebarOpen.value = false
+            else -> isSidebarOpen.value = true
+        }
+    }
+
+    private fun onSwipe(delta: Int) {
+        if (!isSidebarOpen.value && !isSettingsOpen.value) switchChannel(delta)
     }
 
     private fun switchChannel(delta: Int) {
@@ -775,6 +819,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
+            statusText.value = null
             if (list.isNotEmpty()) {
                 channels.clear()
                 channels.addAll(list)
