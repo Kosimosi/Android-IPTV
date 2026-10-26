@@ -17,7 +17,6 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -36,7 +35,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import kotlinx.coroutines.launch
 
-// --- 1. COLOR TOKENS ---
+// Color Tokens
 val OakDarkBackground = Color(0xFF140F0C)
 val OakSurface = Color(0xFF261A13)
 val OakSurfaceElevated = Color(0xFF38271D)
@@ -45,13 +44,8 @@ val ParchmentWhite = Color(0xFFFAF4ED)
 val WarmAshMuted = Color(0xFFA8988B)
 val SidebarOakGlass = Color(0xD2140F0C)
 
-// --- 2. DATA MODEL ---
-data class Channel(
-    val title: String,
-    val url: String
-)
+data class Channel(val title: String, val url: String)
 
-// --- 3. RETRO CRT OFF EFFECT ---
 @Composable
 fun CrtTvExitEffect(
     isExiting: Boolean,
@@ -91,7 +85,6 @@ fun CrtTvExitEffect(
     }
 }
 
-// --- 4. CHANNEL OSD BANNER ---
 @Composable
 fun ChannelOsdBanner(visible: Boolean, channel: Channel?, channelIndex: Int) {
     AnimatedVisibility(
@@ -139,7 +132,6 @@ fun ChannelOsdBanner(visible: Boolean, channel: Channel?, channelIndex: Int) {
     }
 }
 
-// --- 5. TRANSPARENT OAK SIDEBAR ---
 @Composable
 fun ChannelSidebar(
     isOpen: Boolean,
@@ -217,7 +209,6 @@ fun ChannelSidebar(
     }
 }
 
-// --- 6. MAIN ACTIVITY & CONTROLLER ---
 class MainActivity : ComponentActivity() {
 
     private lateinit var audioManager: AudioManager
@@ -228,7 +219,6 @@ class MainActivity : ComponentActivity() {
     private val isOsdVisible = mutableStateOf(false)
     private val currentChannelIndex = mutableStateOf(0)
 
-    // Demo IPTV HLS Streams
     private val channels = mutableStateListOf(
         Channel("Akamai Test Stream", "https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8"),
         Channel("Big Buck Bunny HLS", "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8"),
