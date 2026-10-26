@@ -26,11 +26,11 @@ jobs:
           fi
           chmod +x gradlew
 
-      - name: Restore shared debug keystore
-        run: |
-          if [ -f app/debug.keystore.b64 ]; then
-            base64 -d app/debug.keystore.b64 > app/debug.keystore
-          fi
+      - name: Cache debug keystore (keeps the signing key the same between builds)
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: debug-keystore-v1
 
       - name: Build Debug APK
         run: ./gradlew assembleDebug --stacktrace
