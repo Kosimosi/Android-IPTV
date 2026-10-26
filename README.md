@@ -52,6 +52,8 @@ Designed for 10-foot viewing: large, high-contrast, readable from across the roo
 
 The sidebar also has a SETTINGS button at the top, for remotes without a Menu key.
 
+**Touch (phones/tablets):** tap the screen to open or close the sidebar, swipe left/right to change channel, use the hardware volume keys, and the system Back button for the CRT exit.
+
 ## Playlists
 
 - On launch the app loads an M3U/M3U8 playlist from a URL. The default is `https://iptv-org.github.io/iptv/countries/bd.m3u` (`DEFAULT_PLAYLIST_URL` in `MainActivity.kt`).
