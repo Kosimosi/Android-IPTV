@@ -13,7 +13,8 @@
 
     <application
         android:allowBackup="true"
-        android:icon="@android:drawable/sym_def_app_icon"
+        android:icon="@drawable/ic_launcher"
+        android:banner="@drawable/banner"
         android:label="Retro TV"
         android:supportsRtl="true"
         android:hardwareAccelerated="true"
@@ -23,6 +24,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:banner="@drawable/banner"
             android:screenOrientation="landscape"
             android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenLayout|screenSize|smallestScreenSize">
             <intent-filter>
