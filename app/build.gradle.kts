@@ -16,24 +16,6 @@ android {
         versionName = "1.3"
     }
 
-    // Fixed debug key (restored by CI from debug.keystore.b64) so new APKs install over old ones
-    val sharedKeystore = file("debug.keystore")
-    if (sharedKeystore.exists()) {
-        signingConfigs {
-            create("shared") {
-                storeFile = sharedKeystore
-                storePassword = "android"
-                keyAlias = "androiddebugkey"
-                keyPassword = "android"
-            }
-        }
-        buildTypes {
-            getByName("debug") {
-                signingConfig = signingConfigs.getByName("shared")
-            }
-        }
-    }
-
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
