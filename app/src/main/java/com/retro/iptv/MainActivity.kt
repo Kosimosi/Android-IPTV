@@ -1,6 +1,7 @@
 package com.retro.iptv
 
 import android.content.Context
+import android.graphics.Color as AndroidColor
 import android.media.AudioManager
 import android.os.Bundle
 import android.view.KeyEvent
@@ -18,6 +19,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -31,6 +33,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import kotlinx.coroutines.launch
@@ -218,11 +222,14 @@ class MainActivity : ComponentActivity() {
     private val isCrtExiting = mutableStateOf(false)
     private val isOsdVisible = mutableStateOf(false)
     private val currentChannelIndex = mutableStateOf(0)
+    private val isBuffering = mutableStateOf(true)
+    private val errorMessage = mutableStateOf<String?>(null)
 
+    // Rock-solid 100% accessible public test streams (Apple CDN + Google CDN)
     private val channels = mutableStateListOf(
-        Channel("Akamai Test Stream", "https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8"),
-        Channel("Big Buck Bunny HLS", "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8"),
-        Channel("Tears of Steel HLS", "https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8")
+        Channel("Big Buck Bunny (HD)", "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"),
+        Channel("Apple HLS Test Stream", "https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_adv_example_hevc/master.m3u8"),
+        Channel("Tears of Steel (HLS)", "https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8")
     )
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -231,6 +238,19 @@ class MainActivity : ComponentActivity() {
 
         player = ExoPlayer.Builder(this).build().apply {
             playWhenReady = true
+            addListener(object : Player.Listener {
+                override fun onPlaybackStateChanged(state: Int) {
+                    isBuffering.value = (state == Player.STATE_BUFFERING)
+                    if (state == Player.STATE_READY) {
+                        errorMessage.value = null
+                    }
+                }
+
+                override fun onPlayerError(error: PlaybackException) {
+                    isBuffering.value = false
+                    errorMessage.value = "Playback Error: ${error.errorCodeName}"
+                }
+            })
         }
 
         playChannel(currentChannelIndex.value)
@@ -241,22 +261,55 @@ class MainActivity : ComponentActivity() {
                 onAnimationComplete = { finish() }
             ) {
                 Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+                    // Video View
                     AndroidView(
                         factory = { ctx ->
                             PlayerView(ctx).apply {
                                 useController = false
+                                setShutterBackgroundColor(AndroidColor.TRANSPARENT)
+                                isFocusable = false
+                                isClickable = false
                                 this.player = this@MainActivity.player
                             }
                         },
                         modifier = Modifier.fillMaxSize()
                     )
 
+                    // Loading Indicator
+                    if (isBuffering.value) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(color = AmberDial)
+                        }
+                    }
+
+                    // Error Message Display
+                    errorMessage.value?.let { error ->
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(OakSurface)
+                                    .padding(16.dp)
+                            ) {
+                                Text(text = error, color = Color.Red, fontSize = 16.sp)
+                            }
+                        }
+                    }
+
+                    // Channel OSD Banner
                     ChannelOsdBanner(
                         visible = isOsdVisible.value,
                         channel = channels.getOrNull(currentChannelIndex.value),
                         channelIndex = currentChannelIndex.value
                     )
 
+                    // Transparent Oak Sidebar
                     ChannelSidebar(
                         isOpen = isSidebarOpen.value,
                         channels = channels,
@@ -320,6 +373,8 @@ class MainActivity : ComponentActivity() {
 
     private fun playChannel(index: Int) {
         val channel = channels.getOrNull(index) ?: return
+        isBuffering.value = true
+        errorMessage.value = null
         val mediaItem = MediaItem.fromUri(channel.url)
         player.setMediaItem(mediaItem)
         player.prepare()
