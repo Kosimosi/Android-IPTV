@@ -512,6 +512,12 @@ class MainActivity : ComponentActivity() {
             })
         }
 
+        // First launch: open Settings so the M3U playlist can be set right away
+        if (!prefs.getBoolean(KEY_SETUP_DONE, false)) {
+            settingsMessage.value = "Welcome! Paste your M3U URL, or Close to use the default playlist"
+            isSettingsOpen.value = true
+        }
+
         loadPlaylist()
 
         setContent {
@@ -619,7 +625,7 @@ class MainActivity : ComponentActivity() {
                         onSave = { saveUrl(it) },
                         onImportFile = { pickFile() },
                         onReset = { resetPlaylist() },
-                        onClose = { isSettingsOpen.value = false }
+                        onClose = { closeSettings() }
                     )
                 }
             }
@@ -629,7 +635,7 @@ class MainActivity : ComponentActivity() {
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         if (isSettingsOpen.value) {
             if (keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_MENU) {
-                isSettingsOpen.value = false
+                closeSettings()
                 return true
             }
             return super.onKeyDown(keyCode, event)
@@ -722,6 +728,11 @@ class MainActivity : ComponentActivity() {
     private val hideOsd = Runnable { isOsdVisible.value = false }
 
     // ---- Settings -------------------------------------------------------
+
+    private fun closeSettings() {
+        prefs.edit().putBoolean(KEY_SETUP_DONE, true).apply()
+        isSettingsOpen.value = false
+    }
 
     private fun openSettings() {
         settingsMessage.value = null
@@ -846,7 +857,7 @@ class MainActivity : ComponentActivity() {
                 errorMessage.value = null
                 if (fromSettings) {
                     settingsMessage.value = null
-                    isSettingsOpen.value = false
+                    closeSettings()
                     triggerOsd()
                 }
             }
@@ -891,6 +902,7 @@ class MainActivity : ComponentActivity() {
         const val DEFAULT_PLAYLIST_URL = "https://iptv-org.github.io/iptv/countries/bd.m3u"
         private const val KEY_PLAYLIST_URL = "playlist_url"
         private const val KEY_USE_LOCAL = "use_local"
+        private const val KEY_SETUP_DONE = "setup_done"
         private const val KEY_LAST_URL = "last_url"
         private const val CACHE_FILE = "playlist.m3u"
         private const val LOCAL_FILE = "local.m3u"
