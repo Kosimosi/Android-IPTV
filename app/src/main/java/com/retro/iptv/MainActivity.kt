@@ -464,7 +464,7 @@ class MainActivity : ComponentActivity() {
     private val isBuffering = mutableStateOf(true)
     private val errorMessage = mutableStateOf<String?>(null)
     private val settingsMessage = mutableStateOf<String?>(null)
-    private val statusText = mutableStateOf<String?>("Loading playlist...")
+    private val statusText = mutableStateOf<String?>("Retro TV v1.3 - loading playlist...")
     private val playlistUrlState = mutableStateOf(DEFAULT_PLAYLIST_URL)
     private val sourceLabel = mutableStateOf("URL")
 
