@@ -15,6 +15,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -29,6 +30,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -55,7 +57,7 @@ val OakSurfaceElevated = Color(0xFF38271D)
 val AmberDial = Color(0xFFE07A38)
 val ParchmentWhite = Color(0xFFFAF4ED)
 val WarmAshMuted = Color(0xFFA8988B)
-val SidebarOakGlass = Color(0xD2140F0C)
+val SidebarOakGlass = Color(0xE6140F0C)
 
 // --- DATA MODELS ---
 enum class ChannelStatus {
@@ -114,9 +116,9 @@ fun CrtTvExitEffect(
 @Composable
 fun ChannelStatusDot(status: ChannelStatus) {
     val dotColor = when (status) {
-        ChannelStatus.ONLINE -> Color(0xFF4CAF50)   // Green LED
-        ChannelStatus.OFFLINE -> Color(0xFFE53935)  // Red LED
-        ChannelStatus.UNKNOWN -> Color(0xFF555555)  // Gray (pending check)
+        ChannelStatus.ONLINE -> Color(0xFF4CAF50)   // Green
+        ChannelStatus.OFFLINE -> Color(0xFFE53935)  // Red
+        ChannelStatus.UNKNOWN -> Color(0xFF555555)  // Dim Gray
     }
 
     Box(
@@ -136,7 +138,7 @@ fun ChannelOsdBanner(visible: Boolean, channel: Channel?, channelIndex: Int, not
         exit = fadeOut() + slideOutVertically(targetOffsetY = { it / 2 })
     ) {
         Box(
-            modifier = Modifier.fillMaxSize().padding(bottom = 48.dp, start = 64.dp),
+            modifier = Modifier.fillMaxSize().padding(bottom = 32.dp, start = 24.dp, end = 24.dp),
             contentAlignment = Alignment.BottomStart
         ) {
             Row(
@@ -144,7 +146,7 @@ fun ChannelOsdBanner(visible: Boolean, channel: Channel?, channelIndex: Int, not
                     .clip(RoundedCornerShape(12.dp))
                     .background(SidebarOakGlass)
                     .border(1.dp, OakSurfaceElevated, RoundedCornerShape(12.dp))
-                    .padding(horizontal = 24.dp, vertical = 18.dp),
+                    .padding(horizontal = 20.dp, vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Box(
@@ -160,18 +162,18 @@ fun ChannelOsdBanner(visible: Boolean, channel: Channel?, channelIndex: Int, not
                         fontSize = 14.sp
                     )
                 }
-                Spacer(modifier = Modifier.width(16.dp))
+                Spacer(modifier = Modifier.width(14.dp))
                 Column {
                     Text(
                         text = notice ?: channel?.title.orEmpty(),
                         color = ParchmentWhite,
-                        fontSize = 20.sp,
+                        fontSize = 18.sp,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = if (notice != null) "Watchdog Notice" else "Live Stream",
+                        text = if (notice != null) "Notice" else "Live Stream",
                         color = WarmAshMuted,
-                        fontSize = 13.sp
+                        fontSize = 12.sp
                     )
                 }
             }
@@ -179,14 +181,25 @@ fun ChannelOsdBanner(visible: Boolean, channel: Channel?, channelIndex: Int, not
     }
 }
 
-// --- CHANNEL SIDEBAR WITH LED DOTS ---
+// --- SIDEBAR CHANNEL MENU ---
 @Composable
 fun ChannelSidebar(
     isOpen: Boolean,
     channels: List<Channel>,
     currentIndex: Int,
+    onClose: () -> Unit,
     onChannelSelected: (Int) -> Unit
 ) {
+    if (isOpen) {
+        // Semi-transparent background scrim that closes menu when tapped outside
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.5f))
+                .clickable { onClose() }
+        )
+    }
+
     AnimatedVisibility(
         visible = isOpen,
         enter = slideInHorizontally(initialOffsetX = { -it }),
@@ -195,9 +208,10 @@ fun ChannelSidebar(
         Box(
             modifier = Modifier
                 .fillMaxHeight()
-                .width(440.dp)
+                .width(340.dp)
                 .background(SidebarOakGlass)
-                .padding(24.dp)
+                .clickable(enabled = false) {} // Prevent click-through to video
+                .padding(20.dp)
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 Row(
@@ -206,9 +220,9 @@ fun ChannelSidebar(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "BANGLADESH & INDIA",
+                        text = "CHANNELS",
                         color = AmberDial,
-                        fontSize = 14.sp,
+                        fontSize = 15.sp,
                         fontWeight = FontWeight.Black,
                         letterSpacing = 2.sp
                     )
@@ -249,12 +263,11 @@ fun ChannelSidebar(
                             Text(
                                 text = (index + 1).toString().padStart(2, '0'),
                                 color = if (isFocused) AmberDial else WarmAshMuted,
-                                fontSize = 15.sp,
+                                fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold,
-                                modifier = Modifier.width(36.dp)
+                                modifier = Modifier.width(32.dp)
                             )
 
-                            // Status LED Dot
                             ChannelStatusDot(status = channel.status)
 
                             Spacer(modifier = Modifier.width(10.dp))
@@ -264,7 +277,7 @@ fun ChannelSidebar(
                                 color = if (channel.status == ChannelStatus.OFFLINE)
                                     ParchmentWhite.copy(alpha = 0.35f)
                                 else ParchmentWhite,
-                                fontSize = 16.sp,
+                                fontSize = 15.sp,
                                 fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
                             )
                         }
@@ -275,7 +288,7 @@ fun ChannelSidebar(
     }
 }
 
-// --- MAIN ACTIVITY & LOGIC ---
+// --- MAIN ACTIVITY ---
 class MainActivity : ComponentActivity() {
 
     private lateinit var audioManager: AudioManager
@@ -291,11 +304,9 @@ class MainActivity : ComponentActivity() {
 
     private val channels = mutableStateListOf<Channel>()
 
-    // Watchdog variables
     private var watchdogJob: Job? = null
     private var failedSkipCount = 0
 
-    // Bangladesh + India Playlist URLs
     private val playlistUrls = listOf(
         "https://iptv-org.github.io/iptv/countries/bd.m3u",
         "https://iptv-org.github.io/iptv/countries/in.m3u"
@@ -311,7 +322,6 @@ class MainActivity : ComponentActivity() {
                 override fun onPlaybackStateChanged(state: Int) {
                     isBuffering.value = (state == Player.STATE_BUFFERING)
                     if (state == Player.STATE_READY) {
-                        // Stream is alive! Cancel watchdog & mark channel ONLINE
                         watchdogJob?.cancel()
                         failedSkipCount = 0
                         errorMessage.value = null
@@ -324,7 +334,6 @@ class MainActivity : ComponentActivity() {
                 }
 
                 override fun onPlayerError(error: PlaybackException) {
-                    // Skip automatically on immediate error
                     watchdogJob?.cancel()
                     val idx = currentChannelIndex.value
                     if (idx in channels.indices) {
@@ -340,7 +349,6 @@ class MainActivity : ComponentActivity() {
             })
         }
 
-        // Fetch BD + India Playlists
         loadPlaylists()
 
         setContent {
@@ -348,7 +356,34 @@ class MainActivity : ComponentActivity() {
                 isExiting = isCrtExiting.value,
                 onAnimationComplete = { finish() }
             ) {
-                Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+                var dragTotalX by remember { mutableFloatStateOf(0f) }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black)
+                        // MOBILE TOUCH: Tap to toggle sidebar
+                        .clickable {
+                            isSidebarOpen.value = !isSidebarOpen.value
+                        }
+                        // MOBILE SWIPE: Swipe left/right for channel zapping
+                        .pointerInput(Unit) {
+                            detectHorizontalDragGestures(
+                                onDragEnd = {
+                                    if (dragTotalX < -80f) {
+                                        switchChannel(delta = 1) // Swipe Left = Next
+                                    } else if (dragTotalX > 80f) {
+                                        switchChannel(delta = -1) // Swipe Right = Previous
+                                    }
+                                    dragTotalX = 0f
+                                },
+                                onHorizontalDrag = { change, dragAmount ->
+                                    change.consume()
+                                    dragTotalX += dragAmount
+                                }
+                            )
+                        }
+                ) {
                     // Video View
                     AndroidView(
                         factory = { ctx ->
@@ -362,6 +397,24 @@ class MainActivity : ComponentActivity() {
                         },
                         modifier = Modifier.fillMaxSize()
                     )
+
+                    // Mobile Menu Button (Top-Left)
+                    Box(
+                        modifier = Modifier
+                            .padding(top = 24.dp, start = 20.dp)
+                            .clip(CircleShape)
+                            .background(SidebarOakGlass)
+                            .border(1.dp, AmberDial, CircleShape)
+                            .clickable { isSidebarOpen.value = true }
+                            .padding(horizontal = 14.dp, vertical = 8.dp)
+                    ) {
+                        Text(
+                            text = "☰ MENU",
+                            color = AmberDial,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp
+                        )
+                    }
 
                     // Loading Spinner
                     if (isBuffering.value) {
@@ -386,6 +439,7 @@ class MainActivity : ComponentActivity() {
                         isOpen = isSidebarOpen.value,
                         channels = channels,
                         currentIndex = currentChannelIndex.value,
+                        onClose = { isSidebarOpen.value = false },
                         onChannelSelected = { index ->
                             currentChannelIndex.value = index
                             playChannel(index)
@@ -397,7 +451,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // --- M3U LOADER (BD + India) ---
     private fun loadPlaylists() {
         lifecycleScope.launch(Dispatchers.IO) {
             val mergedList = mutableListOf<Channel>()
@@ -417,7 +470,6 @@ class MainActivity : ComponentActivity() {
                     playChannel(0)
                     startBackgroundHealthCheck()
                 } else {
-                    // Fallback to sample stream if download fails
                     channels.add(Channel("Apple Test Stream", "https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_adv_example_hevc/master.m3u8"))
                     playChannel(0)
                 }
@@ -442,7 +494,6 @@ class MainActivity : ComponentActivity() {
         return list
     }
 
-    // --- 15-SECOND AUTO-SKIP WATCHDOG ---
     private fun playChannel(index: Int) {
         val channel = channels.getOrNull(index) ?: return
         isBuffering.value = true
@@ -459,7 +510,7 @@ class MainActivity : ComponentActivity() {
     private fun startWatchdog(targetIndex: Int) {
         watchdogJob?.cancel()
         watchdogJob = lifecycleScope.launch {
-            delay(15_000) // 15 seconds countdown
+            delay(15_000)
 
             if (isBuffering.value || errorMessage.value != null) {
                 if (targetIndex in channels.indices) {
@@ -475,10 +526,9 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // --- BACKGROUND STREAM VERIFIER ---
     private fun startBackgroundHealthCheck() {
         lifecycleScope.launch(Dispatchers.IO) {
-            val semaphore = Semaphore(3) // Check 3 streams at a time
+            val semaphore = Semaphore(3)
 
             channels.forEachIndexed { index, channel ->
                 if (index == currentChannelIndex.value) return@forEachIndexed
@@ -520,7 +570,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // --- REMOTE CONTROLS ---
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         if (isSidebarOpen.value) {
             if (keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
