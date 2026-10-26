@@ -64,6 +64,8 @@ The sidebar also has a SETTINGS button at the top, for remotes without a Menu ke
 
 ### Settings panel
 
+On first launch the Settings panel opens automatically so you can enter your M3U URL (Close keeps the default). The playlist is re-fetched on every app start; reopen Settings any time to change it.
+
 | Control | Action |
 | :-- | :-- |
 | URL field | Press OK to open the on-screen keyboard and type; Done saves |
@@ -87,7 +89,9 @@ If a file picker isn't available (common on Android TV), use a URL instead.
 app/src/main/java/com/retro/iptv/MainActivity.kt   all UI, parser, playback, settings
 app/src/main/AndroidManifest.xml                   TV launcher, banner, permissions
 app/src/main/res/drawable/banner.xml               TV launcher banner (vector)
-app/src/main/res/drawable/ic_launcher.xml          app icon (vector)
+app/src/main/res/drawable/ic_launcher_*.xml        adaptive icon layers (vector)
+app/src/main/res/mipmap-anydpi-v26/ic_launcher*.xml adaptive icon (square + round)
+app/src/main/res/layout/player_view.xml            PlayerView (TextureView surface)
 .github/workflows/blank.yml                        CI: builds app-debug.apk
 ```
 
