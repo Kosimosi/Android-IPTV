@@ -1,63 +1,79 @@
-plugins {
-    id("com.android.application")
-    id("org.jetbrains.kotlin.android")
-    id("org.jetbrains.kotlin.plugin.compose")
-}
+name: Build & Release APK
 
-android {
-    namespace = "com.retro.iptv"
-    compileSdk = 35
+on:
+  push:
+    branches: [ main ]
+    tags:
+      - 'v*'
+  release:
+    types: [published]
+  workflow_dispatch:
 
-    defaultConfig {
-        applicationId = "com.retro.iptv"
-        minSdk = 26
-        targetSdk = 35
-        versionCode = 5
-        versionName = "1.7"
-    }
+permissions:
+  contents: write
 
-    signingConfigs {
-        create("releaseKey") {
-            // Generates and preserves a stable signature so updates install seamlessly
-            storeFile = file("${System.getProperty("user.home")}/.android/debug.keystore")
-            storePassword = "androiddebugkey"
-            keyAlias = "androiddebugkey"
-            keyPassword = "androiddebugkey"
-        }
-    }
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
 
-    buildTypes {
-        debug {
-            signingConfig = signingConfigs.getByName("releaseKey")
-        }
-        release {
-            signingConfig = signingConfigs.getByName("releaseKey")
-            isMinifyEnabled = false
-        }
-    }
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
 
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
-    }
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.10.2'
 
-    buildFeatures {
-        compose = true
-    }
-}
+      - name: Ensure Stable Keystore
+        run: |
+          mkdir -p ~/.android
+          if [ ! -f ~/.android/debug.keystore ]; then
+            keytool -genkeypair -alias androiddebugkey -keypass androiddebugkey -keystore ~/.android/debug.keystore -storepass androiddebugkey -dname "CN=Android Debug,O=Android,C=US" -validity 10000 -keyalg RSA -keysize 2048
+          fi
 
-kotlin {
-    jvmToolchain(17)
-}
+      - name: Generate Wrapper if missing
+        run: |
+          if [ ! -f "gradlew" ]; then
+            gradle wrapper --gradle-version 8.10.2
+          fi
+          chmod +x gradlew
 
-dependencies {
-    implementation(platform("androidx.compose:compose-bom:2024.10.00"))
-    implementation("androidx.compose.ui:ui")
-    implementation("androidx.compose.material3:material3")
-    implementation("androidx.compose.ui:ui-tooling-preview")
-    implementation("androidx.activity:activity-compose:1.9.3")
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug --stacktrace
 
-    implementation("androidx.media3:media3-exoplayer:1.4.1")
-    implementation("androidx.media3:media3-exoplayer-hls:1.4.1")
-    implementation("androidx.media3:media3-ui:1.4.1")
-}
+      # 1. Reads versionName from app/build.gradle.kts and creates versioned name
+      - name: Rename APK with Version
+        run: |
+          # Extract version (e.g. 1.7) from app/build.gradle.kts
+          VERSION=$(grep -o 'versionName = "[^"]*"' app/build.gradle.kts | cut -d'"' -f2 | sed 's/^v//')
+          echo "Detected version: $VERSION"
+          
+          # Create RetroTV-v1.7.apk
+          cp app/build/outputs/apk/debug/app-debug.apk "app/build/outputs/apk/debug/RetroTV-v${VERSION}.apk"
+          
+          # Create RetroIPTV.apk (for in-app updater)
+          cp app/build/outputs/apk/debug/app-debug.apk "app/build/outputs/apk/debug/RetroIPTV.apk"
+
+      # 2. Uploads both APKs to GitHub Artifacts
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: RetroTV-APKs
+          path: app/build/outputs/apk/debug/*.apk
+
+      # 3. Attaches both files to your GitHub Release
+      - name: Upload APKs to Release
+        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            app/build/outputs/apk/debug/RetroTV-v*.apk
+            app/build/outputs/apk/debug/RetroIPTV.apk
+          tag_name: ${{ github.event.release.tag_name || github.ref_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
