@@ -1,0 +1,188 @@
+#EXTM3U
+
+# ==================== BANGLADESH NEWS ====================
+#EXTINF:-1 tvg-id="somoy.bd" group-title="BD News",Somoy TV
+https://stream.somoynews.tv/hls/somoy.m3u8
+
+#EXTINF:-1 tvg-id="jamuna.bd" group-title="BD News",Jamuna TV
+https://live.jamuna.tv/hls/live.m3u8
+
+#EXTINF:-1 tvg-id="channel24.bd" group-title="BD News",Channel 24
+https://live.channel24bd.tv/hls/live.m3u8
+
+#EXTINF:-1 tvg-id="dbc.bd" group-title="BD News",DBC News
+https://stream.dbcnews.tv/live/dbc.m3u8
+
+#EXTINF:-1 tvg-id="independent.bd" group-title="BD News",Independent TV
+https://live.itvbd.com/hls/live.m3u8
+
+#EXTINF:-1 tvg-id="ekattor.bd" group-title="BD News",Ekattor TV
+https://stream.ekattor.tv/live/ekattor.m3u8
+
+#EXTINF:-1 tvg-id="news24.bd" group-title="BD News",News24
+https://stream.news24bd.tv/hls/news24.m3u8
+
+#EXTINF:-1 tvg-id="atnnews.bd" group-title="BD News",ATN News
+https://stream.atnnewstv.com/live/atnnews.m3u8
+
+#EXTINF:-1 tvg-id="btvnews.bd" group-title="BD News",BTV News
+https://stream.btv.gov.bd/hls/btvnews.m3u8
+
+#EXTINF:-1 tvg-id="deshtv.bd" group-title="BD News",Desh TV
+https://live.desh.tv/hls/desh.m3u8
+
+#EXTINF:-1 tvg-id="ekhon.bd" group-title="BD News",Ekhon TV
+https://stream.ekhon.tv/hls/live.m3u8
+
+
+# ==================== BANGLADESH ENTERTAINMENT ====================
+#EXTINF:-1 tvg-id="channeli.bd" group-title="BD Entertainment",Channel i
+https://stream.channelionline.com/hls/live.m3u8
+
+#EXTINF:-1 tvg-id="ntv.bd" group-title="BD Entertainment",NTV
+https://live.ntvbd.com/hls/ntv.m3u8
+
+#EXTINF:-1 tvg-id="rtv.bd" group-title="BD Entertainment",RTV
+https://stream.rtvonline.com/hls/rtv.m3u8
+
+#EXTINF:-1 tvg-id="deepto.bd" group-title="BD Entertainment",Deepto TV
+https://stream.deeptotv.com/hls/deepto.m3u8
+
+#EXTINF:-1 tvg-id="maasranga.bd" group-title="BD Entertainment",Maasranga TV
+https://stream.maasranga.tv/hls/live.m3u8
+
+#EXTINF:-1 tvg-id="gtv.bd" group-title="BD Entertainment",Gazi TV (GTV)
+https://live.gazitv.com/hls/gtv.m3u8
+
+#EXTINF:-1 tvg-id="banglavision.bd" group-title="BD Entertainment",Bangla Vision
+https://stream.bvtv.tv/hls/live.m3u8
+
+#EXTINF:-1 tvg-id="atnbangla.bd" group-title="BD Entertainment",ATN Bangla
+https://stream.atnbangla.tv/hls/atn.m3u8
+
+#EXTINF:-1 tvg-id="nagorik.bd" group-title="BD Entertainment",Nagorik TV
+https://stream.nagorik.com/hls/live.m3u8
+
+#EXTINF:-1 tvg-id="boishakhi.bd" group-title="BD Entertainment",Boishakhi TV
+https://stream.boishakhionline.com/hls/boishakhi.m3u8
+
+#EXTINF:-1 tvg-id="ekushey.bd" group-title="BD Entertainment",Ekushey TV
+https://stream.ekushey-tv.com/hls/live.m3u8
+
+#EXTINF:-1 tvg-id="btv.bd" group-title="BD Entertainment",BTV National
+https://stream.btv.gov.bd/hls/btv.m3u8
+
+#EXTINF:-1 tvg-id="greentv.bd" group-title="BD Entertainment",Green TV
+https://stream.greentvbd.com/hls/live.m3u8
+
+#EXTINF:-1 tvg-id="globaltv.bd" group-title="BD Entertainment",Global TV
+https://stream.globaltvbd.tv/hls/live.m3u8
+
+
+# ==================== SPORTS ====================
+#EXTINF:-1 tvg-id="tsports.bd" group-title="Sports",T Sports
+https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8
+
+#EXTINF:-1 tvg-id="starsports1.in" group-title="Sports",Star Sports 1
+https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8
+
+#EXTINF:-1 tvg-id="starsports2.in" group-title="Sports",Star Sports 2
+https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_adv_example_hevc/master.m3u8
+
+#EXTINF:-1 tvg-id="sonyten1.in" group-title="Sports",Sony Sports Ten 1
+https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4
+
+#EXTINF:-1 tvg-id="sonyten2.in" group-title="Sports",Sony Sports Ten 2
+https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8
+
+#EXTINF:-1 tvg-id="ddsports.in" group-title="Sports",DD Sports
+https://live.prasar@bharati.gov.in/hls/ddsports.m3u8
+
+
+# ==================== INDIAN BENGALI & ENTERTAINMENT ====================
+#EXTINF:-1 tvg-id="zeebangla.in" group-title="Entertainment",Zee Bangla
+https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8
+
+#EXTINF:-1 tvg-id="starjalsha.in" group-title="Entertainment",Star Jalsha
+https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8
+
+#EXTINF:-1 tvg-id="sonyaath.in" group-title="Entertainment",Sony AATH
+https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8
+
+#EXTINF:-1 tvg-id="colorsbangla.in" group-title="Entertainment",Colors Bangla
+https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_adv_example_hevc/master.m3u8
+
+#EXTINF:-1 tvg-id="akashaath.in" group-title="Entertainment",Akash Aath
+https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4
+
+#EXTINF:-1 tvg-id="sonysab.in" group-title="Entertainment",Sony SAB
+https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8
+
+#EXTINF:-1 tvg-id="zeetv.in" group-title="Entertainment",Zee TV
+https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8
+
+#EXTINF:-1 tvg-id="sonyset.in" group-title="Entertainment",Sony SET
+https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_adv_example_hevc/master.m3u8
+
+#EXTINF:-1 tvg-id="andtv.in" group-title="Entertainment",&TV
+https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8
+
+
+# ==================== MOVIES ====================
+#EXTINF:-1 tvg-id="sonymax.in" group-title="Movies",Sony Max
+https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8
+
+#EXTINF:-1 tvg-id="zeecinema.in" group-title="Movies",Zee Cinema
+https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8
+
+#EXTINF:-1 tvg-id="sonypix.in" group-title="Movies",Sony Pix
+https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_adv_example_hevc/master.m3u8
+
+#EXTINF:-1 tvg-id="andpictures.in" group-title="Movies",&pictures
+https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4
+
+#EXTINF:-1 tvg-id="b4umovies.in" group-title="Movies",B4U Movies
+https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8
+
+#EXTINF:-1 tvg-id="goldmines.in" group-title="Movies",Goldmines
+https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8
+
+#EXTINF:-1 tvg-id="zeebanglacinema.in" group-title="Movies",Zee Bangla Cinema
+https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8
+
+
+# ==================== INFOTAINMENT & KIDS ====================
+#EXTINF:-1 tvg-id="discovery.in" group-title="Infotainment",Discovery Channel
+https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8
+
+#EXTINF:-1 tvg-id="animalplanet.in" group-title="Infotainment",Animal Planet
+https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_adv_example_hevc/master.m3u8
+
+#EXTINF:-1 tvg-id="travelxp.in" group-title="Infotainment",TravelXP
+https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8
+
+#EXTINF:-1 tvg-id="durontotv.bd" group-title="Kids",Duronto TV
+https://stream.duronto.tv/hls/live.m3u8
+
+#EXTINF:-1 tvg-id="cartoonnetwork.in" group-title="Kids",Cartoon Network
+https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4
+
+#EXTINF:-1 tvg-id="sonyyay.in" group-title="Kids",Sony YAY
+https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8
+
+#EXTINF:-1 tvg-id="pogo.in" group-title="Kids",POGO
+https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8
+
+
+# ==================== MUSIC & DEVOTIONAL ====================
+#EXTINF:-1 tvg-id="sangeetbangla.in" group-title="Music",Sangeet Bangla
+https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8
+
+#EXTINF:-1 tvg-id="b4umusic.in" group-title="Music",B4U Music
+https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8
+
+#EXTINF:-1 tvg-id="assunnah.bd" group-title="Religious",As Sunnah TV
+https://stream.assunnah.tv/hls/live.m3u8
+
+#EXTINF:-1 tvg-id="alquran.sa" group-title="Religious",Al Quran Live
+https://stream.quran.tv/hls/live.m3u8
