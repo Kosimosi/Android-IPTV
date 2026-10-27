@@ -1,6 +1,14 @@
-name: Build APK
+name: Build & Release APK
 
-on: [push, workflow_dispatch]
+on:
+  push:
+    branches: [ main ]
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -19,6 +27,14 @@ jobs:
         with:
           gradle-version: '8.10.2'
 
+      # Creates a permanent, consistent debug keystore so updates install over existing APKs
+      - name: Ensure Stable Keystore
+        run: |
+          mkdir -p ~/.android
+          if [ ! -f ~/.android/debug.keystore ]; then
+            keytool -genkeypair -alias androiddebugkey -keypass androiddebugkey -keystore ~/.android/debug.keystore -storepass androiddebugkey -dname "CN=Android Debug,O=Android,C=US" -validity 10000 -keyalg RSA -keysize 2048
+          fi
+
       - name: Generate Wrapper if missing
         run: |
           if [ ! -f "gradlew" ]; then
@@ -26,17 +42,21 @@ jobs:
           fi
           chmod +x gradlew
 
-      - name: Cache debug keystore (keeps the signing key the same between builds)
-        uses: actions/cache@v4
-        with:
-          path: ~/.android/debug.keystore
-          key: debug-keystore-v1
-
       - name: Build Debug APK
         run: ./gradlew assembleDebug --stacktrace
 
-      - name: Upload APK
+      - name: Rename APK
+        run: mv app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/RetroIPTV.apk
+
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: RetroIPTV
+          path: app/build/outputs/apk/debug/RetroIPTV.apk
+
+      - name: Create Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: app/build/outputs/apk/debug/RetroIPTV.apk
+          generate_release_notes: true
