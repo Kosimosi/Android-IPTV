@@ -1,17 +1,17 @@
 package com.retro.iptv
 
 import android.content.Context
+import android.content.Intent
 import android.graphics.Color as AndroidColor
 import android.media.AudioManager
+import android.net.Uri
 import android.os.Bundle
 import android.view.KeyEvent
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.animation.*
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.FastOutLinearInEasing
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -26,6 +26,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -33,6 +35,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
@@ -43,10 +46,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.lifecycleScope
+import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.VideoSize
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import kotlinx.coroutines.Dispatchers
@@ -65,17 +71,125 @@ val OakSurfaceElevated = Color(0xFF38271D)
 val AmberDial = Color(0xFFE07A38)
 val ParchmentWhite = Color(0xFFFAF4ED)
 val WarmAshMuted = Color(0xFFA8988B)
-val SidebarOakGlass = Color(0xF2140F0C)
+val SidebarOakGlass = Color(0xF5140F0C)
 
 enum class ChannelStatus { UNKNOWN, ONLINE, OFFLINE }
 
 data class Channel(
     val title: String,
     val url: String,
+    val country: String = "BD",
     val status: ChannelStatus = ChannelStatus.UNKNOWN
 )
 
-// --- RETRO CRT TURN-OFF ANIMATION ---
+// --- 1. YOUTUBE-STYLE APP LAUNCH SCREEN (NO BLACK SCREEN) ---
+@Composable
+fun AppLaunchSplashScreen(
+    isReady: Boolean,
+    onAnimationEnd: () -> Unit
+) {
+    val alphaAnim = remember { Animatable(1f) }
+    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
+    val pulseScale by infiniteTransition.animateFloat(
+        initialValue = 0.95f,
+        targetValue = 1.05f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(900, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "scale"
+    )
+
+    LaunchedEffect(isReady) {
+        if (isReady) {
+            delay(300)
+            alphaAnim.animateTo(0f, tween(500))
+            onAnimationEnd()
+        }
+    }
+
+    if (alphaAnim.value > 0f) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer { alpha = alphaAnim.value }
+                .background(OakDarkBackground),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                // Retro TV Pulsing Logo
+                Box(
+                    modifier = Modifier
+                        .size(100.dp)
+                        .graphicsLayer {
+                            scaleX = pulseScale
+                            scaleY = pulseScale
+                        }
+                        .clip(RoundedCornerShape(24.dp))
+                        .background(OakSurfaceElevated)
+                        .border(2.dp, AmberDial, RoundedCornerShape(24.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("📺", fontSize = 48.sp)
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                Text(
+                    text = "RETRO IPTV",
+                    color = ParchmentWhite,
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 4.sp
+                )
+
+                Text(
+                    text = "CONNECTING STREAMS...",
+                    color = AmberDial,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 2.sp,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+            }
+
+            // Bottom Shimmer Progress Bar (YouTube Style)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(3.dp)
+                    .align(Alignment.BottomCenter)
+                    .background(OakSurface)
+            ) {
+                val shimmerX by infiniteTransition.animateFloat(
+                    initialValue = -300f,
+                    targetValue = 1200f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(1200, easing = LinearEasing),
+                        repeatMode = RepeatMode.Restart
+                    ),
+                    label = "shimmer"
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .width(180.dp)
+                        .graphicsLayer { translationX = shimmerX }
+                        .background(
+                            Brush.horizontalGradient(
+                                listOf(Color.Transparent, AmberDial, Color.Transparent)
+                            )
+                        )
+                )
+            }
+        }
+    }
+}
+
+// --- 2. RETRO CRT EXIT ANIMATION ---
 @Composable
 fun CrtTvExitEffect(
     isExiting: Boolean,
@@ -113,7 +227,6 @@ fun CrtTvExitEffect(
     }
 }
 
-// --- LED STATUS LIGHT ---
 @Composable
 fun ChannelStatusDot(status: ChannelStatus) {
     val dotColor = when (status) {
@@ -124,7 +237,6 @@ fun ChannelStatusDot(status: ChannelStatus) {
     Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(dotColor))
 }
 
-// --- BOTTOM-RIGHT RESOLUTION BADGE ---
 @Composable
 fun ResolutionBadge(visible: Boolean, resolution: String?) {
     AnimatedVisibility(
@@ -133,9 +245,7 @@ fun ResolutionBadge(visible: Boolean, resolution: String?) {
         exit = fadeOut() + slideOutVertically(targetOffsetY = { it / 2 })
     ) {
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(bottom = 32.dp, end = 28.dp),
+            modifier = Modifier.fillMaxSize().padding(bottom = 32.dp, end = 28.dp),
             contentAlignment = Alignment.BottomEnd
         ) {
             Row(
@@ -152,26 +262,15 @@ fun ResolutionBadge(visible: Boolean, resolution: String?) {
                         .background(AmberDial)
                         .padding(horizontal = 6.dp, vertical = 2.dp)
                 ) {
-                    Text(
-                        text = "RES",
-                        color = OakDarkBackground,
-                        fontWeight = FontWeight.Black,
-                        fontSize = 11.sp
-                    )
+                    Text("RES", color = OakDarkBackground, fontWeight = FontWeight.Black, fontSize = 11.sp)
                 }
                 Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = resolution.orEmpty(),
-                    color = ParchmentWhite,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                Text(resolution.orEmpty(), color = ParchmentWhite, fontSize = 14.sp, fontWeight = FontWeight.Bold)
             }
         }
     }
 }
 
-// --- BOTTOM-LEFT CHANNEL BANNER ---
 @Composable
 fun ChannelOsdBanner(visible: Boolean, channel: Channel?, channelIndex: Int, notice: String?) {
     AnimatedVisibility(
@@ -223,7 +322,7 @@ fun ChannelOsdBanner(visible: Boolean, channel: Channel?, channelIndex: Int, not
     }
 }
 
-// --- SIDEBAR CHANNEL MENU WITH SYNC, SEARCH & FAVORITES ---
+// --- 3. LEFT CHANNEL SIDEBAR WITH WORD-BY-WORD SUGGESTION ---
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ChannelSidebar(
@@ -237,8 +336,18 @@ fun ChannelSidebar(
 ) {
     var searchQuery by remember { mutableStateOf("") }
     var showOnlyFavorites by remember { mutableStateOf(false) }
-
     val listState = rememberLazyListState()
+
+    // Real-time word-by-word ghost suggestion in gray
+    val matchedSuggestion = remember(searchQuery, channels) {
+        if (searchQuery.isBlank()) ""
+        else {
+            val found = channels.firstOrNull { it.title.startsWith(searchQuery, ignoreCase = true) }
+            if (found != null && found.title.length >= searchQuery.length) {
+                found.title
+            } else ""
+        }
+    }
 
     val filteredList = remember(searchQuery, channels, showOnlyFavorites, favoriteUrls.toList()) {
         var base = if (showOnlyFavorites) channels.filter { favoriteUrls.contains(it.url) } else channels
@@ -248,22 +357,16 @@ fun ChannelSidebar(
         base
     }
 
-    // Auto-scrolls to the playing channel when opening (Doesn't start from channel 1)
     LaunchedEffect(isOpen) {
         if (isOpen && channels.isNotEmpty()) {
-            val targetInFiltered = filteredList.indexOfFirst { it.url == channels.getOrNull(currentIndex)?.url }
-            if (targetInFiltered >= 0) {
-                listState.scrollToItem(maxOf(0, targetInFiltered - 2))
-            }
+            val target = filteredList.indexOfFirst { it.url == channels.getOrNull(currentIndex)?.url }
+            if (target >= 0) listState.scrollToItem(maxOf(0, target - 2))
         }
     }
 
     if (isOpen) {
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.5f))
-                .clickable { onClose() }
+            modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.5f)).clickable { onClose() }
         )
     }
 
@@ -286,13 +389,10 @@ fun ChannelSidebar(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(text = "CHANNELS", color = AmberDial, fontSize = 15.sp, fontWeight = FontWeight.Black, letterSpacing = 2.sp)
+                    Text("CHANNELS", color = AmberDial, fontSize = 15.sp, fontWeight = FontWeight.Black, letterSpacing = 2.sp)
 
                     Row(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(20.dp))
-                            .background(OakSurface)
-                            .padding(2.dp)
+                        modifier = Modifier.clip(RoundedCornerShape(20.dp)).background(OakSurface).padding(2.dp)
                     ) {
                         Text(
                             text = "ALL",
@@ -319,30 +419,42 @@ fun ChannelSidebar(
                     }
                 }
 
-                // Search Bar
+                // FIXED HEIGHT SEARCH BOX (46dp) WITH GRAY WORD SUGGESTION
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .height(46.dp)
                         .clip(RoundedCornerShape(8.dp))
                         .background(OakSurfaceElevated)
                         .border(1.dp, AmberDial.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
-                        .padding(horizontal = 14.dp, vertical = 10.dp)
+                        .padding(horizontal = 14.dp),
+                    contentAlignment = Alignment.CenterStart
                 ) {
-                    if (searchQuery.isEmpty()) {
-                        Text(text = "🔍 Search channel...", color = WarmAshMuted, fontSize = 14.sp)
+                    // Gray Ghost Suggestion Text behind user typing
+                    if (matchedSuggestion.isNotEmpty()) {
+                        Text(
+                            text = matchedSuggestion,
+                            color = WarmAshMuted.copy(alpha = 0.45f),
+                            fontSize = 14.sp
+                        )
                     }
+
+                    if (searchQuery.isEmpty()) {
+                        Text("🔍 Search channel...", color = WarmAshMuted, fontSize = 14.sp)
+                    }
+
                     BasicTextField(
                         value = searchQuery,
                         onValueChange = { searchQuery = it },
                         textStyle = TextStyle(color = ParchmentWhite, fontSize = 14.sp),
                         cursorBrush = SolidColor(AmberDial),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
                     )
                 }
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Channel List
                 LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     itemsIndexed(filteredList) { _, channel ->
                         val originalIndex = channels.indexOf(channel)
@@ -376,11 +488,8 @@ fun ChannelSidebar(
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier.width(30.dp)
                             )
-
                             ChannelStatusDot(status = channel.status)
-
                             Spacer(modifier = Modifier.width(8.dp))
-
                             Text(
                                 text = channel.title,
                                 color = if (channel.status == ChannelStatus.OFFLINE) ParchmentWhite.copy(alpha = 0.35f) else ParchmentWhite,
@@ -388,9 +497,8 @@ fun ChannelSidebar(
                                 fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
                                 modifier = Modifier.weight(1f)
                             )
-
                             if (isFav) {
-                                Text(text = "★", color = AmberDial, fontSize = 14.sp)
+                                Text("★", color = AmberDial, fontSize = 14.sp)
                             }
                         }
                     }
@@ -400,17 +508,167 @@ fun ChannelSidebar(
     }
 }
 
-// --- MAIN ACTIVITY ---
+// --- 4. RIGHT SIDEBAR: SETTINGS PANEL ---
+@Composable
+fun SettingsSidebar(
+    isOpen: Boolean,
+    includeBD: Boolean,
+    includeIN: Boolean,
+    isWatchdogEnabled: Boolean,
+    favoriteChannels: List<Channel>,
+    onToggleBD: (Boolean) -> Unit,
+    onToggleIN: (Boolean) -> Unit,
+    onToggleWatchdog: (Boolean) -> Unit,
+    onRemoveFavorite: (String) -> Unit,
+    onClose: () -> Unit
+) {
+    if (isOpen) {
+        Box(
+            modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.5f)).clickable { onClose() }
+        )
+    }
+
+    AnimatedVisibility(
+        visible = isOpen,
+        enter = slideInHorizontally(initialOffsetX = { it }),
+        exit = slideOutHorizontally(targetOffsetX = { it })
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize(),
+            contentAlignment = Alignment.CenterEnd
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .width(380.dp)
+                    .background(SidebarOakGlass)
+                    .clickable(enabled = false) {}
+                    .padding(24.dp)
+            ) {
+                LazyColumn(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    item {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("SETTINGS", color = AmberDial, fontSize = 16.sp, fontWeight = FontWeight.Black, letterSpacing = 2.sp)
+                            Text("✕", color = WarmAshMuted, fontSize = 18.sp, modifier = Modifier.clickable { onClose() }.padding(8.dp))
+                        }
+                    }
+
+                    // Channel Sources Checkmarks
+                    item {
+                        Text("CHANNEL REGIONS", color = ParchmentWhite, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(
+                                checked = includeBD,
+                                onCheckedChange = { onToggleBD(it) },
+                                colors = CheckboxDefaults.colors(checkedColor = AmberDial, checkmarkColor = OakDarkBackground)
+                            )
+                            Text("🇧🇩 Bangladesh Channels", color = ParchmentWhite, fontSize = 14.sp)
+                        }
+
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(
+                                checked = includeIN,
+                                onCheckedChange = { onToggleIN(it) },
+                                colors = CheckboxDefaults.colors(checkedColor = AmberDial, checkmarkColor = OakDarkBackground)
+                            )
+                            Text("🇮🇳 India Channels", color = ParchmentWhite, fontSize = 14.sp)
+                        }
+                    }
+
+                    // Auto-Skip Watchdog Toggle
+                    item {
+                        Text("PLAYBACK WATCHDOG", color = ParchmentWhite, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(OakSurface)
+                                .clickable { onToggleWatchdog(!isWatchdogEnabled) }
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Auto-skip after 15s if stream fails", color = ParchmentWhite, fontSize = 13.sp)
+                            Text(if (isWatchdogEnabled) "ON" else "OFF", color = if (isWatchdogEnabled) AmberDial else WarmAshMuted, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    // Google Sync Card
+                    item {
+                        Text("CLOUD BACKUP", color = ParchmentWhite, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(OakSurfaceElevated)
+                                .border(1.dp, AmberDial.copy(alpha = 0.5f), RoundedCornerShape(10.dp))
+                                .clickable {
+                                    // Google login integration point
+                                }
+                                .padding(14.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("G", fontWeight = FontWeight.Black, fontSize = 20.sp, color = AmberDial)
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Text("Sign in with Google", color = ParchmentWhite, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                    Text("Sync favorites to cloud", color = WarmAshMuted, fontSize = 11.sp)
+                                }
+                            }
+                        }
+                    }
+
+                    // Favorites Manager
+                    item {
+                        Text("FAVORITES MANAGER (${favoriteChannels.size})", color = ParchmentWhite, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    }
+
+                    itemsIndexed(favoriteChannels) { _, favChannel ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(OakSurface)
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(favChannel.title, color = ParchmentWhite, fontSize = 13.sp, maxLines = 1, modifier = Modifier.weight(1f))
+                            Text("🗑", color = Color.Red, fontSize = 14.sp, modifier = Modifier.clickable { onRemoveFavorite(favChannel.url) }.padding(4.dp))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// --- MAIN ACTIVITY WITH AUDIO ENGINE UPGRADE ---
 class MainActivity : ComponentActivity() {
 
     private lateinit var audioManager: AudioManager
     private lateinit var player: ExoPlayer
 
     private val isSidebarOpen = mutableStateOf(false)
+    private val isSettingsOpen = mutableStateOf(false)
     private val isCrtExiting = mutableStateOf(false)
     private val isOsdVisible = mutableStateOf(false)
     private val isResolutionVisible = mutableStateOf(false)
-    private val isMenuButtonVisible = mutableStateOf(true)
+    private val isControlsVisible = mutableStateOf(true)
+    private val isPlayerReady = mutableStateOf(false)
+
+    private val includeBD = mutableStateOf(true)
+    private val includeIN = mutableStateOf(true)
+    private val isWatchdogEnabled = mutableStateOf(true)
 
     private val currentResolution = mutableStateOf<String?>(null)
     private val osdNotice = mutableStateOf<String?>(null)
@@ -418,72 +676,85 @@ class MainActivity : ComponentActivity() {
     private val isBuffering = mutableStateOf(true)
     private val errorMessage = mutableStateOf<String?>(null)
 
-    // Using mutableStateListOf so Compose can track additions and removals
     private val favoriteUrls = mutableStateListOf<String>()
-    private val channels = mutableStateListOf<Channel>()
+    private val allChannels = mutableStateListOf<Channel>()
+    private val activeChannels = mutableStateListOf<Channel>()
 
     private var watchdogJob: Job? = null
     private var failedSkipCount = 0
-    private var menuHideJob: Job? = null
-
-    private val playlistUrls = listOf(
-        "https://iptv-org.github.io/iptv/countries/bd.m3u",
-        "https://iptv-org.github.io/iptv/countries/in.m3u"
-    )
+    private var autoHideJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
-
         loadFavoritesFromStorage()
 
-        player = ExoPlayer.Builder(this).build().apply {
-            playWhenReady = true
-            addListener(object : Player.Listener {
-                override fun onPlaybackStateChanged(state: Int) {
-                    isBuffering.value = (state == Player.STATE_BUFFERING)
-                    if (state == Player.STATE_READY) {
-                        watchdogJob?.cancel()
-                        failedSkipCount = 0
-                        errorMessage.value = null
-                        val idx = currentChannelIndex.value
-                        if (idx in channels.indices) {
-                            channels[idx] = channels[idx].copy(status = ChannelStatus.ONLINE)
-                        }
-                    }
-                }
-
-                override fun onVideoSizeChanged(videoSize: VideoSize) {
-                    if (videoSize.width > 0 && videoSize.height > 0) {
-                        currentResolution.value = when {
-                            videoSize.height >= 2160 -> "4K UHD"
-                            videoSize.height >= 1440 -> "2K QHD"
-                            videoSize.height >= 1080 -> "1080p FHD"
-                            videoSize.height >= 720 -> "720p HD"
-                            videoSize.height >= 480 -> "480p SD"
-                            else -> "${videoSize.height}p"
-                        }
-                        triggerResolutionOsd()
-                    }
-                }
-
-                override fun onPlayerError(error: PlaybackException) {
-                    watchdogJob?.cancel()
-                    val idx = currentChannelIndex.value
-                    if (idx in channels.indices) {
-                        channels[idx] = channels[idx].copy(status = ChannelStatus.OFFLINE)
-                    }
-                    if (failedSkipCount < channels.size) {
-                        failedSkipCount++
-                        triggerOsdNotice("Stream offline, hopping to next...")
-                        switchChannel(delta = 1)
-                    }
-                }
-            })
+        // --- UPGRADED AUDIO & PLAYBACK ENGINE ---
+        // Enables hardware/software decoder auto-fallback for AC3, E-AC3, AAC-LATM & MP2 streams
+        val renderersFactory = DefaultRenderersFactory(this).apply {
+            setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
         }
 
+        val audioAttributes = AudioAttributes.Builder()
+            .setUsage(C.USAGE_MEDIA)
+            .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
+            .build()
+
+        player = ExoPlayer.Builder(this, renderersFactory)
+            .setAudioAttributes(audioAttributes, true) // Handles Audio Focus cleanly
+            .build().apply {
+                playWhenReady = true
+                addListener(object : Player.Listener {
+                    // YOUTUBE-STYLE FIRST FRAME: Eliminates Black Screen!
+                    override fun onRenderedFirstFrame() {
+                        isPlayerReady.value = true
+                    }
+
+                    override fun onPlaybackStateChanged(state: Int) {
+                        isBuffering.value = (state == Player.STATE_BUFFERING)
+                        if (state == Player.STATE_READY) {
+                            isPlayerReady.value = true
+                            watchdogJob?.cancel()
+                            failedSkipCount = 0
+                            errorMessage.value = null
+                            val idx = currentChannelIndex.value
+                            if (idx in activeChannels.indices) {
+                                activeChannels[idx] = activeChannels[idx].copy(status = ChannelStatus.ONLINE)
+                            }
+                        }
+                    }
+
+                    override fun onVideoSizeChanged(videoSize: VideoSize) {
+                        if (videoSize.width > 0 && videoSize.height > 0) {
+                            currentResolution.value = when {
+                                videoSize.height >= 2160 -> "4K UHD"
+                                videoSize.height >= 1440 -> "2K QHD"
+                                videoSize.height >= 1080 -> "1080p FHD"
+                                videoSize.height >= 720 -> "720p HD"
+                                videoSize.height >= 480 -> "480p SD"
+                                else -> "${videoSize.height}p"
+                            }
+                            triggerResolutionOsd()
+                        }
+                    }
+
+                    override fun onPlayerError(error: PlaybackException) {
+                        watchdogJob?.cancel()
+                        val idx = currentChannelIndex.value
+                        if (idx in activeChannels.indices) {
+                            activeChannels[idx] = activeChannels[idx].copy(status = ChannelStatus.OFFLINE)
+                        }
+                        if (isWatchdogEnabled.value && failedSkipCount < activeChannels.size) {
+                            failedSkipCount++
+                            triggerOsdNotice("Stream offline, skipping to next...")
+                            switchChannel(delta = 1)
+                        }
+                    }
+                })
+            }
+
         loadPlaylists()
-        startMenuAutoHideTimer()
+        startAutoHideTimer()
 
         setContent {
             CrtTvExitEffect(
@@ -497,8 +768,8 @@ class MainActivity : ComponentActivity() {
                         .fillMaxSize()
                         .background(Color.Black)
                         .clickable {
-                            isMenuButtonVisible.value = true
-                            startMenuAutoHideTimer()
+                            isControlsVisible.value = true
+                            startAutoHideTimer()
                         }
                         .pointerInput(Unit) {
                             detectHorizontalDragGestures(
@@ -514,7 +785,7 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                 ) {
-                    // Video View
+                    // Video Layer
                     AndroidView(
                         factory = { ctx ->
                             PlayerView(ctx).apply {
@@ -528,53 +799,72 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.fillMaxSize()
                     )
 
-                    // Auto-Hiding Mobile Menu Button
+                    // TOP AUTO-HIDING NAVIGATION BUTTONS
                     AnimatedVisibility(
-                        visible = isMenuButtonVisible.value,
+                        visible = isControlsVisible.value,
                         enter = fadeIn(),
                         exit = fadeOut()
                     ) {
-                        Box(
+                        Row(
                             modifier = Modifier
-                                .padding(top = 24.dp, start = 20.dp)
-                                .clip(CircleShape)
-                                .background(SidebarOakGlass)
-                                .border(1.dp, AmberDial, CircleShape)
-                                .clickable {
-                                    isSidebarOpen.value = true
-                                    startMenuAutoHideTimer()
-                                }
-                                .padding(horizontal = 14.dp, vertical = 8.dp)
+                                .fillMaxWidth()
+                                .padding(top = 24.dp, start = 20.dp, end = 20.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text(text = "☰ MENU", color = AmberDial, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            // Left: Channel Menu
+                            Box(
+                                modifier = Modifier
+                                    .clip(CircleShape)
+                                    .background(SidebarOakGlass)
+                                    .border(1.dp, AmberDial, CircleShape)
+                                    .clickable {
+                                        isSidebarOpen.value = true
+                                        startAutoHideTimer()
+                                    }
+                                    .padding(horizontal = 14.dp, vertical = 8.dp)
+                            ) {
+                                Text("☰ CHANNELS", color = AmberDial, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            }
+
+                            // Right: Settings Menu
+                            Box(
+                                modifier = Modifier
+                                    .clip(CircleShape)
+                                    .background(SidebarOakGlass)
+                                    .border(1.dp, AmberDial, CircleShape)
+                                    .clickable {
+                                        isSettingsOpen.value = true
+                                        startAutoHideTimer()
+                                    }
+                                    .padding(horizontal = 14.dp, vertical = 8.dp)
+                            ) {
+                                Text("⚙ SETTINGS", color = AmberDial, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            }
                         }
                     }
 
-                    // Loading Spinner
-                    if (isBuffering.value) {
+                    if (isBuffering.value && isPlayerReady.value) {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             CircularProgressIndicator(color = AmberDial)
                         }
                     }
 
-                    // Bottom-Left Channel Banner
                     ChannelOsdBanner(
                         visible = isOsdVisible.value,
-                        channel = channels.getOrNull(currentChannelIndex.value),
+                        channel = activeChannels.getOrNull(currentChannelIndex.value),
                         channelIndex = currentChannelIndex.value,
                         notice = osdNotice.value
                     )
 
-                    // Bottom-Right Resolution Badge
                     ResolutionBadge(
                         visible = isResolutionVisible.value,
                         resolution = currentResolution.value
                     )
 
-                    // Channel Sidebar
+                    // Left Channel Menu
                     ChannelSidebar(
                         isOpen = isSidebarOpen.value,
-                        channels = channels,
+                        channels = activeChannels,
                         currentIndex = currentChannelIndex.value,
                         favoriteUrls = favoriteUrls,
                         onToggleFavorite = { url -> toggleFavorite(url) },
@@ -585,8 +875,47 @@ class MainActivity : ComponentActivity() {
                             isSidebarOpen.value = false
                         }
                     )
+
+                    // Right Settings Menu
+                    SettingsSidebar(
+                        isOpen = isSettingsOpen.value,
+                        includeBD = includeBD.value,
+                        includeIN = includeIN.value,
+                        isWatchdogEnabled = isWatchdogEnabled.value,
+                        favoriteChannels = allChannels.filter { favoriteUrls.contains(it.url) },
+                        onToggleBD = {
+                            includeBD.value = it
+                            applyRegionFilter()
+                        },
+                        onToggleIN = {
+                            includeIN.value = it
+                            applyRegionFilter()
+                        },
+                        onToggleWatchdog = { isWatchdogEnabled.value = it },
+                        onRemoveFavorite = { url -> toggleFavorite(url) },
+                        onClose = { isSettingsOpen.value = false }
+                    )
+
+                    // YOUTUBE-STYLE LAUNCH SPLASH OVERLAY (DISSOLVES WHEN FIRST FRAME RENDERS)
+                    AppLaunchSplashScreen(
+                        isReady = isPlayerReady.value,
+                        onAnimationEnd = { /* Splash removed */ }
+                    )
                 }
             }
+        }
+    }
+
+    private fun applyRegionFilter() {
+        val filtered = allChannels.filter { channel ->
+            (includeBD.value && channel.country == "BD") ||
+            (includeIN.value && channel.country == "IN")
+        }
+        activeChannels.clear()
+        activeChannels.addAll(filtered)
+        if (activeChannels.isNotEmpty()) {
+            currentChannelIndex.value = 0
+            playChannel(0)
         }
     }
 
@@ -605,55 +934,48 @@ class MainActivity : ComponentActivity() {
             favoriteUrls.add(url)
             Toast.makeText(this, "Added to Favorites ★", Toast.LENGTH_SHORT).show()
         }
-
         val prefs = getSharedPreferences("retro_iptv_prefs", Context.MODE_PRIVATE)
         prefs.edit().putStringSet("fav_urls", favoriteUrls.toSet()).apply()
     }
 
-    private fun startMenuAutoHideTimer() {
-        menuHideJob?.cancel()
-        menuHideJob = lifecycleScope.launch {
+    private fun startAutoHideTimer() {
+        autoHideJob?.cancel()
+        autoHideJob = lifecycleScope.launch {
             delay(4000)
-            if (!isSidebarOpen.value) {
-                isMenuButtonVisible.value = false
+            if (!isSidebarOpen.value && !isSettingsOpen.value) {
+                isControlsVisible.value = false
             }
         }
     }
 
     private fun triggerResolutionOsd() {
         isResolutionVisible.value = true
-        window.decorView.postDelayed({
-            isResolutionVisible.value = false
-        }, 3500)
+        window.decorView.postDelayed({ isResolutionVisible.value = false }, 3500)
     }
 
     private fun loadPlaylists() {
         lifecycleScope.launch(Dispatchers.IO) {
-            val mergedList = mutableListOf<Channel>()
-            for (url in playlistUrls) {
-                try {
-                    val response = URL(url).readText()
-                    mergedList.addAll(parseM3u(response))
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-            }
+            val list = mutableListOf<Channel>()
+            try {
+                val bdText = URL("https://iptv-org.github.io/iptv/countries/bd.m3u").readText()
+                list.addAll(parseM3u(bdText, "BD"))
+            } catch (e: Exception) { e.printStackTrace() }
+
+            try {
+                val inText = URL("https://iptv-org.github.io/iptv/countries/in.m3u").readText()
+                list.addAll(parseM3u(inText, "IN"))
+            } catch (e: Exception) { e.printStackTrace() }
 
             withContext(Dispatchers.Main) {
-                if (mergedList.isNotEmpty()) {
-                    channels.clear()
-                    channels.addAll(mergedList)
-                    playChannel(0)
-                    startBackgroundHealthCheck()
-                } else {
-                    channels.add(Channel("Apple Test Stream", "https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_adv_example_hevc/master.m3u8"))
-                    playChannel(0)
-                }
+                allChannels.clear()
+                allChannels.addAll(list)
+                applyRegionFilter()
+                startBackgroundHealthCheck()
             }
         }
     }
 
-    private fun parseM3u(content: String): List<Channel> {
+    private fun parseM3u(content: String, country: String): List<Channel> {
         val list = mutableListOf<Channel>()
         var currentTitle = ""
         for (line in content.lines()) {
@@ -662,7 +984,7 @@ class MainActivity : ComponentActivity() {
                 currentTitle = trimmed.substringAfterLast(",").trim()
             } else if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
                 if (currentTitle.isNotEmpty()) {
-                    list.add(Channel(title = currentTitle, url = trimmed))
+                    list.add(Channel(title = currentTitle, url = trimmed, country = country))
                     currentTitle = ""
                 }
             }
@@ -671,7 +993,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun playChannel(index: Int) {
-        val channel = channels.getOrNull(index) ?: return
+        val channel = activeChannels.getOrNull(index) ?: return
         isBuffering.value = true
         errorMessage.value = null
         osdNotice.value = null
@@ -681,7 +1003,9 @@ class MainActivity : ComponentActivity() {
         player.setMediaItem(mediaItem)
         player.prepare()
 
-        startWatchdog(index)
+        if (isWatchdogEnabled.value) {
+            startWatchdog(index)
+        }
     }
 
     private fun startWatchdog(targetIndex: Int) {
@@ -689,10 +1013,10 @@ class MainActivity : ComponentActivity() {
         watchdogJob = lifecycleScope.launch {
             delay(15_000)
             if (isBuffering.value || errorMessage.value != null) {
-                if (targetIndex in channels.indices) {
-                    channels[targetIndex] = channels[targetIndex].copy(status = ChannelStatus.OFFLINE)
+                if (targetIndex in activeChannels.indices) {
+                    activeChannels[targetIndex] = activeChannels[targetIndex].copy(status = ChannelStatus.OFFLINE)
                 }
-                if (failedSkipCount < channels.size) {
+                if (failedSkipCount < activeChannels.size) {
                     failedSkipCount++
                     triggerOsdNotice("Stream offline, skipping to next...")
                     switchChannel(delta = 1)
@@ -704,15 +1028,15 @@ class MainActivity : ComponentActivity() {
     private fun startBackgroundHealthCheck() {
         lifecycleScope.launch(Dispatchers.IO) {
             val semaphore = Semaphore(3)
-            channels.forEachIndexed { index, channel ->
+            activeChannels.forEachIndexed { index, channel ->
                 if (index == currentChannelIndex.value) return@forEachIndexed
                 semaphore.acquire()
                 launch {
                     try {
                         val isAlive = testStreamUrl(channel.url)
                         withContext(Dispatchers.Main) {
-                            if (index in channels.indices) {
-                                channels[index] = channels[index].copy(
+                            if (index in activeChannels.indices) {
+                                activeChannels[index] = activeChannels[index].copy(
                                     status = if (isAlive) ChannelStatus.ONLINE else ChannelStatus.OFFLINE
                                 )
                             }
@@ -752,6 +1076,14 @@ class MainActivity : ComponentActivity() {
             return super.onKeyDown(keyCode, event)
         }
 
+        if (isSettingsOpen.value) {
+            if (keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+                isSettingsOpen.value = false
+                return true
+            }
+            return super.onKeyDown(keyCode, event)
+        }
+
         return when (keyCode) {
             KeyEvent.KEYCODE_DPAD_RIGHT -> {
                 switchChannel(delta = 1)
@@ -773,6 +1105,10 @@ class MainActivity : ComponentActivity() {
                 isSidebarOpen.value = true
                 true
             }
+            KeyEvent.KEYCODE_MENU -> {
+                isSettingsOpen.value = true
+                true
+            }
             KeyEvent.KEYCODE_BACK -> {
                 isCrtExiting.value = true
                 true
@@ -782,8 +1118,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun switchChannel(delta: Int) {
-        if (channels.isEmpty()) return
-        val newIndex = (currentChannelIndex.value + delta + channels.size) % channels.size
+        if (activeChannels.isEmpty()) return
+        val newIndex = (currentChannelIndex.value + delta + activeChannels.size) % activeChannels.size
         currentChannelIndex.value = newIndex
         playChannel(newIndex)
         triggerOsdNotice(null)
@@ -801,7 +1137,7 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         super.onDestroy()
         watchdogJob?.cancel()
-        menuHideJob?.cancel()
+        autoHideJob?.cancel()
         player.release()
     }
 }
