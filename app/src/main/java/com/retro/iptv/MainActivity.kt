@@ -1,3 +1,5 @@
+@file:OptIn(androidx.media3.common.util.UnstableApi::class)
+
 package com.retro.iptv
 
 import android.content.Context
@@ -79,7 +81,6 @@ val SidebarOakGlass = Color(0xF5140F0C)
 
 enum class ChannelStatus { UNKNOWN, ONLINE, OFFLINE }
 
-// Multi-URL resilient channel data model
 data class Channel(
     val title: String,
     val url: String,
@@ -89,23 +90,18 @@ data class Channel(
     val status: ChannelStatus = ChannelStatus.UNKNOWN
 )
 
-// --- 1. EMBEDDED HARDCODED AKASH STANDARD LINEUP (SAFE VAULT) ---
+// --- EMBEDDED AKASH STANDARD LINEUP ---
 val EmbeddedAkashStandardChannels = listOf(
-    // Sports
     Channel("T Sports HD", "https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8", "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8", "BD", true),
     Channel("Star Sports 1", "https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_adv_example_hevc/master.m3u8", null, "IN", true),
     Channel("Star Sports 2", "https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8", null, "IN", true),
     Channel("Sony Sports Ten 1", "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4", null, "IN", true),
     Channel("Sony Sports Ten 2", "https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8", null, "IN", true),
-    
-    // Bengali Entertainment & Movies
     Channel("Star Jalsha HD", "https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_adv_example_hevc/master.m3u8", null, "IN", true),
     Channel("Zee Bangla HD", "https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8", null, "IN", true),
     Channel("Colors Bangla", "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8", null, "IN", true),
     Channel("Jalsha Movies", "https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8", null, "IN", true),
     Channel("Zee Bangla Cinema", "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4", null, "IN", true),
-
-    // Bangladeshi Channels
     Channel("Somoy TV", "https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8", null, "BD", true),
     Channel("Jamuna TV", "https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_adv_example_hevc/master.m3u8", null, "BD", true),
     Channel("Channel 24", "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8", null, "BD", true),
@@ -114,8 +110,6 @@ val EmbeddedAkashStandardChannels = listOf(
     Channel("BTV National", "https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8", null, "BD", true),
     Channel("Deepto TV", "https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_adv_example_hevc/master.m3u8", null, "BD", true),
     Channel("Maasranga TV", "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8", null, "BD", true),
-
-    // Hindi & Infotainment
     Channel("Sony SET HD", "https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_adv_example_hevc/master.m3u8", null, "IN", true),
     Channel("Star Plus HD", "https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8", null, "IN", true),
     Channel("Sony MAX", "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8", null, "IN", true),
@@ -124,7 +118,7 @@ val EmbeddedAkashStandardChannels = listOf(
     Channel("Animal Planet", "https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8", null, "IN", true)
 )
 
-// --- 2. YOUTUBE-STYLE APP LAUNCH SCREEN ---
+// --- APP LAUNCH SCREEN ---
 @Composable
 fun AppLaunchSplashScreen(
     isReady: Boolean,
@@ -233,7 +227,7 @@ fun AppLaunchSplashScreen(
     }
 }
 
-// --- 3. RETRO CRT EXIT ANIMATION ---
+// --- RETRO CRT EXIT ANIMATION ---
 @Composable
 fun CrtTvExitEffect(
     isExiting: Boolean,
@@ -366,7 +360,7 @@ fun ChannelOsdBanner(visible: Boolean, channel: Channel?, channelIndex: Int, not
     }
 }
 
-// --- 4. CHANNEL SIDEBAR WITH PREMIUM TAB ---
+// --- CHANNEL SIDEBAR ---
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ChannelSidebar(
@@ -379,7 +373,7 @@ fun ChannelSidebar(
     onChannelSelected: (Int) -> Unit
 ) {
     var searchQuery by remember { mutableStateOf("") }
-    var selectedTab by remember { mutableIntStateOf(0) } // 0: ALL, 1: FAV, 2: PREMIUM
+    var selectedTab by remember { mutableIntStateOf(0) }
     val listState = rememberLazyListState()
 
     val ghostSuggestion = remember(searchQuery, channels) {
@@ -438,7 +432,6 @@ fun ChannelSidebar(
                 ) {
                     Text("CHANNELS", color = AmberDial, fontSize = 15.sp, fontWeight = FontWeight.Black, letterSpacing = 2.sp)
 
-                    // 3 TABS: ALL / FAV / PREMIUM
                     Row(
                         modifier = Modifier.clip(RoundedCornerShape(20.dp)).background(OakSurface).padding(2.dp)
                     ) {
@@ -478,7 +471,6 @@ fun ChannelSidebar(
                     }
                 }
 
-                // FIXED HEIGHT SEARCH BOX (46dp)
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -573,7 +565,7 @@ fun ChannelSidebar(
     }
 }
 
-// --- 5. SETTINGS PANEL ---
+// --- SETTINGS PANEL ---
 @Composable
 fun SettingsSidebar(
     isOpen: Boolean,
@@ -789,7 +781,7 @@ fun SettingsSidebar(
     }
 }
 
-// --- 6. MAIN ACTIVITY ---
+// --- MAIN ACTIVITY ---
 class MainActivity : ComponentActivity() {
 
     private lateinit var audioManager: AudioManager
@@ -830,7 +822,6 @@ class MainActivity : ComponentActivity() {
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
         loadSettingsFromStorage()
 
-        // 1. Audio Engine Upgrade (Hardware & Software fallback)
         val renderersFactory = DefaultRenderersFactory(this).apply {
             setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
         }
@@ -840,14 +831,14 @@ class MainActivity : ComponentActivity() {
             .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
             .build()
 
-        // 2. HTTP Data Source with Anti-403 Forbidden Desktop User-Agent
         val httpDataSourceFactory = DefaultHttpDataSource.Factory()
-            .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
+            .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
             .setAllowCrossProtocolRedirects(true)
             .setConnectTimeoutMs(8000)
             .setReadTimeoutMs(8000)
 
-        val mediaSourceFactory = DefaultMediaSourceFactory(httpDataSourceFactory)
+        val mediaSourceFactory = DefaultMediaSourceFactory(this)
+            .setDataSourceFactory(httpDataSourceFactory)
 
         player = ExoPlayer.Builder(this, renderersFactory)
             .setMediaSourceFactory(mediaSourceFactory)
@@ -893,11 +884,9 @@ class MainActivity : ComponentActivity() {
                 })
             }
 
-        // Initialize with Safe Embedded Akash Lineup immediately
         allChannels.addAll(EmbeddedAkashStandardChannels)
         applyRegionFilter()
 
-        // Sync with online playlists in background
         loadPlaylists()
         startAutoHideTimer()
 
@@ -1084,7 +1073,6 @@ class MainActivity : ComponentActivity() {
         watchdogJob?.cancel()
         val currentChannel = activeChannels.getOrNull(targetIndex) ?: return
 
-        // 1. If primary URL failed, try backup link first before skipping!
         if (!isPlayingBackup && currentChannel.backupUrl != null) {
             isPlayingBackup = true
             triggerOsdNotice("Switching to backup stream...")
@@ -1095,7 +1083,6 @@ class MainActivity : ComponentActivity() {
             return
         }
 
-        // 2. If both primary and backup fail, mark OFFLINE and hop to next channel
         isPlayingBackup = false
         if (targetIndex in activeChannels.indices) {
             activeChannels[targetIndex] = activeChannels[targetIndex].copy(status = ChannelStatus.OFFLINE)
@@ -1175,7 +1162,6 @@ class MainActivity : ComponentActivity() {
     private fun loadPlaylists() {
         lifecycleScope.launch(Dispatchers.IO) {
             val list = mutableListOf<Channel>()
-            // Always keep Embedded Akash Lineup
             list.addAll(EmbeddedAkashStandardChannels)
 
             if (customM3uUrl.value.isNotBlank()) {
@@ -1184,12 +1170,10 @@ class MainActivity : ComponentActivity() {
                     list.addAll(parseM3u(customText, "CUSTOM"))
                 } catch (e: Exception) { e.printStackTrace() }
             } else {
-                // Try BDIX Mrgify with failover protection
                 try {
                     val mrgifyText = URL("https://raw.githubusercontent.com/abusaeeidx/Mrgify-BDIX-IPTV/main/playlist.m3u").readText()
                     list.addAll(parseM3u(mrgifyText, "BD"))
                 } catch (e: Exception) {
-                    // Fallback to iptv-org if Mrgify is unreachable
                     try {
                         val bdText = URL("https://iptv-org.github.io/iptv/countries/bd.m3u").readText()
                         list.addAll(parseM3u(bdText, "BD"))
