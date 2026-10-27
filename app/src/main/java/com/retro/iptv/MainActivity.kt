@@ -54,8 +54,10 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.VideoSize
+import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.PlayerView
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -77,13 +79,52 @@ val SidebarOakGlass = Color(0xF5140F0C)
 
 enum class ChannelStatus { UNKNOWN, ONLINE, OFFLINE }
 
+// Multi-URL resilient channel data model
 data class Channel(
     val title: String,
     val url: String,
+    val backupUrl: String? = null,
     val country: String = "BD",
+    val isPremium: Boolean = false,
     val status: ChannelStatus = ChannelStatus.UNKNOWN
 )
 
+// --- 1. EMBEDDED HARDCODED AKASH STANDARD LINEUP (SAFE VAULT) ---
+val EmbeddedAkashStandardChannels = listOf(
+    // Sports
+    Channel("T Sports HD", "https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8", "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8", "BD", true),
+    Channel("Star Sports 1", "https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_adv_example_hevc/master.m3u8", null, "IN", true),
+    Channel("Star Sports 2", "https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8", null, "IN", true),
+    Channel("Sony Sports Ten 1", "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4", null, "IN", true),
+    Channel("Sony Sports Ten 2", "https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8", null, "IN", true),
+    
+    // Bengali Entertainment & Movies
+    Channel("Star Jalsha HD", "https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_adv_example_hevc/master.m3u8", null, "IN", true),
+    Channel("Zee Bangla HD", "https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8", null, "IN", true),
+    Channel("Colors Bangla", "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8", null, "IN", true),
+    Channel("Jalsha Movies", "https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8", null, "IN", true),
+    Channel("Zee Bangla Cinema", "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4", null, "IN", true),
+
+    // Bangladeshi Channels
+    Channel("Somoy TV", "https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8", null, "BD", true),
+    Channel("Jamuna TV", "https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_adv_example_hevc/master.m3u8", null, "BD", true),
+    Channel("Channel 24", "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8", null, "BD", true),
+    Channel("Channel i", "https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8", null, "BD", true),
+    Channel("NTV HD", "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4", null, "BD", true),
+    Channel("BTV National", "https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8", null, "BD", true),
+    Channel("Deepto TV", "https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_adv_example_hevc/master.m3u8", null, "BD", true),
+    Channel("Maasranga TV", "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8", null, "BD", true),
+
+    // Hindi & Infotainment
+    Channel("Sony SET HD", "https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_adv_example_hevc/master.m3u8", null, "IN", true),
+    Channel("Star Plus HD", "https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8", null, "IN", true),
+    Channel("Sony MAX", "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8", null, "IN", true),
+    Channel("Discovery HD", "https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8", null, "IN", true),
+    Channel("National Geographic", "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4", null, "IN", true),
+    Channel("Animal Planet", "https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8", null, "IN", true)
+)
+
+// --- 2. YOUTUBE-STYLE APP LAUNCH SCREEN ---
 @Composable
 fun AppLaunchSplashScreen(
     isReady: Boolean,
@@ -151,7 +192,7 @@ fun AppLaunchSplashScreen(
                 )
 
                 Text(
-                    text = "CONNECTING STREAMS...",
+                    text = "INITIALIZING AKASH STREAMS...",
                     color = AmberDial,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
@@ -192,6 +233,7 @@ fun AppLaunchSplashScreen(
     }
 }
 
+// --- 3. RETRO CRT EXIT ANIMATION ---
 @Composable
 fun CrtTvExitEffect(
     isExiting: Boolean,
@@ -314,8 +356,8 @@ fun ChannelOsdBanner(visible: Boolean, channel: Channel?, channelIndex: Int, not
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = if (notice != null) "Notice" else "Live Stream",
-                        color = WarmAshMuted,
+                        text = if (channel?.isPremium == true) "👑 RetroTV Premium (Akash)" else if (notice != null) "Notice" else "Live Stream",
+                        color = if (channel?.isPremium == true) AmberDial else WarmAshMuted,
                         fontSize = 12.sp
                     )
                 }
@@ -324,7 +366,7 @@ fun ChannelOsdBanner(visible: Boolean, channel: Channel?, channelIndex: Int, not
     }
 }
 
-// --- 3. CHANNEL SIDEBAR ---
+// --- 4. CHANNEL SIDEBAR WITH PREMIUM TAB ---
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ChannelSidebar(
@@ -337,7 +379,7 @@ fun ChannelSidebar(
     onChannelSelected: (Int) -> Unit
 ) {
     var searchQuery by remember { mutableStateOf("") }
-    var showOnlyFavorites by remember { mutableStateOf(false) }
+    var selectedTab by remember { mutableIntStateOf(0) } // 0: ALL, 1: FAV, 2: PREMIUM
     val listState = rememberLazyListState()
 
     val ghostSuggestion = remember(searchQuery, channels) {
@@ -350,8 +392,12 @@ fun ChannelSidebar(
         }
     }
 
-    val filteredList = remember(searchQuery, channels, showOnlyFavorites, favoriteUrls.toList()) {
-        var base = if (showOnlyFavorites) channels.filter { favoriteUrls.contains(it.url) } else channels
+    val filteredList = remember(searchQuery, channels, selectedTab, favoriteUrls.toList()) {
+        var base = when (selectedTab) {
+            1 -> channels.filter { favoriteUrls.contains(it.url) }
+            2 -> channels.filter { it.isPremium }
+            else -> channels
+        }
         if (searchQuery.isNotBlank()) {
             base = base.filter { it.title.contains(searchQuery, ignoreCase = true) }
         }
@@ -379,7 +425,7 @@ fun ChannelSidebar(
         Box(
             modifier = Modifier
                 .fillMaxHeight()
-                .width(360.dp)
+                .width(380.dp)
                 .background(SidebarOakGlass)
                 .clickable(enabled = false) {}
                 .padding(20.dp)
@@ -392,34 +438,47 @@ fun ChannelSidebar(
                 ) {
                     Text("CHANNELS", color = AmberDial, fontSize = 15.sp, fontWeight = FontWeight.Black, letterSpacing = 2.sp)
 
+                    // 3 TABS: ALL / FAV / PREMIUM
                     Row(
                         modifier = Modifier.clip(RoundedCornerShape(20.dp)).background(OakSurface).padding(2.dp)
                     ) {
                         Text(
                             text = "ALL",
-                            color = if (!showOnlyFavorites) OakDarkBackground else WarmAshMuted,
-                            fontSize = 11.sp,
+                            color = if (selectedTab == 0) OakDarkBackground else WarmAshMuted,
+                            fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier
                                 .clip(RoundedCornerShape(16.dp))
-                                .background(if (!showOnlyFavorites) AmberDial else Color.Transparent)
-                                .clickable { showOnlyFavorites = false }
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                                .background(if (selectedTab == 0) AmberDial else Color.Transparent)
+                                .clickable { selectedTab = 0 }
+                                .padding(horizontal = 7.dp, vertical = 4.dp)
                         )
                         Text(
                             text = "★ FAV",
-                            color = if (showOnlyFavorites) OakDarkBackground else WarmAshMuted,
-                            fontSize = 11.sp,
+                            color = if (selectedTab == 1) OakDarkBackground else WarmAshMuted,
+                            fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier
                                 .clip(RoundedCornerShape(16.dp))
-                                .background(if (showOnlyFavorites) AmberDial else Color.Transparent)
-                                .clickable { showOnlyFavorites = true }
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                                .background(if (selectedTab == 1) AmberDial else Color.Transparent)
+                                .clickable { selectedTab = 1 }
+                                .padding(horizontal = 7.dp, vertical = 4.dp)
+                        )
+                        Text(
+                            text = "👑 AKASH",
+                            color = if (selectedTab == 2) OakDarkBackground else AmberDial,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Black,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(if (selectedTab == 2) AmberDial else Color.Transparent)
+                                .clickable { selectedTab = 2 }
+                                .padding(horizontal = 7.dp, vertical = 4.dp)
                         )
                     }
                 }
 
+                // FIXED HEIGHT SEARCH BOX (46dp)
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -500,6 +559,9 @@ fun ChannelSidebar(
                                 fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
                                 modifier = Modifier.weight(1f)
                             )
+                            if (channel.isPremium) {
+                                Text("👑", fontSize = 12.sp, modifier = Modifier.padding(end = 4.dp))
+                            }
                             if (isFav) {
                                 Text("★", color = AmberDial, fontSize = 14.sp)
                             }
@@ -511,17 +573,19 @@ fun ChannelSidebar(
     }
 }
 
-// --- 4. SETTINGS PANEL (CUSTOM M3U + REGIONS + FAVORITES FIX) ---
+// --- 5. SETTINGS PANEL ---
 @Composable
 fun SettingsSidebar(
     isOpen: Boolean,
     includeBD: Boolean,
     includeIN: Boolean,
+    includePremium: Boolean,
     customM3uUrl: String,
     isWatchdogEnabled: Boolean,
     favoriteChannels: List<Channel>,
     onToggleBD: (Boolean) -> Unit,
     onToggleIN: (Boolean) -> Unit,
+    onTogglePremium: (Boolean) -> Unit,
     onLoadCustomM3u: (String) -> Unit,
     onResetDefaultM3u: () -> Unit,
     onToggleWatchdog: (Boolean) -> Unit,
@@ -566,7 +630,6 @@ fun SettingsSidebar(
                         }
                     }
 
-                    // --- CUSTOM M3U URL FIELD ---
                     item {
                         Text("PLAYLIST SOURCE (M3U)", color = ParchmentWhite, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                         Spacer(modifier = Modifier.height(8.dp))
@@ -623,10 +686,18 @@ fun SettingsSidebar(
                         }
                     }
 
-                    // --- REGION CHECKBOXES ---
                     item {
-                        Text("CHANNEL REGIONS", color = ParchmentWhite, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        Text("CHANNEL CATEGORIES", color = ParchmentWhite, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                         Spacer(modifier = Modifier.height(8.dp))
+
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(
+                                checked = includePremium,
+                                onCheckedChange = { onTogglePremium(it) },
+                                colors = CheckboxDefaults.colors(checkedColor = AmberDial, checkmarkColor = OakDarkBackground)
+                            )
+                            Text("👑 RetroTV Premium (Akash Lineup)", color = AmberDial, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        }
 
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Checkbox(
@@ -634,7 +705,7 @@ fun SettingsSidebar(
                                 onCheckedChange = { onToggleBD(it) },
                                 colors = CheckboxDefaults.colors(checkedColor = AmberDial, checkmarkColor = OakDarkBackground)
                             )
-                            Text("🇧🇩 Bangladesh Channels", color = ParchmentWhite, fontSize = 14.sp)
+                            Text("🇧🇩 Bangladesh Public Channels", color = ParchmentWhite, fontSize = 14.sp)
                         }
 
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -643,11 +714,10 @@ fun SettingsSidebar(
                                 onCheckedChange = { onToggleIN(it) },
                                 colors = CheckboxDefaults.colors(checkedColor = AmberDial, checkmarkColor = OakDarkBackground)
                             )
-                            Text("🇮🇳 India Channels", color = ParchmentWhite, fontSize = 14.sp)
+                            Text("🇮🇳 India Public Channels", color = ParchmentWhite, fontSize = 14.sp)
                         }
                     }
 
-                    // --- PLAYBACK WATCHDOG ---
                     item {
                         Text("PLAYBACK WATCHDOG", color = ParchmentWhite, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                         Spacer(modifier = Modifier.height(8.dp))
@@ -666,7 +736,6 @@ fun SettingsSidebar(
                         }
                     }
 
-                    // --- FAVORITES BACKUP / EXPORT ---
                     item {
                         Text("FAVORITES BACKUP", color = ParchmentWhite, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                         Spacer(modifier = Modifier.height(8.dp))
@@ -690,7 +759,6 @@ fun SettingsSidebar(
                         }
                     }
 
-                    // --- FAVORITES MANAGER ---
                     item {
                         Text("FAVORITES MANAGER (${favoriteChannels.size})", color = ParchmentWhite, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                     }
@@ -721,7 +789,7 @@ fun SettingsSidebar(
     }
 }
 
-// --- 5. MAIN ACTIVITY ---
+// --- 6. MAIN ACTIVITY ---
 class MainActivity : ComponentActivity() {
 
     private lateinit var audioManager: AudioManager
@@ -737,6 +805,7 @@ class MainActivity : ComponentActivity() {
 
     private val includeBD = mutableStateOf(true)
     private val includeIN = mutableStateOf(true)
+    private val includePremium = mutableStateOf(true)
     private val customM3uUrl = mutableStateOf("")
     private val isWatchdogEnabled = mutableStateOf(true)
 
@@ -753,6 +822,7 @@ class MainActivity : ComponentActivity() {
     private var watchdogJob: Job? = null
     private var healthCheckJob: Job? = null
     private var failedSkipCount = 0
+    private var isPlayingBackup = false
     private var autoHideJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -760,6 +830,7 @@ class MainActivity : ComponentActivity() {
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
         loadSettingsFromStorage()
 
+        // 1. Audio Engine Upgrade (Hardware & Software fallback)
         val renderersFactory = DefaultRenderersFactory(this).apply {
             setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
         }
@@ -769,7 +840,17 @@ class MainActivity : ComponentActivity() {
             .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
             .build()
 
+        // 2. HTTP Data Source with Anti-403 Forbidden Desktop User-Agent
+        val httpDataSourceFactory = DefaultHttpDataSource.Factory()
+            .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
+            .setAllowCrossProtocolRedirects(true)
+            .setConnectTimeoutMs(8000)
+            .setReadTimeoutMs(8000)
+
+        val mediaSourceFactory = DefaultMediaSourceFactory(httpDataSourceFactory)
+
         player = ExoPlayer.Builder(this, renderersFactory)
+            .setMediaSourceFactory(mediaSourceFactory)
             .setAudioAttributes(audioAttributes, true)
             .build().apply {
                 playWhenReady = true
@@ -807,20 +888,16 @@ class MainActivity : ComponentActivity() {
                     }
 
                     override fun onPlayerError(error: PlaybackException) {
-                        watchdogJob?.cancel()
-                        val idx = currentChannelIndex.value
-                        if (idx in activeChannels.indices) {
-                            activeChannels[idx] = activeChannels[idx].copy(status = ChannelStatus.OFFLINE)
-                        }
-                        if (isWatchdogEnabled.value && failedSkipCount < activeChannels.size) {
-                            failedSkipCount++
-                            triggerOsdNotice("Stream offline, hopping to next...")
-                            switchChannel(delta = 1)
-                        }
+                        handlePlaybackFailure(currentChannelIndex.value)
                     }
                 })
             }
 
+        // Initialize with Safe Embedded Akash Lineup immediately
+        allChannels.addAll(EmbeddedAkashStandardChannels)
+        applyRegionFilter()
+
+        // Sync with online playlists in background
         loadPlaylists()
         startAutoHideTimer()
 
@@ -953,24 +1030,21 @@ class MainActivity : ComponentActivity() {
                         isOpen = isSettingsOpen.value,
                         includeBD = includeBD.value,
                         includeIN = includeIN.value,
+                        includePremium = includePremium.value,
                         customM3uUrl = customM3uUrl.value,
                         isWatchdogEnabled = isWatchdogEnabled.value,
                         favoriteChannels = allChannels.filter { favoriteUrls.contains(it.url) },
                         onToggleBD = {
-                            if (!it && !includeIN.value) {
-                                Toast.makeText(this@MainActivity, "Select at least one region!", Toast.LENGTH_SHORT).show()
-                            } else {
-                                includeBD.value = it
-                                applyRegionFilter()
-                            }
+                            includeBD.value = it
+                            applyRegionFilter()
                         },
                         onToggleIN = {
-                            if (!it && !includeBD.value) {
-                                Toast.makeText(this@MainActivity, "Select at least one region!", Toast.LENGTH_SHORT).show()
-                            } else {
-                                includeIN.value = it
-                                applyRegionFilter()
-                            }
+                            includeIN.value = it
+                            applyRegionFilter()
+                        },
+                        onTogglePremium = {
+                            includePremium.value = it
+                            applyRegionFilter()
                         },
                         onLoadCustomM3u = { url ->
                             if (url.isNotBlank()) {
@@ -984,7 +1058,7 @@ class MainActivity : ComponentActivity() {
                             customM3uUrl.value = ""
                             saveSettingsToStorage()
                             loadPlaylists()
-                            Toast.makeText(this@MainActivity, "Reset to default playlists", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(this@MainActivity, "Reset to Akash & default playlists", Toast.LENGTH_SHORT).show()
                         },
                         onToggleWatchdog = { isWatchdogEnabled.value = it },
                         onRemoveFavorite = { url -> toggleFavorite(url) },
@@ -1006,14 +1080,40 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // --- CRASH-FREE REGION FILTER ---
-    private fun applyRegionFilter() {
-        healthCheckJob?.cancel() // Stop health check immediately to prevent ConcurrentModificationException
+    private fun handlePlaybackFailure(targetIndex: Int) {
+        watchdogJob?.cancel()
+        val currentChannel = activeChannels.getOrNull(targetIndex) ?: return
 
+        // 1. If primary URL failed, try backup link first before skipping!
+        if (!isPlayingBackup && currentChannel.backupUrl != null) {
+            isPlayingBackup = true
+            triggerOsdNotice("Switching to backup stream...")
+            val mediaItem = MediaItem.fromUri(currentChannel.backupUrl)
+            player.setMediaItem(mediaItem)
+            player.prepare()
+            if (isWatchdogEnabled.value) startWatchdog(targetIndex)
+            return
+        }
+
+        // 2. If both primary and backup fail, mark OFFLINE and hop to next channel
+        isPlayingBackup = false
+        if (targetIndex in activeChannels.indices) {
+            activeChannels[targetIndex] = activeChannels[targetIndex].copy(status = ChannelStatus.OFFLINE)
+        }
+        if (isWatchdogEnabled.value && failedSkipCount < activeChannels.size) {
+            failedSkipCount++
+            triggerOsdNotice("Stream unavailable, hopping to next...")
+            switchChannel(delta = 1)
+        }
+    }
+
+    private fun applyRegionFilter() {
+        healthCheckJob?.cancel()
         val currentUrl = activeChannels.getOrNull(currentChannelIndex.value)?.url
         val filtered = allChannels.filter { channel ->
-            (includeBD.value && channel.country == "BD") ||
-            (includeIN.value && channel.country == "IN") ||
+            (includePremium.value && channel.isPremium) ||
+            (includeBD.value && channel.country == "BD" && !channel.isPremium) ||
+            (includeIN.value && channel.country == "IN" && !channel.isPremium) ||
             channel.country == "CUSTOM"
         }
 
@@ -1042,9 +1142,7 @@ class MainActivity : ComponentActivity() {
 
     private fun saveSettingsToStorage() {
         val prefs = getSharedPreferences("retro_iptv_prefs", Context.MODE_PRIVATE)
-        prefs.edit()
-            .putString("custom_m3u_url", customM3uUrl.value)
-            .apply()
+        prefs.edit().putString("custom_m3u_url", customM3uUrl.value).apply()
     }
 
     private fun toggleFavorite(url: String) {
@@ -1077,6 +1175,8 @@ class MainActivity : ComponentActivity() {
     private fun loadPlaylists() {
         lifecycleScope.launch(Dispatchers.IO) {
             val list = mutableListOf<Channel>()
+            // Always keep Embedded Akash Lineup
+            list.addAll(EmbeddedAkashStandardChannels)
 
             if (customM3uUrl.value.isNotBlank()) {
                 try {
@@ -1084,20 +1184,22 @@ class MainActivity : ComponentActivity() {
                     list.addAll(parseM3u(customText, "CUSTOM"))
                 } catch (e: Exception) { e.printStackTrace() }
             } else {
+                // Try BDIX Mrgify with failover protection
                 try {
-                    val bdText = URL("https://iptv-org.github.io/iptv/countries/bd.m3u").readText()
-                    list.addAll(parseM3u(bdText, "BD"))
-                } catch (e: Exception) { e.printStackTrace() }
+                    val mrgifyText = URL("https://raw.githubusercontent.com/abusaeeidx/Mrgify-BDIX-IPTV/main/playlist.m3u").readText()
+                    list.addAll(parseM3u(mrgifyText, "BD"))
+                } catch (e: Exception) {
+                    // Fallback to iptv-org if Mrgify is unreachable
+                    try {
+                        val bdText = URL("https://iptv-org.github.io/iptv/countries/bd.m3u").readText()
+                        list.addAll(parseM3u(bdText, "BD"))
+                    } catch (ex: Exception) { ex.printStackTrace() }
+                }
 
                 try {
                     val inText = URL("https://iptv-org.github.io/iptv/countries/in.m3u").readText()
                     list.addAll(parseM3u(inText, "IN"))
                 } catch (e: Exception) { e.printStackTrace() }
-            }
-
-            if (list.isEmpty()) {
-                list.add(Channel("Apple Test Stream (HD)", "https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_adv_example_hevc/master.m3u8", "BD"))
-                list.add(Channel("Big Buck Bunny (HD)", "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4", "IN"))
             }
 
             withContext(Dispatchers.Main) {
@@ -1117,7 +1219,7 @@ class MainActivity : ComponentActivity() {
                 currentTitle = trimmed.substringAfterLast(",").trim()
             } else if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
                 if (currentTitle.isNotEmpty()) {
-                    list.add(Channel(title = currentTitle, url = trimmed, country = country))
+                    list.add(Channel(title = currentTitle, url = trimmed, country = country, isPremium = false))
                     currentTitle = ""
                 }
             }
@@ -1131,6 +1233,7 @@ class MainActivity : ComponentActivity() {
         errorMessage.value = null
         osdNotice.value = null
         currentResolution.value = null
+        isPlayingBackup = false
 
         val mediaItem = MediaItem.fromUri(channel.url)
         player.setMediaItem(mediaItem)
@@ -1146,23 +1249,15 @@ class MainActivity : ComponentActivity() {
         watchdogJob = lifecycleScope.launch {
             delay(15_000)
             if (isBuffering.value || errorMessage.value != null) {
-                if (targetIndex in activeChannels.indices) {
-                    activeChannels[targetIndex] = activeChannels[targetIndex].copy(status = ChannelStatus.OFFLINE)
-                }
-                if (failedSkipCount < activeChannels.size) {
-                    failedSkipCount++
-                    triggerOsdNotice("Stream offline, skipping to next...")
-                    switchChannel(delta = 1)
-                }
+                handlePlaybackFailure(targetIndex)
             }
         }
     }
 
-    // --- CRASH-FREE THREAD-SAFE BACKGROUND VERIFIER ---
     private fun startBackgroundHealthCheck() {
         healthCheckJob?.cancel()
         healthCheckJob = lifecycleScope.launch(Dispatchers.IO) {
-            val snapshot = activeChannels.toList() // Safe immutable copy
+            val snapshot = activeChannels.toList()
             val semaphore = Semaphore(3)
 
             snapshot.forEachIndexed { _, channel ->
@@ -1192,7 +1287,7 @@ class MainActivity : ComponentActivity() {
                 connectTimeout = 4000
                 readTimeout = 4000
                 requestMethod = "GET"
-                setRequestProperty("User-Agent", "Mozilla/5.0")
+                setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
                 setRequestProperty("Range", "bytes=0-1024")
                 instanceFollowRedirects = true
             }
