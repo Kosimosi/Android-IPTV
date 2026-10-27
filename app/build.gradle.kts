@@ -13,7 +13,27 @@ android {
         minSdk = 26
         targetSdk = 35
         versionCode = 5
-        versionName = "1.3.5"
+        versionName = "1.7"
+    }
+
+    signingConfigs {
+        create("releaseKey") {
+            // Generates and preserves a stable signature so updates install seamlessly
+            storeFile = file("${System.getProperty("user.home")}/.android/debug.keystore")
+            storePassword = "androiddebugkey"
+            keyAlias = "androiddebugkey"
+            keyPassword = "androiddebugkey"
+        }
+    }
+
+    buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("releaseKey")
+        }
+        release {
+            signingConfig = signingConfigs.getByName("releaseKey")
+            isMinifyEnabled = false
+        }
     }
 
     compileOptions {
