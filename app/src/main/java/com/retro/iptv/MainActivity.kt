@@ -1,14 +1,13 @@
 package com.retro.iptv
 
 import android.content.Context
-import android.content.Intent
 import android.graphics.Color as AndroidColor
 import android.media.AudioManager
-import android.net.Uri
 import android.os.Bundle
 import android.view.KeyEvent
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
@@ -40,8 +39,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -82,7 +84,6 @@ data class Channel(
     val status: ChannelStatus = ChannelStatus.UNKNOWN
 )
 
-// --- 1. YOUTUBE-STYLE APP LAUNCH SCREEN (NO BLACK SCREEN) ---
 @Composable
 fun AppLaunchSplashScreen(
     isReady: Boolean,
@@ -105,6 +106,10 @@ fun AppLaunchSplashScreen(
             delay(300)
             alphaAnim.animateTo(0f, tween(500))
             onAnimationEnd()
+        } else {
+            delay(5000)
+            alphaAnim.animateTo(0f, tween(500))
+            onAnimationEnd()
         }
     }
 
@@ -120,7 +125,6 @@ fun AppLaunchSplashScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-                // Retro TV Pulsing Logo
                 Box(
                     modifier = Modifier
                         .size(100.dp)
@@ -156,7 +160,6 @@ fun AppLaunchSplashScreen(
                 )
             }
 
-            // Bottom Shimmer Progress Bar (YouTube Style)
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -189,7 +192,6 @@ fun AppLaunchSplashScreen(
     }
 }
 
-// --- 2. RETRO CRT EXIT ANIMATION ---
 @Composable
 fun CrtTvExitEffect(
     isExiting: Boolean,
@@ -322,7 +324,7 @@ fun ChannelOsdBanner(visible: Boolean, channel: Channel?, channelIndex: Int, not
     }
 }
 
-// --- 3. LEFT CHANNEL SIDEBAR WITH WORD-BY-WORD SUGGESTION ---
+// --- 3. CHANNEL SIDEBAR ---
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ChannelSidebar(
@@ -338,14 +340,13 @@ fun ChannelSidebar(
     var showOnlyFavorites by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
 
-    // Real-time word-by-word ghost suggestion in gray
-    val matchedSuggestion = remember(searchQuery, channels) {
-        if (searchQuery.isBlank()) ""
+    val ghostSuggestion = remember(searchQuery, channels) {
+        if (searchQuery.isBlank()) null
         else {
             val found = channels.firstOrNull { it.title.startsWith(searchQuery, ignoreCase = true) }
-            if (found != null && found.title.length >= searchQuery.length) {
+            if (found != null && found.title.length > searchQuery.length) {
                 found.title
-            } else ""
+            } else null
         }
     }
 
@@ -419,7 +420,6 @@ fun ChannelSidebar(
                     }
                 }
 
-                // FIXED HEIGHT SEARCH BOX (46dp) WITH GRAY WORD SUGGESTION
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -430,13 +430,16 @@ fun ChannelSidebar(
                         .padding(horizontal = 14.dp),
                     contentAlignment = Alignment.CenterStart
                 ) {
-                    // Gray Ghost Suggestion Text behind user typing
-                    if (matchedSuggestion.isNotEmpty()) {
-                        Text(
-                            text = matchedSuggestion,
-                            color = WarmAshMuted.copy(alpha = 0.45f),
-                            fontSize = 14.sp
-                        )
+                    if (ghostSuggestion != null) {
+                        val ghostText = buildAnnotatedString {
+                            withStyle(SpanStyle(color = Color.Transparent)) {
+                                append(searchQuery)
+                            }
+                            withStyle(SpanStyle(color = WarmAshMuted.copy(alpha = 0.45f))) {
+                                append(ghostSuggestion.drop(searchQuery.length))
+                            }
+                        }
+                        Text(text = ghostText, fontSize = 14.sp)
                     }
 
                     if (searchQuery.isEmpty()) {
@@ -508,20 +511,26 @@ fun ChannelSidebar(
     }
 }
 
-// --- 4. RIGHT SIDEBAR: SETTINGS PANEL ---
+// --- 4. SETTINGS PANEL (CUSTOM M3U + REGIONS + FAVORITES FIX) ---
 @Composable
 fun SettingsSidebar(
     isOpen: Boolean,
     includeBD: Boolean,
     includeIN: Boolean,
+    customM3uUrl: String,
     isWatchdogEnabled: Boolean,
     favoriteChannels: List<Channel>,
     onToggleBD: (Boolean) -> Unit,
     onToggleIN: (Boolean) -> Unit,
+    onLoadCustomM3u: (String) -> Unit,
+    onResetDefaultM3u: () -> Unit,
     onToggleWatchdog: (Boolean) -> Unit,
     onRemoveFavorite: (String) -> Unit,
+    onExportFavorites: () -> Unit,
     onClose: () -> Unit
 ) {
+    var m3uInputText by remember(customM3uUrl) { mutableStateOf(customM3uUrl) }
+
     if (isOpen) {
         Box(
             modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.5f)).clickable { onClose() }
@@ -534,8 +543,7 @@ fun SettingsSidebar(
         exit = slideOutHorizontally(targetOffsetX = { it })
     ) {
         Box(
-            modifier = Modifier
-                .fillMaxSize(),
+            modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.CenterEnd
         ) {
             Box(
@@ -558,7 +566,64 @@ fun SettingsSidebar(
                         }
                     }
 
-                    // Channel Sources Checkmarks
+                    // --- CUSTOM M3U URL FIELD ---
+                    item {
+                        Text("PLAYLIST SOURCE (M3U)", color = ParchmentWhite, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(OakSurfaceElevated)
+                                .border(1.dp, AmberDial.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
+                                .padding(12.dp)
+                        ) {
+                            if (m3uInputText.isEmpty()) {
+                                Text("Paste M3U URL here...", color = WarmAshMuted, fontSize = 12.sp)
+                            }
+                            BasicTextField(
+                                value = m3uInputText,
+                                onValueChange = { m3uInputText = it },
+                                textStyle = TextStyle(color = ParchmentWhite, fontSize = 12.sp),
+                                cursorBrush = SolidColor(AmberDial),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(AmberDial)
+                                    .clickable { onLoadCustomM3u(m3uInputText) }
+                                    .padding(vertical = 10.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("Load M3U", color = OakDarkBackground, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(OakSurface)
+                                    .clickable {
+                                        m3uInputText = ""
+                                        onResetDefaultM3u()
+                                    }
+                                    .padding(vertical = 10.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("Reset Default", color = ParchmentWhite, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            }
+                        }
+                    }
+
+                    // --- REGION CHECKBOXES ---
                     item {
                         Text("CHANNEL REGIONS", color = ParchmentWhite, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                         Spacer(modifier = Modifier.height(8.dp))
@@ -582,7 +647,7 @@ fun SettingsSidebar(
                         }
                     }
 
-                    // Auto-Skip Watchdog Toggle
+                    // --- PLAYBACK WATCHDOG ---
                     item {
                         Text("PLAYBACK WATCHDOG", color = ParchmentWhite, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                         Spacer(modifier = Modifier.height(8.dp))
@@ -601,35 +666,39 @@ fun SettingsSidebar(
                         }
                     }
 
-                    // Google Sync Card
+                    // --- FAVORITES BACKUP / EXPORT ---
                     item {
-                        Text("CLOUD BACKUP", color = ParchmentWhite, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        Text("FAVORITES BACKUP", color = ParchmentWhite, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                         Spacer(modifier = Modifier.height(8.dp))
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clip(RoundedCornerShape(10.dp))
+                                .clip(RoundedCornerShape(8.dp))
                                 .background(OakSurfaceElevated)
-                                .border(1.dp, AmberDial.copy(alpha = 0.5f), RoundedCornerShape(10.dp))
-                                .clickable {
-                                    // Google login integration point
-                                }
-                                .padding(14.dp)
+                                .border(1.dp, AmberDial.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                                .clickable { onExportFavorites() }
+                                .padding(12.dp)
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("G", fontWeight = FontWeight.Black, fontSize = 20.sp, color = AmberDial)
-                                Spacer(modifier = Modifier.width(12.dp))
+                                Text("📋", fontSize = 18.sp)
+                                Spacer(modifier = Modifier.width(10.dp))
                                 Column {
-                                    Text("Sign in with Google", color = ParchmentWhite, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                                    Text("Sync favorites to cloud", color = WarmAshMuted, fontSize = 11.sp)
+                                    Text("Copy Favorites Code", color = ParchmentWhite, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                    Text("Copies favorite URLs to clipboard to save", color = WarmAshMuted, fontSize = 11.sp)
                                 }
                             }
                         }
                     }
 
-                    // Favorites Manager
+                    // --- FAVORITES MANAGER ---
                     item {
                         Text("FAVORITES MANAGER (${favoriteChannels.size})", color = ParchmentWhite, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    }
+
+                    if (favoriteChannels.isEmpty()) {
+                        item {
+                            Text("No favorites yet. Long-press any channel in the list to add.", color = WarmAshMuted, fontSize = 12.sp)
+                        }
                     }
 
                     itemsIndexed(favoriteChannels) { _, favChannel ->
@@ -652,7 +721,7 @@ fun SettingsSidebar(
     }
 }
 
-// --- MAIN ACTIVITY WITH AUDIO ENGINE UPGRADE ---
+// --- 5. MAIN ACTIVITY ---
 class MainActivity : ComponentActivity() {
 
     private lateinit var audioManager: AudioManager
@@ -668,6 +737,7 @@ class MainActivity : ComponentActivity() {
 
     private val includeBD = mutableStateOf(true)
     private val includeIN = mutableStateOf(true)
+    private val customM3uUrl = mutableStateOf("")
     private val isWatchdogEnabled = mutableStateOf(true)
 
     private val currentResolution = mutableStateOf<String?>(null)
@@ -681,16 +751,15 @@ class MainActivity : ComponentActivity() {
     private val activeChannels = mutableStateListOf<Channel>()
 
     private var watchdogJob: Job? = null
+    private var healthCheckJob: Job? = null
     private var failedSkipCount = 0
     private var autoHideJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
-        loadFavoritesFromStorage()
+        loadSettingsFromStorage()
 
-        // --- UPGRADED AUDIO & PLAYBACK ENGINE ---
-        // Enables hardware/software decoder auto-fallback for AC3, E-AC3, AAC-LATM & MP2 streams
         val renderersFactory = DefaultRenderersFactory(this).apply {
             setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
         }
@@ -701,11 +770,10 @@ class MainActivity : ComponentActivity() {
             .build()
 
         player = ExoPlayer.Builder(this, renderersFactory)
-            .setAudioAttributes(audioAttributes, true) // Handles Audio Focus cleanly
+            .setAudioAttributes(audioAttributes, true)
             .build().apply {
                 playWhenReady = true
                 addListener(object : Player.Listener {
-                    // YOUTUBE-STYLE FIRST FRAME: Eliminates Black Screen!
                     override fun onRenderedFirstFrame() {
                         isPlayerReady.value = true
                     }
@@ -746,7 +814,7 @@ class MainActivity : ComponentActivity() {
                         }
                         if (isWatchdogEnabled.value && failedSkipCount < activeChannels.size) {
                             failedSkipCount++
-                            triggerOsdNotice("Stream offline, skipping to next...")
+                            triggerOsdNotice("Stream offline, hopping to next...")
                             switchChannel(delta = 1)
                         }
                     }
@@ -757,6 +825,16 @@ class MainActivity : ComponentActivity() {
         startAutoHideTimer()
 
         setContent {
+            BackHandler(enabled = isSidebarOpen.value || isSettingsOpen.value || !isCrtExiting.value) {
+                if (isSidebarOpen.value) {
+                    isSidebarOpen.value = false
+                } else if (isSettingsOpen.value) {
+                    isSettingsOpen.value = false
+                } else {
+                    isCrtExiting.value = true
+                }
+            }
+
             CrtTvExitEffect(
                 isExiting = isCrtExiting.value,
                 onAnimationComplete = { finish() }
@@ -785,7 +863,6 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                 ) {
-                    // Video Layer
                     AndroidView(
                         factory = { ctx ->
                             PlayerView(ctx).apply {
@@ -799,7 +876,6 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.fillMaxSize()
                     )
 
-                    // TOP AUTO-HIDING NAVIGATION BUTTONS
                     AnimatedVisibility(
                         visible = isControlsVisible.value,
                         enter = fadeIn(),
@@ -811,7 +887,6 @@ class MainActivity : ComponentActivity() {
                                 .padding(top = 24.dp, start = 20.dp, end = 20.dp),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            // Left: Channel Menu
                             Box(
                                 modifier = Modifier
                                     .clip(CircleShape)
@@ -826,7 +901,6 @@ class MainActivity : ComponentActivity() {
                                 Text("☰ CHANNELS", color = AmberDial, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                             }
 
-                            // Right: Settings Menu
                             Box(
                                 modifier = Modifier
                                     .clip(CircleShape)
@@ -861,7 +935,6 @@ class MainActivity : ComponentActivity() {
                         resolution = currentResolution.value
                     )
 
-                    // Left Channel Menu
                     ChannelSidebar(
                         isOpen = isSidebarOpen.value,
                         channels = activeChannels,
@@ -876,54 +949,102 @@ class MainActivity : ComponentActivity() {
                         }
                     )
 
-                    // Right Settings Menu
                     SettingsSidebar(
                         isOpen = isSettingsOpen.value,
                         includeBD = includeBD.value,
                         includeIN = includeIN.value,
+                        customM3uUrl = customM3uUrl.value,
                         isWatchdogEnabled = isWatchdogEnabled.value,
                         favoriteChannels = allChannels.filter { favoriteUrls.contains(it.url) },
                         onToggleBD = {
-                            includeBD.value = it
-                            applyRegionFilter()
+                            if (!it && !includeIN.value) {
+                                Toast.makeText(this@MainActivity, "Select at least one region!", Toast.LENGTH_SHORT).show()
+                            } else {
+                                includeBD.value = it
+                                applyRegionFilter()
+                            }
                         },
                         onToggleIN = {
-                            includeIN.value = it
-                            applyRegionFilter()
+                            if (!it && !includeBD.value) {
+                                Toast.makeText(this@MainActivity, "Select at least one region!", Toast.LENGTH_SHORT).show()
+                            } else {
+                                includeIN.value = it
+                                applyRegionFilter()
+                            }
+                        },
+                        onLoadCustomM3u = { url ->
+                            if (url.isNotBlank()) {
+                                customM3uUrl.value = url
+                                saveSettingsToStorage()
+                                loadPlaylists()
+                                isSettingsOpen.value = false
+                            }
+                        },
+                        onResetDefaultM3u = {
+                            customM3uUrl.value = ""
+                            saveSettingsToStorage()
+                            loadPlaylists()
+                            Toast.makeText(this@MainActivity, "Reset to default playlists", Toast.LENGTH_SHORT).show()
                         },
                         onToggleWatchdog = { isWatchdogEnabled.value = it },
                         onRemoveFavorite = { url -> toggleFavorite(url) },
+                        onExportFavorites = {
+                            val code = favoriteUrls.joinToString(",")
+                            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Favorites", code))
+                            Toast.makeText(this@MainActivity, "Favorites copied to clipboard!", Toast.LENGTH_SHORT).show()
+                        },
                         onClose = { isSettingsOpen.value = false }
                     )
 
-                    // YOUTUBE-STYLE LAUNCH SPLASH OVERLAY (DISSOLVES WHEN FIRST FRAME RENDERS)
                     AppLaunchSplashScreen(
                         isReady = isPlayerReady.value,
-                        onAnimationEnd = { /* Splash removed */ }
+                        onAnimationEnd = { }
                     )
                 }
             }
         }
     }
 
+    // --- CRASH-FREE REGION FILTER ---
     private fun applyRegionFilter() {
+        healthCheckJob?.cancel() // Stop health check immediately to prevent ConcurrentModificationException
+
+        val currentUrl = activeChannels.getOrNull(currentChannelIndex.value)?.url
         val filtered = allChannels.filter { channel ->
             (includeBD.value && channel.country == "BD") ||
-            (includeIN.value && channel.country == "IN")
+            (includeIN.value && channel.country == "IN") ||
+            channel.country == "CUSTOM"
         }
+
         activeChannels.clear()
         activeChannels.addAll(filtered)
+
         if (activeChannels.isNotEmpty()) {
-            currentChannelIndex.value = 0
-            playChannel(0)
+            val sameChannelIdx = activeChannels.indexOfFirst { it.url == currentUrl }
+            if (sameChannelIdx >= 0) {
+                currentChannelIndex.value = sameChannelIdx
+            } else {
+                currentChannelIndex.value = 0
+                playChannel(0)
+            }
+            startBackgroundHealthCheck()
         }
     }
 
-    private fun loadFavoritesFromStorage() {
+    private fun loadSettingsFromStorage() {
         val prefs = getSharedPreferences("retro_iptv_prefs", Context.MODE_PRIVATE)
         val savedFavs = prefs.getStringSet("fav_urls", emptySet()) ?: emptySet()
         favoriteUrls.clear()
         favoriteUrls.addAll(savedFavs)
+        customM3uUrl.value = prefs.getString("custom_m3u_url", "") ?: ""
+    }
+
+    private fun saveSettingsToStorage() {
+        val prefs = getSharedPreferences("retro_iptv_prefs", Context.MODE_PRIVATE)
+        prefs.edit()
+            .putString("custom_m3u_url", customM3uUrl.value)
+            .apply()
     }
 
     private fun toggleFavorite(url: String) {
@@ -956,21 +1077,33 @@ class MainActivity : ComponentActivity() {
     private fun loadPlaylists() {
         lifecycleScope.launch(Dispatchers.IO) {
             val list = mutableListOf<Channel>()
-            try {
-                val bdText = URL("https://iptv-org.github.io/iptv/countries/bd.m3u").readText()
-                list.addAll(parseM3u(bdText, "BD"))
-            } catch (e: Exception) { e.printStackTrace() }
 
-            try {
-                val inText = URL("https://iptv-org.github.io/iptv/countries/in.m3u").readText()
-                list.addAll(parseM3u(inText, "IN"))
-            } catch (e: Exception) { e.printStackTrace() }
+            if (customM3uUrl.value.isNotBlank()) {
+                try {
+                    val customText = URL(customM3uUrl.value).readText()
+                    list.addAll(parseM3u(customText, "CUSTOM"))
+                } catch (e: Exception) { e.printStackTrace() }
+            } else {
+                try {
+                    val bdText = URL("https://iptv-org.github.io/iptv/countries/bd.m3u").readText()
+                    list.addAll(parseM3u(bdText, "BD"))
+                } catch (e: Exception) { e.printStackTrace() }
+
+                try {
+                    val inText = URL("https://iptv-org.github.io/iptv/countries/in.m3u").readText()
+                    list.addAll(parseM3u(inText, "IN"))
+                } catch (e: Exception) { e.printStackTrace() }
+            }
+
+            if (list.isEmpty()) {
+                list.add(Channel("Apple Test Stream (HD)", "https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_adv_example_hevc/master.m3u8", "BD"))
+                list.add(Channel("Big Buck Bunny (HD)", "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4", "IN"))
+            }
 
             withContext(Dispatchers.Main) {
                 allChannels.clear()
                 allChannels.addAll(list)
                 applyRegionFilter()
-                startBackgroundHealthCheck()
             }
         }
     }
@@ -1025,18 +1158,22 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    // --- CRASH-FREE THREAD-SAFE BACKGROUND VERIFIER ---
     private fun startBackgroundHealthCheck() {
-        lifecycleScope.launch(Dispatchers.IO) {
+        healthCheckJob?.cancel()
+        healthCheckJob = lifecycleScope.launch(Dispatchers.IO) {
+            val snapshot = activeChannels.toList() // Safe immutable copy
             val semaphore = Semaphore(3)
-            activeChannels.forEachIndexed { index, channel ->
-                if (index == currentChannelIndex.value) return@forEachIndexed
+
+            snapshot.forEachIndexed { _, channel ->
                 semaphore.acquire()
                 launch {
                     try {
                         val isAlive = testStreamUrl(channel.url)
                         withContext(Dispatchers.Main) {
-                            if (index in activeChannels.indices) {
-                                activeChannels[index] = activeChannels[index].copy(
+                            val idx = activeChannels.indexOfFirst { it.url == channel.url }
+                            if (idx >= 0) {
+                                activeChannels[idx] = activeChannels[idx].copy(
                                     status = if (isAlive) ChannelStatus.ONLINE else ChannelStatus.OFFLINE
                                 )
                             }
@@ -1137,6 +1274,7 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         super.onDestroy()
         watchdogJob?.cancel()
+        healthCheckJob?.cancel()
         autoHideJob?.cancel()
         player.release()
     }
