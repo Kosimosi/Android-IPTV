@@ -24,7 +24,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -90,7 +89,7 @@ data class Channel(
     val status: ChannelStatus = ChannelStatus.UNKNOWN
 )
 
-// --- LIGHTWEIGHT NATIVE LOGO LOADER (NO CRASHES, CACHED) ---
+// --- RELIABLE LOGO LOADER (Buffered to prevent decode failures) ---
 @Composable
 fun RemoteChannelLogo(url: String?, channelTitle: String, modifier: Modifier = Modifier) {
     var bitmap by remember(url) { mutableStateOf<ImageBitmap?>(null) }
@@ -99,15 +98,19 @@ fun RemoteChannelLogo(url: String?, channelTitle: String, modifier: Modifier = M
         if (!url.isNullOrBlank()) {
             withContext(Dispatchers.IO) {
                 try {
-                    val connection = URL(url).openConnection() as HttpURLConnection
-                    connection.connectTimeout = 4000
-                    connection.readTimeout = 4000
-                    connection.setRequestProperty("User-Agent", "Mozilla/5.0")
-                    connection.doInput = true
-                    connection.connect()
-                    val input = connection.inputStream
-                    val bmp = BitmapFactory.decodeStream(input)
-                    bitmap = bmp?.asImageBitmap()
+                    val connection = (URL(url).openConnection() as HttpURLConnection).apply {
+                        connectTimeout = 6000
+                        readTimeout = 6000
+                        setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                        instanceFollowRedirects = true
+                    }
+                    if (connection.responseCode in 200..299) {
+                        connection.inputStream.use { stream ->
+                            val bytes = stream.readBytes()
+                            val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                            bitmap = bmp?.asImageBitmap()
+                        }
+                    }
                 } catch (e: Exception) {
                     bitmap = null
                 }
@@ -123,6 +126,7 @@ fun RemoteChannelLogo(url: String?, channelTitle: String, modifier: Modifier = M
             contentScale = ContentScale.Fit
         )
     } else {
+        // Clean fallback badge showing 3-letter channel code
         Box(
             modifier = modifier
                 .clip(RoundedCornerShape(6.dp))
@@ -177,7 +181,7 @@ fun CrtTvExitEffect(
     }
 }
 
-// --- TOP HEADER (HOME & FAVOURITES PILLS) ---
+// --- TOP HEADER (HOME & FAVOURITES ONLY) ---
 @Composable
 fun OttTopHeader(
     currentTab: String,
@@ -192,15 +196,14 @@ fun OttTopHeader(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
+        // Logo
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("RETRO", color = AmberDial, fontWeight = FontWeight.Black, fontSize = 20.sp, letterSpacing = 2.sp)
             Text("TV", color = Color.White, fontWeight = FontWeight.Black, fontSize = 20.sp, letterSpacing = 1.sp)
         }
 
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        // Center Pills
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
             val isHome = currentTab == "HOME"
             Box(
                 modifier = Modifier
@@ -224,6 +227,7 @@ fun OttTopHeader(
             }
         }
 
+        // White Action Icons
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("🔍", color = Color.White, fontSize = 18.sp, modifier = Modifier.clip(CircleShape).clickable { onOpenSearch() }.padding(6.dp))
             Text("⚙", color = Color.White, fontSize = 20.sp, modifier = Modifier.clip(CircleShape).clickable { onOpenSettings() }.padding(6.dp))
@@ -276,7 +280,7 @@ fun HeroSection(
                 RemoteChannelLogo(
                     url = channel.logo,
                     channelTitle = channel.title,
-                    modifier = Modifier.size(44.dp).clip(RoundedCornerShape(8.dp))
+                    modifier = Modifier.size(46.dp).clip(RoundedCornerShape(8.dp))
                 )
                 Spacer(modifier = Modifier.width(14.dp))
             }
@@ -328,7 +332,7 @@ fun HeroSection(
     }
 }
 
-// --- 16:9 CHANNEL CARD WITH OFFICIAL LOGO ---
+// --- 16:9 CHANNEL CARD WITH LOGO ---
 @Composable
 fun ChannelCard(
     channel: Channel,
@@ -374,11 +378,10 @@ fun ChannelCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Official Channel Logo
                 RemoteChannelLogo(
                     url = channel.logo,
                     channelTitle = channel.title,
-                    modifier = Modifier.size(32.dp).clip(RoundedCornerShape(6.dp))
+                    modifier = Modifier.size(34.dp).clip(RoundedCornerShape(6.dp))
                 )
 
                 if (channel.status == ChannelStatus.ONLINE) {
@@ -559,7 +562,7 @@ fun SettingsModal(
                             .padding(vertical = 10.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("Apply URL", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        Text("Apply", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                     }
 
                     Box(
@@ -596,7 +599,7 @@ fun SettingsModal(
     }
 }
 
-// --- MAIN ACTIVITY ---
+// --- MAIN ACTIVITY CONTROLLER ---
 class MainActivity : ComponentActivity() {
 
     private lateinit var audioManager: AudioManager
@@ -619,6 +622,17 @@ class MainActivity : ComponentActivity() {
 
     private var autoHideJob: Job? = null
     private var watchdogJob: Job? = null
+
+    // Safe embedded fallback with your 7 verified working channels
+    private val fallbackChannels = listOf(
+        Channel("Jamuna TV", "https://playztv-apps.pages.dev/jamuna-tv/index.m3u8", "BD News", "https://raw.githubusercontent.com/iptv-org/api/master/logos/JamunaTV.bd.png"),
+        Channel("DBC News", "https://playztv-apps.pages.dev/dbc-news/index.m3u8", "BD News", "https://raw.githubusercontent.com/iptv-org/api/master/logos/DBCNews.bd.png"),
+        Channel("Ekattor TV", "https://playztv-apps.pages.dev/ekattor-tv/index.m3u8", "BD News", "https://raw.githubusercontent.com/iptv-org/api/master/logos/EkattorTV.bd.png"),
+        Channel("NTV", "https://playztv-apps.pages.dev/ntv/index.m3u8", "BD Entertainment", "https://raw.githubusercontent.com/iptv-org/api/master/logos/NTV.bd.png"),
+        Channel("Deepto TV", "https://playztv-apps.pages.dev/deepto-tv/index.m3u8", "BD Entertainment", "https://raw.githubusercontent.com/iptv-org/api/master/logos/DeeptoTV.bd.png"),
+        Channel("Maasranga TV", "https://playztv-apps.pages.dev/maasranga-tv/index.m3u8", "BD Entertainment", "https://raw.githubusercontent.com/iptv-org/api/master/logos/MaasrangaTelevision.bd.png"),
+        Channel("DD Sports HD", "https://mumbai-edge.smartplaytv.in/DDSportsHD/index.m3u8", "Sports", "https://raw.githubusercontent.com/iptv-org/api/master/logos/DDSports.in.png")
+    )
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -745,7 +759,7 @@ class MainActivity : ComponentActivity() {
                             val activeChannel = channels.getOrNull(currentChannelIndex.value)
                             val isFav = favoriteUrls.contains(activeChannel?.url.orEmpty())
 
-                            val filteredGroups = remember(currentTab.value, channels, favoriteUrls.toList()) {
+                            val filteredGroups = remember(currentTab.value, channels.toList(), favoriteUrls.toList()) {
                                 if (currentTab.value == "FAVOURITES") {
                                     mapOf("Favourites" to channels.filter { favoriteUrls.contains(it.url) })
                                 } else {
@@ -910,22 +924,27 @@ class MainActivity : ComponentActivity() {
         prefs.edit().putStringSet("fav_urls", favoriteUrls.toSet()).apply()
     }
 
+    // --- PLAYLIST LOADER ---
     private fun loadPlaylists() {
         lifecycleScope.launch(Dispatchers.IO) {
             val cacheFile = File(filesDir, "cached_playlist.m3u")
 
-            if (cacheFile.exists()) {
-                val cached = parseM3u(cacheFile.readText())
-                if (cached.isNotEmpty()) {
-                    withContext(Dispatchers.Main) {
-                        channels.clear()
-                        channels.addAll(cached)
-                        if (currentChannelIndex.value !in channels.indices) currentChannelIndex.value = 0
-                        playChannel(currentChannelIndex.value)
-                    }
-                }
+            // 1. Try loading cached playlist or fallback to the 7 verified channels
+            val initialList = if (cacheFile.exists()) {
+                val parsed = parseM3u(cacheFile.readText())
+                if (parsed.isNotEmpty()) parsed else fallbackChannels
+            } else {
+                fallbackChannels
             }
 
+            withContext(Dispatchers.Main) {
+                channels.clear()
+                channels.addAll(initialList)
+                if (currentChannelIndex.value !in channels.indices) currentChannelIndex.value = 0
+                playChannel(currentChannelIndex.value)
+            }
+
+            // 2. Fetch fresh update from GitHub
             val targetUrl = if (customM3uUrl.value.isNotBlank()) customM3uUrl.value else DEFAULT_PLAYLIST_URL
             val freshText = fetchUrl(targetUrl)
 
@@ -967,7 +986,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // Parses M3U extracting clean title, group-title, and tvg-logo
     private fun parseM3u(content: String): List<Channel> {
         val list = mutableListOf<Channel>()
         var currentTitle = ""
@@ -979,7 +997,6 @@ class MainActivity : ComponentActivity() {
             val trimmed = line.trim()
             if (trimmed.startsWith("#EXTINF", ignoreCase = true)) {
                 currentTitle = trimmed.substringAfterLast(",").trim()
-                
                 val groupMatch = """group-title="([^"]*)"""".toRegex(RegexOption.IGNORE_CASE).find(trimmed)
                 currentGroup = groupMatch?.groupValues?.get(1)?.trim() ?: "General"
 
@@ -1031,46 +1048,47 @@ class MainActivity : ComponentActivity() {
         playChannel(newIndex)
     }
 
+    // --- HARDWARE REMOTE NAVIGATION (LEFT/RIGHT ALWAYS ZAP CHANNELS) ---
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        when (keyCode) {
+            KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                switchChannel(1)
+                return true
+            }
+            KeyEvent.KEYCODE_DPAD_LEFT -> {
+                switchChannel(-1)
+                return true
+            }
+            KeyEvent.KEYCODE_DPAD_UP -> {
+                audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_RAISE, AudioManager.FLAG_SHOW_UI)
+                return true
+            }
+            KeyEvent.KEYCODE_DPAD_DOWN -> {
+                audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_LOWER, AudioManager.FLAG_SHOW_UI)
+                return true
+            }
+        }
+
         if (!isUiVisible.value) {
             when (keyCode) {
-                KeyEvent.KEYCODE_BACK -> {
-                    isCrtExiting.value = true
-                    return true
-                }
-                else -> {
+                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_MENU -> {
                     isUiVisible.value = true
                     resetIdleTimer()
                     return true
                 }
+                KeyEvent.KEYCODE_BACK -> {
+                    isCrtExiting.value = true
+                    return true
+                }
             }
-        }
-
-        resetIdleTimer()
-
-        return when (keyCode) {
-            KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                switchChannel(1)
-                true
-            }
-            KeyEvent.KEYCODE_DPAD_LEFT -> {
-                switchChannel(-1)
-                true
-            }
-            KeyEvent.KEYCODE_DPAD_UP -> {
-                audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_RAISE, AudioManager.FLAG_SHOW_UI)
-                true
-            }
-            KeyEvent.KEYCODE_DPAD_DOWN -> {
-                audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_LOWER, AudioManager.FLAG_SHOW_UI)
-                true
-            }
-            KeyEvent.KEYCODE_BACK -> {
+        } else {
+            if (keyCode == KeyEvent.KEYCODE_BACK) {
                 isUiVisible.value = false
-                true
+                return true
             }
-            else -> super.onKeyDown(keyCode, event)
         }
+
+        return super.onKeyDown(keyCode, event)
     }
 
     override fun onDestroy() {
