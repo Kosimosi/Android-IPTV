@@ -4,23 +4,13 @@
 #EXTINF:-1 tvg-id="JamunaTV.bd" tvg-logo="https://raw.githubusercontent.com/iptv-org/api/master/logos/JamunaTV.bd.png" group-title="BD News",Jamuna TV
 https://playztv-apps.pages.dev/jamuna-tv/index.m3u8
 
-#EXTINF:-1 tvg-id="Channel24.bd" tvg-logo="https://raw.githubusercontent.com/iptv-org/api/master/logos/Channel24.bd.png" group-title="BD News",Channel 24
-https://playztv-apps.pages.dev/channel-24/index.m3u8
-
 #EXTINF:-1 tvg-id="DBCNews.bd" tvg-logo="https://raw.githubusercontent.com/iptv-org/api/master/logos/DBCNews.bd.png" group-title="BD News",DBC News
 https://playztv-apps.pages.dev/dbc-news/index.m3u8
 
 #EXTINF:-1 tvg-id="EkattorTV.bd" tvg-logo="https://raw.githubusercontent.com/iptv-org/api/master/logos/EkattorTV.bd.png" group-title="BD News",Ekattor TV
 https://playztv-apps.pages.dev/ekattor-tv/index.m3u8
 
-#EXTINF:-1 tvg-id="BTVNews.bd" tvg-logo="https://raw.githubusercontent.com/iptv-org/api/master/logos/BTVNews.bd.png" group-title="BD News",BTV News
-https://playztv-apps.pages.dev/btv-news/index.m3u8
-
-
 # ==================== BD ENTERTAINMENT ====================
-#EXTINF:-1 tvg-id="BTVNational.bd" tvg-logo="https://raw.githubusercontent.com/iptv-org/api/master/logos/BTVNational.bd.png" group-title="BD Entertainment",BTV National HD
-https://playztv-apps.pages.dev/btv-national-hd/index.m3u8
-
 #EXTINF:-1 tvg-id="NTV.bd" tvg-logo="https://raw.githubusercontent.com/iptv-org/api/master/logos/NTV.bd.png" group-title="BD Entertainment",NTV
 https://playztv-apps.pages.dev/ntv/index.m3u8
 
@@ -30,15 +20,6 @@ https://playztv-apps.pages.dev/deepto-tv/index.m3u8
 #EXTINF:-1 tvg-id="MaasrangaTelevision.bd" tvg-logo="https://raw.githubusercontent.com/iptv-org/api/master/logos/MaasrangaTelevision.bd.png" group-title="BD Entertainment",Maasranga TV
 https://playztv-apps.pages.dev/maasranga-tv/index.m3u8
 
-
 # ==================== SPORTS ====================
 #EXTINF:-1 tvg-id="DDSports.in" tvg-logo="https://raw.githubusercontent.com/iptv-org/api/master/logos/DDSports.in.png" group-title="Sports",DD Sports HD
 https://mumbai-edge.smartplaytv.in/DDSportsHD/index.m3u8
-
-#EXTINF:-1 tvg-id="TSports.bd" tvg-logo="https://raw.githubusercontent.com/iptv-org/api/master/logos/TSports.bd.png" group-title="Sports",T Sports HD
-https://playztv-apps.pages.dev/tsports/index.m3u8
-
-
-# ==================== KIDS ====================
-#EXTINF:-1 tvg-id="DurontoTV.bd" tvg-logo="https://raw.githubusercontent.com/iptv-org/api/master/logos/DurontoTV.bd.png" group-title="Kids",Duronto TV
-https://playztv-apps.pages.dev/duronto-tv/index.m3u8
