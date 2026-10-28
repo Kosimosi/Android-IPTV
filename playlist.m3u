@@ -1,86 +1,44 @@
 #EXTM3U
 
 # ==================== BD NEWS ====================
-#EXTINF:-1 tvg-id="SomoyNewsTV.bd" tvg-logo="https://raw.githubusercontent.com/iptv-org/api/master/logos/SomoyNewsTV.bd.png" group-title="BD News",Somoy TV
-https://bozztv.com/rongo/rongo-somoy/index.m3u8
-
 #EXTINF:-1 tvg-id="JamunaTV.bd" tvg-logo="https://raw.githubusercontent.com/iptv-org/api/master/logos/JamunaTV.bd.png" group-title="BD News",Jamuna TV
-https://bozztv.com/rongo/rongo-JamunaTelevision/index.m3u8
+https://playztv-apps.pages.dev/jamuna-tv/index.m3u8
 
 #EXTINF:-1 tvg-id="Channel24.bd" tvg-logo="https://raw.githubusercontent.com/iptv-org/api/master/logos/Channel24.bd.png" group-title="BD News",Channel 24
-https://live.channel24bd.tv/hls/live.m3u8
-
-#EXTINF:-1 tvg-id="ATNNews.bd" tvg-logo="https://raw.githubusercontent.com/iptv-org/api/master/logos/ATNNews.bd.png" group-title="BD News",ATN News
-https://owrcovcrpy.gpcdn.net/bpk-tv/1706/output/1706.m3u8
-
-#EXTINF:-1 tvg-id="IndependentTelevision.bd" tvg-logo="https://raw.githubusercontent.com/iptv-org/api/master/logos/IndependentTelevision.bd.png" group-title="BD News",Independent TV
-https://live.itvbd.com/hls/live.m3u8
-
-#EXTINF:-1 tvg-id="EkattorTV.bd" tvg-logo="https://raw.githubusercontent.com/iptv-org/api/master/logos/EkattorTV.bd.png" group-title="BD News",Ekattor TV
-https://stream.ekattor.tv/live/ekattor.m3u8
+https://playztv-apps.pages.dev/channel-24/index.m3u8
 
 #EXTINF:-1 tvg-id="DBCNews.bd" tvg-logo="https://raw.githubusercontent.com/iptv-org/api/master/logos/DBCNews.bd.png" group-title="BD News",DBC News
-https://stream.dbcnews.tv/live/dbc.m3u8
+https://playztv-apps.pages.dev/dbc-news/index.m3u8
 
-#EXTINF:-1 tvg-id="News24.bd" tvg-logo="https://raw.githubusercontent.com/iptv-org/api/master/logos/News24.bd.png" group-title="BD News",News24
-https://stream.news24bd.tv/hls/news24.m3u8
-
-#EXTINF:-1 tvg-id="DeshTV.bd" tvg-logo="https://raw.githubusercontent.com/iptv-org/api/master/logos/DeshTV.bd.png" group-title="BD News",Desh TV
-https://live.desh.tv/hls/desh.m3u8
+#EXTINF:-1 tvg-id="EkattorTV.bd" tvg-logo="https://raw.githubusercontent.com/iptv-org/api/master/logos/EkattorTV.bd.png" group-title="BD News",Ekattor TV
+https://playztv-apps.pages.dev/ekattor-tv/index.m3u8
 
 #EXTINF:-1 tvg-id="BTVNews.bd" tvg-logo="https://raw.githubusercontent.com/iptv-org/api/master/logos/BTVNews.bd.png" group-title="BD News",BTV News
-https://stream.btv.gov.bd/hls/btvnews.m3u8
+https://playztv-apps.pages.dev/btv-news/index.m3u8
 
 
 # ==================== BD ENTERTAINMENT ====================
-#EXTINF:-1 tvg-id="Channeli.bd" tvg-logo="https://raw.githubusercontent.com/iptv-org/api/master/logos/Channeli.bd.png" group-title="BD Entertainment",Channel i
-https://owrcovcrpy.gpcdn.net/bpk-tv/1723/output/index.m3u8
-
-#EXTINF:-1 tvg-id="BTVNational.bd" tvg-logo="https://raw.githubusercontent.com/iptv-org/api/master/logos/BTVNational.bd.png" group-title="BD Entertainment",BTV National
-https://owrcovcrpy.gpcdn.net/bpk-tv/1709/output/index.m3u8
+#EXTINF:-1 tvg-id="BTVNational.bd" tvg-logo="https://raw.githubusercontent.com/iptv-org/api/master/logos/BTVNational.bd.png" group-title="BD Entertainment",BTV National HD
+https://playztv-apps.pages.dev/btv-national-hd/index.m3u8
 
 #EXTINF:-1 tvg-id="NTV.bd" tvg-logo="https://raw.githubusercontent.com/iptv-org/api/master/logos/NTV.bd.png" group-title="BD Entertainment",NTV
-https://live.ntvbd.com/hls/ntv.m3u8
-
-#EXTINF:-1 tvg-id="RTV.bd" tvg-logo="https://raw.githubusercontent.com/iptv-org/api/master/logos/RTV.bd.png" group-title="BD Entertainment",RTV
-https://stream.rtvonline.com/hls/rtv.m3u8
-
-#EXTINF:-1 tvg-id="Banglavision.bd" tvg-logo="https://raw.githubusercontent.com/iptv-org/api/master/logos/Banglavision.bd.png" group-title="BD Entertainment",Bangla Vision
-https://stream.bvtv.tv/hls/live.m3u8
-
-#EXTINF:-1 tvg-id="MaasrangaTelevision.bd" tvg-logo="https://raw.githubusercontent.com/iptv-org/api/master/logos/MaasrangaTelevision.bd.png" group-title="BD Entertainment",Maasranga TV
-https://stream.maasranga.tv/hls/live.m3u8
+https://playztv-apps.pages.dev/ntv/index.m3u8
 
 #EXTINF:-1 tvg-id="DeeptoTV.bd" tvg-logo="https://raw.githubusercontent.com/iptv-org/api/master/logos/DeeptoTV.bd.png" group-title="BD Entertainment",Deepto TV
-https://stream.deeptotv.com/hls/deepto.m3u8
+https://playztv-apps.pages.dev/deepto-tv/index.m3u8
 
-#EXTINF:-1 tvg-id="GaziSatelliteTelevision.bd" tvg-logo="https://raw.githubusercontent.com/iptv-org/api/master/logos/GaziSatelliteTelevision.bd.png" group-title="BD Entertainment",Gazi TV (GTV)
-https://live.gazitv.com/hls/gtv.m3u8
-
-#EXTINF:-1 tvg-id="EkusheyTelevision.bd" tvg-logo="https://raw.githubusercontent.com/iptv-org/api/master/logos/EkusheyTelevision.bd.png" group-title="BD Entertainment",Ekushey TV
-https://stream.ekushey-tv.com/hls/live.m3u8
-
-#EXTINF:-1 tvg-id="BijoyTV.bd" tvg-logo="https://raw.githubusercontent.com/iptv-org/api/master/logos/BijoyTV.bd.png" group-title="BD Entertainment",Bijoy TV
-https://edge2.roarzone.info:8447/roarzone/edge3/bijoy-tv/index.m3u8
-
-#EXTINF:-1 tvg-id="MohonaTV.bd" tvg-logo="https://raw.githubusercontent.com/iptv-org/api/master/logos/MohonaTV.bd.png" group-title="BD Entertainment",Mohona TV
-https://tvsen6.aynaott.com/mohonatv/index.m3u8
+#EXTINF:-1 tvg-id="MaasrangaTelevision.bd" tvg-logo="https://raw.githubusercontent.com/iptv-org/api/master/logos/MaasrangaTelevision.bd.png" group-title="BD Entertainment",Maasranga TV
+https://playztv-apps.pages.dev/maasranga-tv/index.m3u8
 
 
 # ==================== SPORTS ====================
-#EXTINF:-1 tvg-id="TSports.bd" tvg-logo="https://raw.githubusercontent.com/iptv-org/api/master/logos/TSports.bd.png" group-title="Sports",T Sports HD
-https://tvsen7.aynaott.com/tsportsfhd/index.m3u8
-
 #EXTINF:-1 tvg-id="DDSports.in" tvg-logo="https://raw.githubusercontent.com/iptv-org/api/master/logos/DDSports.in.png" group-title="Sports",DD Sports HD
 https://mumbai-edge.smartplaytv.in/DDSportsHD/index.m3u8
 
+#EXTINF:-1 tvg-id="TSports.bd" tvg-logo="https://raw.githubusercontent.com/iptv-org/api/master/logos/TSports.bd.png" group-title="Sports",T Sports HD
+https://playztv-apps.pages.dev/tsports/index.m3u8
 
-# ==================== KIDS & DEVOTIONAL ====================
+
+# ==================== KIDS ====================
 #EXTINF:-1 tvg-id="DurontoTV.bd" tvg-logo="https://raw.githubusercontent.com/iptv-org/api/master/logos/DurontoTV.bd.png" group-title="Kids",Duronto TV
-https://tvsen4.aynaott.com/durontotv/index.m3u8
-
-#EXTINF:-1 tvg-id="AsSunnah.bd" tvg-logo="https://i.imgur.com/8Q7Zg7e.png" group-title="Religious",As Sunnah TV
-https://stream.assunnah.tv/hls/live.m3u8
-
-#EXTINF:-1 tvg-id="AlQuran.sa" tvg-logo="https://i.imgur.com/e5kMhI4.png" group-title="Religious",Al Quran Live
-https://stream.quran.tv/hls/live.m3u8
+https://playztv-apps.pages.dev/duronto-tv/index.m3u8
