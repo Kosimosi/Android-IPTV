@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -89,7 +90,7 @@ data class Channel(
     val status: ChannelStatus = ChannelStatus.UNKNOWN
 )
 
-// --- RELIABLE LOGO LOADER (Buffered to prevent decode failures) ---
+// --- RELIABLE LOGO LOADER (Follows Redirects & Decodes PNG/JPG) ---
 @Composable
 fun RemoteChannelLogo(url: String?, channelTitle: String, modifier: Modifier = Modifier) {
     var bitmap by remember(url) { mutableStateOf<ImageBitmap?>(null) }
@@ -98,19 +99,39 @@ fun RemoteChannelLogo(url: String?, channelTitle: String, modifier: Modifier = M
         if (!url.isNullOrBlank()) {
             withContext(Dispatchers.IO) {
                 try {
-                    val connection = (URL(url).openConnection() as HttpURLConnection).apply {
-                        connectTimeout = 6000
-                        readTimeout = 6000
-                        setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-                        instanceFollowRedirects = true
-                    }
-                    if (connection.responseCode in 200..299) {
-                        connection.inputStream.use { stream ->
-                            val bytes = stream.readBytes()
-                            val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                            bitmap = bmp?.asImageBitmap()
+                    var currentUrl = url
+                    var redirects = 0
+                    var finalBitmap: ImageBitmap? = null
+
+                    while (redirects < 5 && currentUrl != null) {
+                        val connection = (URL(currentUrl).openConnection() as HttpURLConnection).apply {
+                            connectTimeout = 6000
+                            readTimeout = 6000
+                            setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                            instanceFollowRedirects = true
                         }
+
+                        val status = connection.responseCode
+                        if (status == HttpURLConnection.HTTP_MOVED_PERM ||
+                            status == HttpURLConnection.HTTP_MOVED_TEMP ||
+                            status == 307 || status == 308) {
+                            currentUrl = connection.getHeaderField("Location")
+                            redirects++
+                            connection.disconnect()
+                            continue
+                        }
+
+                        if (status in 200..299) {
+                            connection.inputStream.use { stream ->
+                                val bytes = stream.readBytes()
+                                val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                                finalBitmap = bmp?.asImageBitmap()
+                            }
+                        }
+                        connection.disconnect()
+                        break
                     }
+                    bitmap = finalBitmap
                 } catch (e: Exception) {
                     bitmap = null
                 }
@@ -126,7 +147,6 @@ fun RemoteChannelLogo(url: String?, channelTitle: String, modifier: Modifier = M
             contentScale = ContentScale.Fit
         )
     } else {
-        // Clean fallback badge showing 3-letter channel code
         Box(
             modifier = modifier
                 .clip(RoundedCornerShape(6.dp))
@@ -227,7 +247,7 @@ fun OttTopHeader(
             }
         }
 
-        // White Action Icons
+        // Action Icons
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("🔍", color = Color.White, fontSize = 18.sp, modifier = Modifier.clip(CircleShape).clickable { onOpenSearch() }.padding(6.dp))
             Text("⚙", color = Color.White, fontSize = 20.sp, modifier = Modifier.clip(CircleShape).clickable { onOpenSettings() }.padding(6.dp))
@@ -623,15 +643,15 @@ class MainActivity : ComponentActivity() {
     private var autoHideJob: Job? = null
     private var watchdogJob: Job? = null
 
-    // Safe embedded fallback with your 7 verified working channels
+    // Verified 7-Channel Local Fallback
     private val fallbackChannels = listOf(
-        Channel("Jamuna TV", "https://playztv-apps.pages.dev/jamuna-tv/index.m3u8", "BD News", "https://raw.githubusercontent.com/iptv-org/api/master/logos/JamunaTV.bd.png"),
-        Channel("DBC News", "https://playztv-apps.pages.dev/dbc-news/index.m3u8", "BD News", "https://raw.githubusercontent.com/iptv-org/api/master/logos/DBCNews.bd.png"),
-        Channel("Ekattor TV", "https://playztv-apps.pages.dev/ekattor-tv/index.m3u8", "BD News", "https://raw.githubusercontent.com/iptv-org/api/master/logos/EkattorTV.bd.png"),
-        Channel("NTV", "https://playztv-apps.pages.dev/ntv/index.m3u8", "BD Entertainment", "https://raw.githubusercontent.com/iptv-org/api/master/logos/NTV.bd.png"),
-        Channel("Deepto TV", "https://playztv-apps.pages.dev/deepto-tv/index.m3u8", "BD Entertainment", "https://raw.githubusercontent.com/iptv-org/api/master/logos/DeeptoTV.bd.png"),
-        Channel("Maasranga TV", "https://playztv-apps.pages.dev/maasranga-tv/index.m3u8", "BD Entertainment", "https://raw.githubusercontent.com/iptv-org/api/master/logos/MaasrangaTelevision.bd.png"),
-        Channel("DD Sports HD", "https://mumbai-edge.smartplaytv.in/DDSportsHD/index.m3u8", "Sports", "https://raw.githubusercontent.com/iptv-org/api/master/logos/DDSports.in.png")
+        Channel("Jamuna TV", "https://playztv-apps.pages.dev/jamuna-tv/index.m3u8", "BD News", "https://i.imgur.com/6xLp0Mf.png"),
+        Channel("DBC News", "https://playztv-apps.pages.dev/dbc-news/index.m3u8", "BD News", "https://upload.wikimedia.org/wikipedia/commons/9/9f/DBC_News_logo.png"),
+        Channel("Ekattor TV", "https://playztv-apps.pages.dev/ekattor-tv/index.m3u8", "BD News", "https://i.imgur.com/8neLbDd.jpg"),
+        Channel("NTV", "https://playztv-apps.pages.dev/ntv/index.m3u8", "BD Entertainment", "https://upload.wikimedia.org/wikipedia/en/thumb/e/ef/NTV_%28Bangladesh%29_logo.svg/320px-NTV_%28Bangladesh%29_logo.svg.png"),
+        Channel("Deepto TV", "https://playztv-apps.pages.dev/deepto-tv/index.m3u8", "BD Entertainment", "https://i.imgur.com/0sBqVhc.png"),
+        Channel("Maasranga TV", "https://playztv-apps.pages.dev/maasranga-tv/index.m3u8", "BD Entertainment", "https://upload.wikimedia.org/wikipedia/en/thumb/2/27/Maasranga_Television_logo.svg/320px-Maasranga_Television_logo.svg.png"),
+        Channel("DD Sports HD", "https://mumbai-edge.smartplaytv.in/DDSportsHD/index.m3u8", "Sports", "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7b/DD_Sports_logo_2023.svg/320px-DD_Sports_logo_2023.svg.png")
     )
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -733,6 +753,7 @@ class MainActivity : ComponentActivity() {
                             if (isUiVisible.value) resetIdleTimer()
                         }
                 ) {
+                    // Video View
                     AndroidView(
                         factory = { ctx ->
                             PlayerView(ctx).apply {
@@ -746,6 +767,7 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.fillMaxSize()
                     )
 
+                    // Foreground OTT Interface
                     AnimatedVisibility(
                         visible = isUiVisible.value,
                         enter = fadeIn(tween(350)),
@@ -924,12 +946,11 @@ class MainActivity : ComponentActivity() {
         prefs.edit().putStringSet("fav_urls", favoriteUrls.toSet()).apply()
     }
 
-    // --- PLAYLIST LOADER ---
     private fun loadPlaylists() {
         lifecycleScope.launch(Dispatchers.IO) {
             val cacheFile = File(filesDir, "cached_playlist.m3u")
 
-            // 1. Try loading cached playlist or fallback to the 7 verified channels
+            // Load cache or verified fallback channels immediately
             val initialList = if (cacheFile.exists()) {
                 val parsed = parseM3u(cacheFile.readText())
                 if (parsed.isNotEmpty()) parsed else fallbackChannels
@@ -944,7 +965,7 @@ class MainActivity : ComponentActivity() {
                 playChannel(currentChannelIndex.value)
             }
 
-            // 2. Fetch fresh update from GitHub
+            // Fetch update from personal repository
             val targetUrl = if (customM3uUrl.value.isNotBlank()) customM3uUrl.value else DEFAULT_PLAYLIST_URL
             val freshText = fetchUrl(targetUrl)
 
@@ -1048,7 +1069,7 @@ class MainActivity : ComponentActivity() {
         playChannel(newIndex)
     }
 
-    // --- HARDWARE REMOTE NAVIGATION (LEFT/RIGHT ALWAYS ZAP CHANNELS) ---
+    // Direct Remote Zapping on Left / Right
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         when (keyCode) {
             KeyEvent.KEYCODE_DPAD_RIGHT -> {
