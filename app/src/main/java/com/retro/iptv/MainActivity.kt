@@ -21,7 +21,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -33,7 +32,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
@@ -63,22 +61,16 @@ import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 
-// --- YOUR PERSONAL GITHUB PLAYLIST URL ---
+// --- REPOSITORY PLAYLIST URL ---
 const val DEFAULT_PLAYLIST_URL = "https://raw.githubusercontent.com/Kosimosi/Android-IPTV/main/playlist.m3u"
 
-// --- COLOR PALETTE (Modern Oak / OTT Glass) ---
+// --- COLOR PALETTE (Modern Oak) ---
 val OakDarkBackground = Color(0xFF140F0C)
 val OakSurface = Color(0xFF261A13)
 val OakSurfaceElevated = Color(0xFF38271D)
 val AmberDial = Color(0xFFE07A38)
 val ParchmentWhite = Color(0xFFFAF4ED)
 val WarmAshMuted = Color(0xFFA8988B)
-val ScrimDarkGradient = Brush.verticalGradient(
-    0.0f to Color.Black.copy(alpha = 0.85f),
-    0.3f to Color.Black.copy(alpha = 0.25f),
-    0.6f to Color.Black.copy(alpha = 0.70f),
-    1.0f to Color.Black.copy(alpha = 0.95f)
-)
 
 enum class ChannelStatus { UNKNOWN, ONLINE, OFFLINE }
 
@@ -127,12 +119,11 @@ fun CrtTvExitEffect(
     }
 }
 
-// --- OTT TOP HEADER (Logo, Categories & Actions) ---
+// --- TOP HEADER (HOME & FAVOURITES ONLY AS ROUNDED PILLS) ---
 @Composable
 fun OttTopHeader(
-    categories: List<String>,
-    selectedCategory: String,
-    onSelectCategory: (String) -> Unit,
+    currentTab: String,
+    onSelectTab: (String) -> Unit,
     onOpenSearch: () -> Unit,
     onOpenSettings: () -> Unit
 ) {
@@ -143,7 +134,7 @@ fun OttTopHeader(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Brand Logo
+        // App Logo
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = "RETRO",
@@ -154,63 +145,81 @@ fun OttTopHeader(
             )
             Text(
                 text = "TV",
-                color = ParchmentWhite,
+                color = Color.White,
                 fontWeight = FontWeight.Black,
                 fontSize = 20.sp,
                 letterSpacing = 1.sp
             )
         }
 
-        // Center Category Tabs
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.weight(1f, fill = false).padding(horizontal = 24.dp)
+        // Center: ONLY Home and Favourites in Pill Shape
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            items(categories) { cat ->
-                val isSelected = selectedCategory.equals(cat, ignoreCase = true)
+            // Home Pill
+            val isHome = currentTab == "HOME"
+            Box(
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .background(if (isHome) AmberDial else OakSurfaceElevated)
+                    .clickable { onSelectTab("HOME") }
+                    .padding(horizontal = 20.dp, vertical = 8.dp)
+            ) {
                 Text(
-                    text = cat.uppercase(),
-                    color = if (isSelected) AmberDial else ParchmentWhite.copy(alpha = 0.75f),
-                    fontSize = 13.sp,
-                    fontWeight = if (isSelected) FontWeight.Black else FontWeight.Bold,
-                    letterSpacing = 1.sp,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable { onSelectCategory(cat) }
-                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                    text = "Home",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp
+                )
+            }
+
+            // Favourites Pill
+            val isFav = currentTab == "FAVOURITES"
+            Box(
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .background(if (isFav) AmberDial else OakSurfaceElevated)
+                    .clickable { onSelectTab("FAVOURITES") }
+                    .padding(horizontal = 20.dp, vertical = 8.dp)
+            ) {
+                Text(
+                    text = "Favourites",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp
                 )
             }
         }
 
-        // Action Icons
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Box(
+        // Right Action Icons: White Search & Settings Icons
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            // White Search Icon
+            Text(
+                text = "🔍",
+                color = Color.White,
+                fontSize = 18.sp,
                 modifier = Modifier
                     .clip(CircleShape)
-                    .background(OakSurfaceElevated)
-                    .border(1.dp, AmberDial.copy(alpha = 0.6f), CircleShape)
                     .clickable { onOpenSearch() }
-                    .padding(horizontal = 14.dp, vertical = 8.dp)
-            ) {
-                Text("🔍 Search", color = ParchmentWhite, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-            }
+                    .padding(6.dp)
+            )
 
-            Box(
+            // White Settings Icon
+            Text(
+                text = "⚙",
+                color = Color.White,
+                fontSize = 20.sp,
                 modifier = Modifier
                     .clip(CircleShape)
-                    .background(OakSurfaceElevated)
-                    .border(1.dp, AmberDial.copy(alpha = 0.6f), CircleShape)
                     .clickable { onOpenSettings() }
-                    .padding(horizontal = 14.dp, vertical = 8.dp)
-            ) {
-                Text("⚙ Settings", color = ParchmentWhite, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-            }
+                    .padding(6.dp)
+            )
         }
     }
 }
 
-// --- HERO SECTION (Active Stream Metadata) ---
+// --- HERO SECTION ---
 @Composable
 fun HeroSection(
     channel: Channel?,
@@ -222,9 +231,8 @@ fun HeroSection(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 36.dp, vertical = 16.dp)
+            .padding(horizontal = 36.dp, vertical = 12.dp)
     ) {
-        // Live & Resolution Badges
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
                 modifier = Modifier
@@ -251,25 +259,21 @@ fun HeroSection(
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        // Large Channel Title
         Text(
             text = channel?.title ?: "Select a Channel",
-            color = ParchmentWhite,
+            color = Color.White,
             fontSize = 32.sp,
-            fontWeight = FontWeight.Black,
-            letterSpacing = 1.sp
+            fontWeight = FontWeight.Black
         )
 
         Text(
-            text = channel?.group ?: "Live Stream",
+            text = channel?.group ?: "Live TV",
             color = WarmAshMuted,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Normal
+            fontSize = 13.sp
         )
 
         Spacer(modifier = Modifier.height(14.dp))
 
-        // Quick Action Buttons
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Box(
                 modifier = Modifier
@@ -278,7 +282,7 @@ fun HeroSection(
                     .clickable { onWatchFullscreen() }
                     .padding(horizontal = 18.dp, vertical = 10.dp)
             ) {
-                Text("▶ Fullscreen", color = OakDarkBackground, fontWeight = FontWeight.Black, fontSize = 13.sp)
+                Text("▶ Fullscreen", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
             }
 
             Box(
@@ -290,8 +294,8 @@ fun HeroSection(
                     .padding(horizontal = 16.dp, vertical = 10.dp)
             ) {
                 Text(
-                    text = if (isFavorite) "★ Favorited" else "☆ Add Favorite",
-                    color = ParchmentWhite,
+                    text = if (isFavorite) "★ Favorited" else "☆ Add Favourite",
+                    color = Color.White,
                     fontWeight = FontWeight.Bold,
                     fontSize = 13.sp
                 )
@@ -341,7 +345,6 @@ fun ChannelCard(
             modifier = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            // Channel Number Badge & Status Dot
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -355,7 +358,7 @@ fun ChannelCard(
                 ) {
                     Text(
                         text = "TV",
-                        color = if (isSelected) OakDarkBackground else WarmAshMuted,
+                        color = Color.White,
                         fontSize = 9.sp,
                         fontWeight = FontWeight.Bold
                     )
@@ -366,10 +369,9 @@ fun ChannelCard(
                 }
             }
 
-            // Channel Title
             Text(
                 text = channel.title,
-                color = if (isSelected || isFocused) ParchmentWhite else ParchmentWhite.copy(alpha = 0.85f),
+                color = Color.White,
                 fontSize = 14.sp,
                 fontWeight = if (isSelected || isFocused) FontWeight.Bold else FontWeight.SemiBold,
                 maxLines = 2
@@ -378,7 +380,7 @@ fun ChannelCard(
     }
 }
 
-// --- SEARCH MODAL OVERLAY ---
+// --- SEARCH MODAL ---
 @Composable
 fun SearchModal(
     channels: List<Channel>,
@@ -394,7 +396,7 @@ fun SearchModal(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.75f))
+            .background(Color.Black.copy(alpha = 0.85f))
             .clickable { onClose() },
         contentAlignment = Alignment.Center
     ) {
@@ -414,7 +416,7 @@ fun SearchModal(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text("SEARCH CHANNELS", color = AmberDial, fontSize = 14.sp, fontWeight = FontWeight.Black)
-                    Text("✕", color = WarmAshMuted, fontSize = 16.sp, modifier = Modifier.clickable { onClose() })
+                    Text("✕", color = Color.White, fontSize = 16.sp, modifier = Modifier.clickable { onClose() })
                 }
 
                 Spacer(modifier = Modifier.height(14.dp))
@@ -435,7 +437,7 @@ fun SearchModal(
                     BasicTextField(
                         value = query,
                         onValueChange = { query = it },
-                        textStyle = TextStyle(color = ParchmentWhite, fontSize = 13.sp),
+                        textStyle = TextStyle(color = Color.White, fontSize = 13.sp),
                         cursorBrush = SolidColor(AmberDial),
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true
@@ -448,7 +450,7 @@ fun SearchModal(
                     items(results) { ch ->
                         Text(
                             text = ch.title,
-                            color = ParchmentWhite,
+                            color = Color.White,
                             fontSize = 14.sp,
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -465,7 +467,7 @@ fun SearchModal(
     }
 }
 
-// --- SETTINGS MODAL OVERLAY ---
+// --- SETTINGS MODAL ---
 @Composable
 fun SettingsModal(
     customM3uUrl: String,
@@ -480,7 +482,7 @@ fun SettingsModal(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.75f))
+            .background(Color.Black.copy(alpha = 0.85f))
             .clickable { onClose() },
         contentAlignment = Alignment.Center
     ) {
@@ -500,10 +502,10 @@ fun SettingsModal(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text("SETTINGS", color = AmberDial, fontSize = 14.sp, fontWeight = FontWeight.Black)
-                    Text("✕", color = WarmAshMuted, fontSize = 16.sp, modifier = Modifier.clickable { onClose() })
+                    Text("✕", color = Color.White, fontSize = 16.sp, modifier = Modifier.clickable { onClose() })
                 }
 
-                Text("CUSTOM M3U PLAYLIST", color = ParchmentWhite, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                Text("PLAYLIST SOURCE", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
 
                 Box(
                     modifier = Modifier
@@ -514,12 +516,12 @@ fun SettingsModal(
                         .padding(12.dp)
                 ) {
                     if (urlInput.isEmpty()) {
-                        Text("Paste M3U URL...", color = WarmAshMuted, fontSize = 12.sp)
+                        Text("Enter M3U link...", color = WarmAshMuted, fontSize = 12.sp)
                     }
                     BasicTextField(
                         value = urlInput,
                         onValueChange = { urlInput = it },
-                        textStyle = TextStyle(color = ParchmentWhite, fontSize = 12.sp),
+                        textStyle = TextStyle(color = Color.White, fontSize = 12.sp),
                         cursorBrush = SolidColor(AmberDial),
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -538,7 +540,7 @@ fun SettingsModal(
                             .padding(vertical = 10.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("Apply URL", color = OakDarkBackground, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        Text("Apply URL", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                     }
 
                     Box(
@@ -553,7 +555,7 @@ fun SettingsModal(
                             .padding(vertical = 10.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("Reset Default", color = ParchmentWhite, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        Text("Reset Default", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                     }
                 }
 
@@ -567,7 +569,7 @@ fun SettingsModal(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("15s Watchdog Auto-skip", color = ParchmentWhite, fontSize = 12.sp)
+                    Text("15s Watchdog Auto-skip", color = Color.White, fontSize = 12.sp)
                     Text(if (isWatchdogEnabled) "ON" else "OFF", color = if (isWatchdogEnabled) AmberDial else WarmAshMuted, fontWeight = FontWeight.Bold)
                 }
             }
@@ -575,7 +577,7 @@ fun SettingsModal(
     }
 }
 
-// --- MAIN ACTIVITY CONTROLLER ---
+// --- MAIN ACTIVITY ---
 class MainActivity : ComponentActivity() {
 
     private lateinit var audioManager: AudioManager
@@ -586,10 +588,10 @@ class MainActivity : ComponentActivity() {
     private val isSettingsOpen = mutableStateOf(false)
     private val isCrtExiting = mutableStateOf(false)
 
+    private val currentTab = mutableStateOf("HOME") // "HOME" or "FAVOURITES"
     private val currentResolution = mutableStateOf<String?>(null)
     private val currentChannelIndex = mutableStateOf(0)
     private val isBuffering = mutableStateOf(true)
-    private val selectedCategory = mutableStateOf("HOME")
 
     private val customM3uUrl = mutableStateOf("")
     private val isWatchdogEnabled = mutableStateOf(true)
@@ -614,7 +616,7 @@ class MainActivity : ComponentActivity() {
             .build()
 
         val httpDataSourceFactory = DefaultHttpDataSource.Factory()
-            .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+            .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
             .setAllowCrossProtocolRedirects(true)
             .setConnectTimeoutMs(10000)
             .setReadTimeoutMs(10000)
@@ -663,6 +665,20 @@ class MainActivity : ComponentActivity() {
         resetIdleTimer()
 
         setContent {
+            val listState = rememberLazyListState()
+
+            // DYNAMIC TRANSPARENCY: As you scroll down into categories, background darkens (transparency decreases)!
+            val scrollOffset by remember {
+                derivedStateOf {
+                    listState.firstVisibleItemScrollOffset + (listState.firstVisibleItemIndex * 350)
+                }
+            }
+            val dynamicDarkAlpha by remember {
+                derivedStateOf {
+                    (0.35f + (scrollOffset / 600f).coerceIn(0f, 0.60f)) // Transitions from 0.35f to 0.95f opaque!
+                }
+            }
+
             BackHandler(enabled = isSearchOpen.value || isSettingsOpen.value || isUiVisible.value || !isCrtExiting.value) {
                 when {
                     isSearchOpen.value -> isSearchOpen.value = false
@@ -685,7 +701,7 @@ class MainActivity : ComponentActivity() {
                             if (isUiVisible.value) resetIdleTimer()
                         }
                 ) {
-                    // LAYER 1: Full-Screen Live Video Playing in the Background
+                    // LAYER 1: Full-Screen Live Video
                     AndroidView(
                         factory = { ctx ->
                             PlayerView(ctx).apply {
@@ -699,7 +715,7 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.fillMaxSize()
                     )
 
-                    // LAYER 2: OTT Overlay (Auto-Hides after 6s of inactivity)
+                    // LAYER 2: OTT Foreground with Dynamic Lower Transparency on Scroll
                     AnimatedVisibility(
                         visible = isUiVisible.value,
                         enter = fadeIn(tween(350)),
@@ -708,31 +724,25 @@ class MainActivity : ComponentActivity() {
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .background(ScrimDarkGradient)
+                                .background(Color.Black.copy(alpha = dynamicDarkAlpha))
                         ) {
                             val activeChannel = channels.getOrNull(currentChannelIndex.value)
                             val isFav = favoriteUrls.contains(activeChannel?.url.orEmpty())
 
-                            // Build category shelves from M3U group titles
-                            val allCategories = remember(channels) {
-                                listOf("HOME") + channels.map { it.group }.distinct().filter { it.isNotBlank() } + listOf("FAVORITES")
-                            }
-
-                            val filteredGroups = remember(selectedCategory.value, channels, favoriteUrls.toList()) {
-                                when (selectedCategory.value) {
-                                    "HOME" -> channels.groupBy { it.group }
-                                    "FAVORITES" -> mapOf("Favorites" to channels.filter { favoriteUrls.contains(it.url) })
-                                    else -> mapOf(selectedCategory.value to channels.filter { it.group.equals(selectedCategory.value, ignoreCase = true) })
+                            val filteredGroups = remember(currentTab.value, channels, favoriteUrls.toList()) {
+                                if (currentTab.value == "FAVOURITES") {
+                                    mapOf("Favourites" to channels.filter { favoriteUrls.contains(it.url) })
+                                } else {
+                                    channels.groupBy { it.group }
                                 }
                             }
 
                             Column(modifier = Modifier.fillMaxSize()) {
-                                // Top Header
+                                // Top Header (Only Home and Favourites + White Icons)
                                 OttTopHeader(
-                                    categories = allCategories,
-                                    selectedCategory = selectedCategory.value,
-                                    onSelectCategory = {
-                                        selectedCategory.value = it
+                                    currentTab = currentTab.value,
+                                    onSelectTab = {
+                                        currentTab.value = it
                                         resetIdleTimer()
                                     },
                                     onOpenSearch = {
@@ -745,13 +755,13 @@ class MainActivity : ComponentActivity() {
                                     }
                                 )
 
-                                // Main Vertical Content (Hero + Horizontal Shelves)
+                                // Main Content
                                 LazyColumn(
+                                    state = listState,
                                     modifier = Modifier.fillMaxSize(),
                                     verticalArrangement = Arrangement.spacedBy(16.dp),
                                     contentPadding = PaddingValues(bottom = 32.dp)
                                 ) {
-                                    // Hero Section
                                     item {
                                         HeroSection(
                                             channel = activeChannel,
@@ -809,7 +819,6 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
-                    // Modals
                     if (isSearchOpen.value) {
                         SearchModal(
                             channels = channels,
@@ -856,7 +865,7 @@ class MainActivity : ComponentActivity() {
     private fun resetIdleTimer() {
         autoHideJob?.cancel()
         autoHideJob = lifecycleScope.launch {
-            delay(6000) // Auto-hide after 6s of inactivity
+            delay(6000)
             if (!isSearchOpen.value && !isSettingsOpen.value) {
                 isUiVisible.value = false
             }
@@ -879,10 +888,10 @@ class MainActivity : ComponentActivity() {
     private fun toggleFavorite(url: String) {
         if (favoriteUrls.contains(url)) {
             favoriteUrls.remove(url)
-            Toast.makeText(this, "Removed from Favorites", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Removed from Favourites", Toast.LENGTH_SHORT).show()
         } else {
             favoriteUrls.add(url)
-            Toast.makeText(this, "Added to Favorites ★", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Added to Favourites ★", Toast.LENGTH_SHORT).show()
         }
         val prefs = getSharedPreferences("retro_iptv_prefs", Context.MODE_PRIVATE)
         prefs.edit().putStringSet("fav_urls", favoriteUrls.toSet()).apply()
@@ -892,7 +901,6 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch(Dispatchers.IO) {
             val cacheFile = File(filesDir, "cached_playlist.m3u")
 
-            // 1. Instant local cache load
             if (cacheFile.exists()) {
                 val cached = parseM3u(cacheFile.readText())
                 if (cached.isNotEmpty()) {
@@ -905,7 +913,6 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            // 2. Fetch fresh from GitHub
             val targetUrl = if (customM3uUrl.value.isNotBlank()) customM3uUrl.value else DEFAULT_PLAYLIST_URL
             val freshText = fetchUrl(targetUrl)
 
@@ -998,7 +1005,6 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        // Any remote button wakes up the OTT interface
         if (!isUiVisible.value) {
             when (keyCode) {
                 KeyEvent.KEYCODE_BACK -> {
