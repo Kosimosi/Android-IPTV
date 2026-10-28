@@ -3,6 +3,7 @@
 package com.retro.iptv
 
 import android.content.Context
+import android.graphics.BitmapFactory
 import android.graphics.Color as AndroidColor
 import android.media.AudioManager
 import android.os.Bundle
@@ -13,14 +14,17 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -33,8 +37,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -61,7 +69,7 @@ import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 
-// --- REPOSITORY PLAYLIST URL ---
+// --- YOUR PERSONAL GITHUB PLAYLIST URL ---
 const val DEFAULT_PLAYLIST_URL = "https://raw.githubusercontent.com/Kosimosi/Android-IPTV/main/playlist.m3u"
 
 // --- COLOR PALETTE (Modern Oak) ---
@@ -78,8 +86,58 @@ data class Channel(
     val title: String,
     val url: String,
     val group: String = "General",
+    val logo: String? = null,
     val status: ChannelStatus = ChannelStatus.UNKNOWN
 )
+
+// --- LIGHTWEIGHT NATIVE LOGO LOADER (NO CRASHES, CACHED) ---
+@Composable
+fun RemoteChannelLogo(url: String?, channelTitle: String, modifier: Modifier = Modifier) {
+    var bitmap by remember(url) { mutableStateOf<ImageBitmap?>(null) }
+
+    LaunchedEffect(url) {
+        if (!url.isNullOrBlank()) {
+            withContext(Dispatchers.IO) {
+                try {
+                    val connection = URL(url).openConnection() as HttpURLConnection
+                    connection.connectTimeout = 4000
+                    connection.readTimeout = 4000
+                    connection.setRequestProperty("User-Agent", "Mozilla/5.0")
+                    connection.doInput = true
+                    connection.connect()
+                    val input = connection.inputStream
+                    val bmp = BitmapFactory.decodeStream(input)
+                    bitmap = bmp?.asImageBitmap()
+                } catch (e: Exception) {
+                    bitmap = null
+                }
+            }
+        }
+    }
+
+    if (bitmap != null) {
+        Image(
+            bitmap = bitmap!!,
+            contentDescription = channelTitle,
+            modifier = modifier,
+            contentScale = ContentScale.Fit
+        )
+    } else {
+        Box(
+            modifier = modifier
+                .clip(RoundedCornerShape(6.dp))
+                .background(OakSurfaceElevated),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = channelTitle.take(3).uppercase(),
+                color = AmberDial,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
 
 // --- RETRO CRT SHUTDOWN ANIMATION ---
 @Composable
@@ -119,7 +177,7 @@ fun CrtTvExitEffect(
     }
 }
 
-// --- TOP HEADER (HOME & FAVOURITES ONLY AS ROUNDED PILLS) ---
+// --- TOP HEADER (HOME & FAVOURITES PILLS) ---
 @Composable
 fun OttTopHeader(
     currentTab: String,
@@ -134,30 +192,15 @@ fun OttTopHeader(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // App Logo
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = "RETRO",
-                color = AmberDial,
-                fontWeight = FontWeight.Black,
-                fontSize = 20.sp,
-                letterSpacing = 2.sp
-            )
-            Text(
-                text = "TV",
-                color = Color.White,
-                fontWeight = FontWeight.Black,
-                fontSize = 20.sp,
-                letterSpacing = 1.sp
-            )
+            Text("RETRO", color = AmberDial, fontWeight = FontWeight.Black, fontSize = 20.sp, letterSpacing = 2.sp)
+            Text("TV", color = Color.White, fontWeight = FontWeight.Black, fontSize = 20.sp, letterSpacing = 1.sp)
         }
 
-        // Center: ONLY Home and Favourites in Pill Shape
         Row(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Home Pill
             val isHome = currentTab == "HOME"
             Box(
                 modifier = Modifier
@@ -166,15 +209,9 @@ fun OttTopHeader(
                     .clickable { onSelectTab("HOME") }
                     .padding(horizontal = 20.dp, vertical = 8.dp)
             ) {
-                Text(
-                    text = "Home",
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 13.sp
-                )
+                Text("Home", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
             }
 
-            // Favourites Pill
             val isFav = currentTab == "FAVOURITES"
             Box(
                 modifier = Modifier
@@ -183,43 +220,18 @@ fun OttTopHeader(
                     .clickable { onSelectTab("FAVOURITES") }
                     .padding(horizontal = 20.dp, vertical = 8.dp)
             ) {
-                Text(
-                    text = "Favourites",
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 13.sp
-                )
+                Text("Favourites", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
             }
         }
 
-        // Right Action Icons: White Search & Settings Icons
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            // White Search Icon
-            Text(
-                text = "🔍",
-                color = Color.White,
-                fontSize = 18.sp,
-                modifier = Modifier
-                    .clip(CircleShape)
-                    .clickable { onOpenSearch() }
-                    .padding(6.dp)
-            )
-
-            // White Settings Icon
-            Text(
-                text = "⚙",
-                color = Color.White,
-                fontSize = 20.sp,
-                modifier = Modifier
-                    .clip(CircleShape)
-                    .clickable { onOpenSettings() }
-                    .padding(6.dp)
-            )
+            Text("🔍", color = Color.White, fontSize = 18.sp, modifier = Modifier.clip(CircleShape).clickable { onOpenSearch() }.padding(6.dp))
+            Text("⚙", color = Color.White, fontSize = 20.sp, modifier = Modifier.clip(CircleShape).clickable { onOpenSettings() }.padding(6.dp))
         }
     }
 }
 
-// --- HERO SECTION ---
+// --- HERO SECTION WITH LOGO ---
 @Composable
 fun HeroSection(
     channel: Channel?,
@@ -259,18 +271,30 @@ fun HeroSection(
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        Text(
-            text = channel?.title ?: "Select a Channel",
-            color = Color.White,
-            fontSize = 32.sp,
-            fontWeight = FontWeight.Black
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (channel?.logo != null) {
+                RemoteChannelLogo(
+                    url = channel.logo,
+                    channelTitle = channel.title,
+                    modifier = Modifier.size(44.dp).clip(RoundedCornerShape(8.dp))
+                )
+                Spacer(modifier = Modifier.width(14.dp))
+            }
 
-        Text(
-            text = channel?.group ?: "Live TV",
-            color = WarmAshMuted,
-            fontSize = 13.sp
-        )
+            Column {
+                Text(
+                    text = channel?.title ?: "Select a Channel",
+                    color = Color.White,
+                    fontSize = 30.sp,
+                    fontWeight = FontWeight.Black
+                )
+                Text(
+                    text = channel?.group ?: "Live TV",
+                    color = WarmAshMuted,
+                    fontSize = 13.sp
+                )
+            }
+        }
 
         Spacer(modifier = Modifier.height(14.dp))
 
@@ -304,7 +328,7 @@ fun HeroSection(
     }
 }
 
-// --- 16:9 CHANNEL CARD ---
+// --- 16:9 CHANNEL CARD WITH OFFICIAL LOGO ---
 @Composable
 fun ChannelCard(
     channel: Channel,
@@ -317,7 +341,7 @@ fun ChannelCard(
     Box(
         modifier = Modifier
             .width(180.dp)
-            .height(102.dp)
+            .height(104.dp)
             .graphicsLayer {
                 val scale = if (isFocused) 1.08f else 1.0f
                 scaleX = scale
@@ -350,19 +374,12 @@ fun ChannelCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(if (isSelected) AmberDial else OakSurfaceElevated)
-                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                ) {
-                    Text(
-                        text = "TV",
-                        color = Color.White,
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
+                // Official Channel Logo
+                RemoteChannelLogo(
+                    url = channel.logo,
+                    channelTitle = channel.title,
+                    modifier = Modifier.size(32.dp).clip(RoundedCornerShape(6.dp))
+                )
 
                 if (channel.status == ChannelStatus.ONLINE) {
                     Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(Color(0xFF4CAF50)))
@@ -372,9 +389,9 @@ fun ChannelCard(
             Text(
                 text = channel.title,
                 color = Color.White,
-                fontSize = 14.sp,
+                fontSize = 13.sp,
                 fontWeight = if (isSelected || isFocused) FontWeight.Bold else FontWeight.SemiBold,
-                maxLines = 2
+                maxLines = 1
             )
         }
     }
@@ -448,18 +465,20 @@ fun SearchModal(
 
                 LazyColumn(modifier = Modifier.heightIn(max = 240.dp)) {
                     items(results) { ch ->
-                        Text(
-                            text = ch.title,
-                            color = Color.White,
-                            fontSize = 14.sp,
+                        Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
                                     onSelectChannel(ch)
                                     onClose()
                                 }
-                                .padding(vertical = 10.dp)
-                        )
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RemoteChannelLogo(url = ch.logo, channelTitle = ch.title, modifier = Modifier.size(24.dp))
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(text = ch.title, color = Color.White, fontSize = 14.sp)
+                        }
                     }
                 }
             }
@@ -588,7 +607,7 @@ class MainActivity : ComponentActivity() {
     private val isSettingsOpen = mutableStateOf(false)
     private val isCrtExiting = mutableStateOf(false)
 
-    private val currentTab = mutableStateOf("HOME") // "HOME" or "FAVOURITES"
+    private val currentTab = mutableStateOf("HOME")
     private val currentResolution = mutableStateOf<String?>(null)
     private val currentChannelIndex = mutableStateOf(0)
     private val isBuffering = mutableStateOf(true)
@@ -616,7 +635,7 @@ class MainActivity : ComponentActivity() {
             .build()
 
         val httpDataSourceFactory = DefaultHttpDataSource.Factory()
-            .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
+            .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
             .setAllowCrossProtocolRedirects(true)
             .setConnectTimeoutMs(10000)
             .setReadTimeoutMs(10000)
@@ -667,7 +686,6 @@ class MainActivity : ComponentActivity() {
         setContent {
             val listState = rememberLazyListState()
 
-            // DYNAMIC TRANSPARENCY: As you scroll down into categories, background darkens (transparency decreases)!
             val scrollOffset by remember {
                 derivedStateOf {
                     listState.firstVisibleItemScrollOffset + (listState.firstVisibleItemIndex * 350)
@@ -675,7 +693,7 @@ class MainActivity : ComponentActivity() {
             }
             val dynamicDarkAlpha by remember {
                 derivedStateOf {
-                    (0.35f + (scrollOffset / 600f).coerceIn(0f, 0.60f)) // Transitions from 0.35f to 0.95f opaque!
+                    (0.35f + (scrollOffset / 600f).coerceIn(0f, 0.60f))
                 }
             }
 
@@ -701,7 +719,6 @@ class MainActivity : ComponentActivity() {
                             if (isUiVisible.value) resetIdleTimer()
                         }
                 ) {
-                    // LAYER 1: Full-Screen Live Video
                     AndroidView(
                         factory = { ctx ->
                             PlayerView(ctx).apply {
@@ -715,7 +732,6 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.fillMaxSize()
                     )
 
-                    // LAYER 2: OTT Foreground with Dynamic Lower Transparency on Scroll
                     AnimatedVisibility(
                         visible = isUiVisible.value,
                         enter = fadeIn(tween(350)),
@@ -738,7 +754,6 @@ class MainActivity : ComponentActivity() {
                             }
 
                             Column(modifier = Modifier.fillMaxSize()) {
-                                // Top Header (Only Home and Favourites + White Icons)
                                 OttTopHeader(
                                     currentTab = currentTab.value,
                                     onSelectTab = {
@@ -755,7 +770,6 @@ class MainActivity : ComponentActivity() {
                                     }
                                 )
 
-                                // Main Content
                                 LazyColumn(
                                     state = listState,
                                     modifier = Modifier.fillMaxSize(),
@@ -777,7 +791,6 @@ class MainActivity : ComponentActivity() {
                                         )
                                     }
 
-                                    // Category Shelves
                                     filteredGroups.forEach { (groupName, groupChannels) ->
                                         if (groupChannels.isNotEmpty()) {
                                             item {
@@ -943,7 +956,7 @@ class MainActivity : ComponentActivity() {
                 connectTimeout = 8000
                 readTimeout = 8000
                 requestMethod = "GET"
-                setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                setRequestProperty("User-Agent", "Mozilla/5.0")
                 instanceFollowRedirects = true
             }
             if (connection.responseCode in 200..299) {
@@ -954,23 +967,37 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    // Parses M3U extracting clean title, group-title, and tvg-logo
     private fun parseM3u(content: String): List<Channel> {
         val list = mutableListOf<Channel>()
         var currentTitle = ""
         var currentGroup = "General"
+        var currentLogo: String? = null
         val lines = content.lines()
 
         for (line in lines) {
             val trimmed = line.trim()
             if (trimmed.startsWith("#EXTINF", ignoreCase = true)) {
                 currentTitle = trimmed.substringAfterLast(",").trim()
+                
                 val groupMatch = """group-title="([^"]*)"""".toRegex(RegexOption.IGNORE_CASE).find(trimmed)
                 currentGroup = groupMatch?.groupValues?.get(1)?.trim() ?: "General"
+
+                val logoMatch = """tvg-logo="([^"]*)"""".toRegex(RegexOption.IGNORE_CASE).find(trimmed)
+                currentLogo = logoMatch?.groupValues?.get(1)?.trim()
             } else if (trimmed.startsWith("http://", ignoreCase = true) || trimmed.startsWith("https://", ignoreCase = true)) {
                 if (currentTitle.isNotEmpty()) {
-                    list.add(Channel(title = currentTitle, url = trimmed, group = currentGroup))
+                    list.add(
+                        Channel(
+                            title = currentTitle,
+                            url = trimmed,
+                            group = currentGroup,
+                            logo = currentLogo
+                        )
+                    )
                     currentTitle = ""
                     currentGroup = "General"
+                    currentLogo = null
                 }
             }
         }
