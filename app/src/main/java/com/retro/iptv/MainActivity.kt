@@ -294,7 +294,6 @@ private fun RetroTopTab(
             .background(pillColor)
             .border(1.dp, borderColor, CircleShape)
             .onFocusChanged { focused = it.isFocused }
-            .focusable()
             .clickable(onClick = onSelect)
             .padding(horizontal = 15.dp, vertical = 9.dp),
         contentAlignment = Alignment.Center
@@ -321,7 +320,6 @@ private fun RetroTopAction(
             .background(fill)
             .border(1.dp, if (focused) AmberDial else Color.White.copy(alpha = 0.12f), CircleShape)
             .onFocusChanged { focused = it.isFocused }
-            .focusable()
             .clickable(onClick = onClick)
             .padding(9.dp),
         contentAlignment = Alignment.Center
