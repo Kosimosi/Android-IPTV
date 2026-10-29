@@ -887,8 +887,7 @@ class MainActivity : ComponentActivity() {
                                                                         playChannel(idx)
                                                                     }
                                                                 },
-                                                                onUserInteract = { resetIdleTimer() },
-                                                                focusRequester = if (ch.url == filteredGroups.values.firstOrNull()?.firstOrNull()?.url) initialMenuFocusRequester else null
+                                                                onUserInteract = { resetIdleTimer() }
                                                             )
                                                         }
                                                     }
