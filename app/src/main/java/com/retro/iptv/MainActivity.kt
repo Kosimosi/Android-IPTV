@@ -52,6 +52,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
@@ -569,6 +570,14 @@ fun SearchModal(
     onClose: () -> Unit
 ) {
     var query by remember { mutableStateOf("") }
+    val context = LocalContext.current
+    val searchFocusRequester = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        if (context.packageManager.hasSystemFeature("android.software.leanback")) {
+            delay(120)
+            runCatching { searchFocusRequester.requestFocus() }
+        }
+    }
     val results = remember(query, channels) {
         if (query.isBlank()) emptyList()
         else channels.filter { it.title.contains(query, ignoreCase = true) }
@@ -577,8 +586,7 @@ fun SearchModal(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.85f))
-            .clickable { onClose() },
+            .background(Color.Black.copy(alpha = 0.85f)),
         contentAlignment = Alignment.Center
     ) {
         Box(
@@ -587,7 +595,6 @@ fun SearchModal(
                 .clip(RoundedCornerShape(14.dp))
                 .background(OakSurface)
                 .border(1.5.dp, AmberDial, RoundedCornerShape(14.dp))
-                .clickable(enabled = false) {}
                 .padding(24.dp)
         ) {
             Column {
@@ -620,7 +627,7 @@ fun SearchModal(
                         onValueChange = { query = it },
                         textStyle = TextStyle(color = Color.White, fontSize = 13.sp),
                         cursorBrush = SolidColor(AmberDial),
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().focusRequester(searchFocusRequester),
                         singleLine = true
                     )
                 }
@@ -661,12 +668,19 @@ fun SettingsModal(
     onClose: () -> Unit
 ) {
     var urlInput by remember(customM3uUrl) { mutableStateOf(customM3uUrl) }
+    val context = LocalContext.current
+    val settingsFocusRequester = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        if (context.packageManager.hasSystemFeature("android.software.leanback")) {
+            delay(120)
+            runCatching { settingsFocusRequester.requestFocus() }
+        }
+    }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.85f))
-            .clickable { onClose() },
+            .background(Color.Black.copy(alpha = 0.85f)),
         contentAlignment = Alignment.Center
     ) {
         Box(
@@ -675,7 +689,6 @@ fun SettingsModal(
                 .clip(RoundedCornerShape(14.dp))
                 .background(OakSurface)
                 .border(1.5.dp, AmberDial, RoundedCornerShape(14.dp))
-                .clickable(enabled = false) {}
                 .padding(24.dp)
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -706,7 +719,7 @@ fun SettingsModal(
                         onValueChange = { urlInput = it },
                         textStyle = TextStyle(color = Color.White, fontSize = 12.sp),
                         cursorBrush = SolidColor(AmberDial),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth().focusRequester(settingsFocusRequester)
                     )
                 }
 
