@@ -674,6 +674,7 @@ class MainActivity : ComponentActivity() {
     private val currentResolution = mutableStateOf<String?>(null)
     private val currentChannelIndex = mutableStateOf(0)
     private val isBuffering = mutableStateOf(true)
+    private val isChannelInfoVisible = mutableStateOf(false)
 
     private val customM3uUrl = mutableStateOf("")
     private val isWatchdogEnabled = mutableStateOf(true)
@@ -682,6 +683,7 @@ class MainActivity : ComponentActivity() {
 
     private var autoHideJob: Job? = null
     private var watchdogJob: Job? = null
+    private var channelInfoJob: Job? = null
 
     // Verified 7-Channel Local Fallback
     private val fallbackChannels = listOf(
@@ -918,6 +920,36 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
+                    AnimatedVisibility(
+                        visible = isChannelInfoVisible.value && !isUiVisible.value,
+                        modifier = Modifier.align(Alignment.BottomStart).padding(start = 32.dp, bottom = 28.dp),
+                        enter = fadeIn(tween(250)) + slideInVertically(tween(250)) { it / 3 },
+                        exit = fadeOut(tween(250)) + slideOutVertically(tween(250)) { it / 3 }
+                    ) {
+                        val infoChannel = channels.getOrNull(currentChannelIndex.value)
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color.Black.copy(alpha = 0.78f))
+                                .border(1.dp, AmberDial.copy(alpha = 0.7f), RoundedCornerShape(12.dp))
+                                .padding(horizontal = 18.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (infoChannel?.logo != null) {
+                                RemoteChannelLogo(infoChannel.logo, infoChannel.title, Modifier.size(42.dp))
+                                Spacer(Modifier.width(12.dp))
+                            }
+                            Column {
+                                Text(infoChannel?.title ?: "Live TV", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                                Text(
+                                    text = listOfNotNull(infoChannel?.group, currentResolution.value).joinToString("  •  "),
+                                    color = WarmAshMuted,
+                                    fontSize = 12.sp
+                                )
+                            }
+                        }
+                    }
+
                     if (isSearchOpen.value) {
                         SearchModal(
                             channels = channels,
@@ -1103,6 +1135,14 @@ class MainActivity : ComponentActivity() {
         val channel = channels.getOrNull(index) ?: return
         isBuffering.value = true
         currentResolution.value = null
+        isChannelInfoVisible.value = true
+        channelInfoJob?.cancel()
+        // Keep the channel banner visible for five seconds after the menu fades away.
+        val infoDuration = if (isUiVisible.value) 10_000L else 5_000L
+        channelInfoJob = lifecycleScope.launch {
+            delay(infoDuration)
+            isChannelInfoVisible.value = false
+        }
 
         val mediaItem = MediaItem.fromUri(channel.url)
         player.setMediaItem(mediaItem)
@@ -1172,6 +1212,7 @@ class MainActivity : ComponentActivity() {
         super.onDestroy()
         autoHideJob?.cancel()
         watchdogJob?.cancel()
+        channelInfoJob?.cancel()
         player.release()
     }
 }
