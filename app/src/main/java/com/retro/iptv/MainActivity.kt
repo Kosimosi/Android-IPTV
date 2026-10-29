@@ -352,7 +352,7 @@ fun OttTopHeader(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 listOf("HOME" to "Home", "FAVOURITES" to "Favourites", "REGION" to "Region", "TOPIC" to "Topic").forEach { (tab, label) ->
-                    val selected = currentTab == tab || (tab == "TOPIC" && currentTab == "HOME")
+                    val selected = currentTab == tab
                     RetroTopTab(
                         label = label,
                         selected = selected,
@@ -370,7 +370,7 @@ fun OttTopHeader(
         }
         if (compact) {
             Column(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
+                modifier = Modifier.fillMaxWidth().focusGroup().padding(horizontal = 14.dp, vertical = 10.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
