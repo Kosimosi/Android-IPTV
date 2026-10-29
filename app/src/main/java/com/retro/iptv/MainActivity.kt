@@ -35,6 +35,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusGroup
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
@@ -72,6 +75,7 @@ import java.net.URL
 
 // --- YOUR PERSONAL GITHUB PLAYLIST URL ---
 const val DEFAULT_PLAYLIST_URL = "https://raw.githubusercontent.com/Kosimosi/Android-IPTV/main/playlist.m3u"
+const val IPTV_ORG_PLAYLIST_URL = "https://iptv-org.github.io/iptv/index.m3u"
 
 // --- COLOR PALETTE (Modern Oak) ---
 val OakDarkBackground = Color(0xFF140F0C)
@@ -88,7 +92,8 @@ data class Channel(
     val url: String,
     val group: String = "General",
     val logo: String? = null,
-    val status: ChannelStatus = ChannelStatus.UNKNOWN
+    val status: ChannelStatus = ChannelStatus.UNKNOWN,
+    val region: String = "Unknown Region"
 )
 
 // --- RELIABLE LOGO LOADER (Follows Redirects & Decodes PNG/JPG) ---
@@ -206,6 +211,7 @@ fun CrtTvExitEffect(
 @Composable
 fun OttTopHeader(
     currentTab: String,
+    initialFocusRequester: FocusRequester,
     onSelectTab: (String) -> Unit,
     onOpenSearch: () -> Unit,
     onOpenSettings: () -> Unit
@@ -213,45 +219,55 @@ fun OttTopHeader(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 32.dp, vertical = 20.dp),
+            .focusGroup()
+            .padding(horizontal = 32.dp, vertical = 16.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Logo
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("RETRO", color = AmberDial, fontWeight = FontWeight.Black, fontSize = 20.sp, letterSpacing = 2.sp)
             Text("TV", color = Color.White, fontWeight = FontWeight.Black, fontSize = 20.sp, letterSpacing = 1.sp)
         }
 
-        // Center Pills
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-            val isHome = currentTab == "HOME"
-            Box(
-                modifier = Modifier
-                    .clip(CircleShape)
-                    .background(if (isHome) AmberDial else OakSurfaceElevated)
-                    .clickable { onSelectTab("HOME") }
-                    .padding(horizontal = 20.dp, vertical = 8.dp)
-            ) {
-                Text("Home", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-            }
-
-            val isFav = currentTab == "FAVOURITES"
-            Box(
-                modifier = Modifier
-                    .clip(CircleShape)
-                    .background(if (isFav) AmberDial else OakSurfaceElevated)
-                    .clickable { onSelectTab("FAVOURITES") }
-                    .padding(horizontal = 20.dp, vertical = 8.dp)
-            ) {
-                Text("Favourites", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            listOf("HOME" to "Home", "FAVOURITES" to "Favourites", "REGION" to "Region", "TOPIC" to "Topic").forEach { (tab, label) ->
+                val selected = currentTab == tab || (tab == "TOPIC" && currentTab == "HOME")
+                Box(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(if (selected) AmberDial else OakSurfaceElevated)
+                        .then(if (tab == "HOME") Modifier.focusRequester(initialFocusRequester) else Modifier)
+                        .clickable { onSelectTab(tab) }
+                        .focusable()
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(label, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                }
             }
         }
 
-        // Action Icons
-        Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("🔍", color = Color.White, fontSize = 18.sp, modifier = Modifier.clip(CircleShape).clickable { onOpenSearch() }.padding(6.dp))
-            Text("⚙", color = Color.White, fontSize = 20.sp, modifier = Modifier.clip(CircleShape).clickable { onOpenSettings() }.padding(6.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "⌕",
+                color = Color.White,
+                fontSize = 28.sp,
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .clickable { onOpenSearch() }
+                    .focusable()
+                    .padding(horizontal = 6.dp, vertical = 2.dp)
+            )
+            Text(
+                "⛭",
+                color = Color.White,
+                fontSize = 25.sp,
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .clickable { onOpenSettings() }
+                    .focusable()
+                    .padding(horizontal = 6.dp, vertical = 2.dp)
+            )
         }
     }
 }
@@ -359,7 +375,8 @@ fun ChannelCard(
     channel: Channel,
     isSelected: Boolean,
     onSelect: () -> Unit,
-    onUserInteract: () -> Unit
+    onUserInteract: () -> Unit,
+    focusRequester: FocusRequester? = null
 ) {
     var isFocused by remember { mutableStateOf(false) }
 
@@ -379,6 +396,7 @@ fun ChannelCard(
                 color = if (isFocused) AmberDial else if (isSelected) AmberDial.copy(alpha = 0.7f) else Color.Transparent,
                 shape = RoundedCornerShape(10.dp)
             )
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .onFocusChanged { 
                 isFocused = it.isFocused
                 if (it.isFocused) onUserInteract()
@@ -388,6 +406,7 @@ fun ChannelCard(
                 onSelect()
                 onUserInteract()
             }
+            .focusGroup()
             .padding(12.dp)
     ) {
         Column(
@@ -722,6 +741,14 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val listState = rememberLazyListState()
+            val initialMenuFocusRequester = remember { FocusRequester() }
+
+            LaunchedEffect(isUiVisible.value, channels.size) {
+                if (isUiVisible.value) {
+                    delay(180)
+                    runCatching { initialMenuFocusRequester.requestFocus() }
+                }
+            }
 
             val scrollOffset by remember {
                 derivedStateOf {
@@ -785,16 +812,17 @@ class MainActivity : ComponentActivity() {
                             val isFav = favoriteUrls.contains(activeChannel?.url.orEmpty())
 
                             val filteredGroups = remember(currentTab.value, channels.toList(), favoriteUrls.toList()) {
-                                if (currentTab.value == "FAVOURITES") {
-                                    mapOf("Favourites" to channels.filter { favoriteUrls.contains(it.url) })
-                                } else {
-                                    channels.groupBy { it.group }
+                                when (currentTab.value) {
+                                    "FAVOURITES" -> mapOf("Favourites" to channels.filter { favoriteUrls.contains(it.url) })
+                                    "REGION" -> channels.groupBy { it.region.ifBlank { "Unknown Region" } }.toSortedMap()
+                                    else -> channels.groupBy { it.group.ifBlank { "General" } }.toSortedMap()
                                 }
                             }
 
                             Column(modifier = Modifier.fillMaxSize()) {
                                 OttTopHeader(
                                     currentTab = currentTab.value,
+                                    initialFocusRequester = initialMenuFocusRequester,
                                     onSelectTab = {
                                         currentTab.value = it
                                         resetIdleTimer()
@@ -844,6 +872,7 @@ class MainActivity : ComponentActivity() {
                                                     )
 
                                                     LazyRow(
+                                                        modifier = Modifier.focusGroup(),
                                                         horizontalArrangement = Arrangement.spacedBy(14.dp),
                                                         contentPadding = PaddingValues(horizontal = 36.dp)
                                                     ) {
@@ -858,7 +887,8 @@ class MainActivity : ComponentActivity() {
                                                                         playChannel(idx)
                                                                     }
                                                                 },
-                                                                onUserInteract = { resetIdleTimer() }
+                                                                onUserInteract = { resetIdleTimer() },
+                                                                focusRequester = if (ch.url == filteredGroups.values.firstOrNull()?.firstOrNull()?.url) initialMenuFocusRequester else null
                                                             )
                                                         }
                                                     }
@@ -917,7 +947,7 @@ class MainActivity : ComponentActivity() {
     private fun resetIdleTimer() {
         autoHideJob?.cancel()
         autoHideJob = lifecycleScope.launch {
-            delay(6000)
+            delay(5000)
             if (!isSearchOpen.value && !isSettingsOpen.value) {
                 isUiVisible.value = false
             }
@@ -953,7 +983,6 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch(Dispatchers.IO) {
             val cacheFile = File(filesDir, "cached_playlist.m3u")
 
-            // Load cache or verified fallback channels immediately
             val initialList = if (cacheFile.exists()) {
                 val parsed = parseM3u(cacheFile.readText())
                 if (parsed.isNotEmpty()) parsed else fallbackChannels
@@ -963,18 +992,21 @@ class MainActivity : ComponentActivity() {
 
             withContext(Dispatchers.Main) {
                 channels.clear()
-                channels.addAll(initialList)
+                channels.addAll(initialList.distinctBy { it.url })
                 if (currentChannelIndex.value !in channels.indices) currentChannelIndex.value = 0
                 playChannel(currentChannelIndex.value)
             }
 
-            // Fetch update from personal repository
-            val targetUrl = if (customM3uUrl.value.isNotBlank()) customM3uUrl.value else DEFAULT_PLAYLIST_URL
-            val freshText = fetchUrl(targetUrl)
+            // Keep the current/personal playlist and add the IPTV-Org catalogue.
+            val primaryUrl = if (customM3uUrl.value.isNotBlank()) customM3uUrl.value else DEFAULT_PLAYLIST_URL
+            val playlistTexts = listOf(primaryUrl, IPTV_ORG_PLAYLIST_URL)
+                .distinct()
+                .mapNotNull { url -> fetchUrl(url) }
 
-            if (freshText != null) {
-                cacheFile.writeText(freshText)
-                val freshList = parseM3u(freshText)
+            if (playlistTexts.isNotEmpty()) {
+                val combinedText = playlistTexts.joinToString("\n")
+                cacheFile.writeText(combinedText)
+                val freshList = parseM3u(combinedText).distinctBy { it.url }
                 withContext(Dispatchers.Main) {
                     if (freshList.isNotEmpty()) {
                         val currentPlayingUrl = channels.getOrNull(currentChannelIndex.value)?.url
@@ -983,7 +1015,7 @@ class MainActivity : ComponentActivity() {
                         val sameIdx = channels.indexOfFirst { it.url == currentPlayingUrl }
                         if (sameIdx >= 0) {
                             currentChannelIndex.value = sameIdx
-                        } else if (channels.isNotEmpty()) {
+                        } else {
                             currentChannelIndex.value = 0
                             playChannel(0)
                         }
@@ -997,7 +1029,7 @@ class MainActivity : ComponentActivity() {
         return try {
             val connection = (URL(urlString).openConnection() as HttpURLConnection).apply {
                 connectTimeout = 8000
-                readTimeout = 8000
+                readTimeout = 30000
                 requestMethod = "GET"
                 setRequestProperty("User-Agent", "Mozilla/5.0")
                 instanceFollowRedirects = true
@@ -1015,6 +1047,7 @@ class MainActivity : ComponentActivity() {
         var currentTitle = ""
         var currentGroup = "General"
         var currentLogo: String? = null
+        var currentRegion = "Unknown Region"
         val lines = content.lines()
 
         for (line in lines) {
@@ -1026,6 +1059,8 @@ class MainActivity : ComponentActivity() {
 
                 val logoMatch = """tvg-logo="([^"]*)"""".toRegex(RegexOption.IGNORE_CASE).find(trimmed)
                 currentLogo = logoMatch?.groupValues?.get(1)?.trim()
+                val countryMatch = """tvg-country="([^"]*)"""" .trim().toRegex(RegexOption.IGNORE_CASE).find(trimmed)
+                currentRegion = countryMatch?.groupValues?.get(1)?.trim()?.takeIf { it.isNotBlank() } ?: "Unknown Region"
             } else if (trimmed.startsWith("http://", ignoreCase = true) || trimmed.startsWith("https://", ignoreCase = true)) {
                 if (currentTitle.isNotEmpty()) {
                     list.add(
@@ -1033,12 +1068,14 @@ class MainActivity : ComponentActivity() {
                             title = currentTitle,
                             url = trimmed,
                             group = currentGroup,
-                            logo = currentLogo
+                            logo = currentLogo,
+                            region = currentRegion
                         )
                     )
                     currentTitle = ""
                     currentGroup = "General"
                     currentLogo = null
+                    currentRegion = "Unknown Region"
                 }
             }
         }
@@ -1075,6 +1112,10 @@ class MainActivity : ComponentActivity() {
     // Menu hidden: Left/Right zap channels, Up/Down/OK/Menu open the menu.
     // Menu visible: all D-pad keys go to the menu so you can move around in it.
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        // Let Android handle hardware volume keys normally.
+        if (keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN || keyCode == KeyEvent.KEYCODE_VOLUME_MUTE) {
+            return super.onKeyDown(keyCode, event)
+        }
         if (!isUiVisible.value) {
             when (keyCode) {
                 KeyEvent.KEYCODE_DPAD_RIGHT -> {
