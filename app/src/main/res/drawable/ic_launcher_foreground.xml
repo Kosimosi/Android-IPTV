@@ -4,28 +4,18 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- antennas -->
     <path
-        android:strokeColor="#FAF4ED"
-        android:strokeWidth="2.5"
+        android:strokeColor="#E53935"
+        android:strokeWidth="3"
         android:strokeLineCap="round"
-        android:pathData="M44,40L34,26M64,40L74,26" />
-    <!-- oak body -->
+        android:pathData="M44,38L34,24M64,38L74,24" />
     <path
-        android:fillColor="#7A4A28"
-        android:pathData="M30,40h48a6,6 0 0 1 6,6v30a6,6 0 0 1 -6,6h-48a6,6 0 0 1 -6,-6v-30a6,6 0 0 1 6,-6z" />
-    <!-- screen -->
+        android:fillColor="#E53935"
+        android:pathData="M30,38h48a7,7 0 0 1 7,7v32a7,7 0 0 1 -7,7h-48a7,7 0 0 1 -7,-7v-32a7,7 0 0 1 7,-7z" />
     <path
-        android:fillColor="#E07A38"
-        android:pathData="M33,45h28a4,4 0 0 1 4,4v24a4,4 0 0 1 -4,4h-28a4,4 0 0 1 -4,-4v-24a4,4 0 0 1 4,-4z" />
-    <!-- play triangle -->
-    <path android:fillColor="#140F0C" android:pathData="M42,53l14,8l-14,8z" />
-    <!-- dials -->
-    <path android:fillColor="#FAF4ED" android:pathData="M71.5,52a3,3 0 1 0 6,0a3,3 0 1 0 -6,0z" />
-    <path android:fillColor="#FAF4ED" android:pathData="M71.5,62a3,3 0 1 0 6,0a3,3 0 1 0 -6,0z" />
-    <path
-        android:strokeColor="#140F0C"
-        android:strokeWidth="1.5"
-        android:strokeLineCap="round"
-        android:pathData="M71.5,70h6M71.5,73h6" />
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M33,44h31a4,4 0 0 1 4,4v25a4,4 0 0 1 -4,4h-31a4,4 0 0 1 -4,-4v-25a4,4 0 0 1 4,-4z" />
+    <path android:fillColor="#E53935" android:pathData="M40,52l17,8.5l-17,8.5z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M72,50a3.5,3.5 0 1 0 7,0a3.5,3.5 0 1 0 -7,0z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M72,64a3.5,3.5 0 1 0 7,0a3.5,3.5 0 1 0 -7,0z" />
 </vector>
