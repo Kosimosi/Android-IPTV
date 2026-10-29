@@ -12,8 +12,10 @@ android {
         applicationId = "com.retro.iptv"
         minSdk = 26
         targetSdk = 35
-        versionCode = 6
-        versionName = "2.0.0"
+        // GitHub Actions assigns a monotonically increasing versionCode for each workflow run.
+        // Local builds use 7 until the next CI build.
+        versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 7
+        versionName = "2.0.${System.getenv("GITHUB_RUN_NUMBER") ?: "7"}"
     }
 
     compileOptions {
