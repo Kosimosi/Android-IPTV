@@ -763,7 +763,7 @@ class MainActivity : ComponentActivity() {
             val listState = rememberLazyListState()
             val initialMenuFocusRequester = remember { FocusRequester() }
 
-            LaunchedEffect(isUiVisible.value, channels.size) {
+            LaunchedEffect(isUiVisible.value) {
                 if (isUiVisible.value) {
                     delay(180)
                     runCatching { initialMenuFocusRequester.requestFocus() }
