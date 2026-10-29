@@ -14,6 +14,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -44,6 +45,8 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.TextStyle
@@ -207,6 +210,36 @@ fun CrtTvExitEffect(
     }
 }
 
+@Composable
+fun ModernSearchIcon(modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier) {
+        val unit = size.minDimension / 24f
+        drawCircle(Color.White, radius = 6.5f * unit, center = Offset(9f * unit, 9f * unit), style = Stroke(width = 2f * unit))
+        drawLine(Color.White, start = Offset(13.8f * unit, 13.8f * unit), end = Offset(21f * unit, 21f * unit), strokeWidth = 2.2f * unit)
+    }
+}
+
+@Composable
+fun ModernSettingsIcon(modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier) {
+        val unit = size.minDimension / 24f
+        val center = Offset(size.width / 2f, size.height / 2f)
+        for (i in 0 until 8) {
+            val angle = Math.PI * i / 4.0
+            val inner = 7.5f * unit
+            val outer = 10f * unit
+            drawLine(
+                Color.White,
+                start = Offset(center.x + kotlin.math.cos(angle).toFloat() * inner, center.y + kotlin.math.sin(angle).toFloat() * inner),
+                end = Offset(center.x + kotlin.math.cos(angle).toFloat() * outer, center.y + kotlin.math.sin(angle).toFloat() * outer),
+                strokeWidth = 2.8f * unit
+            )
+        }
+        drawCircle(Color.White, radius = 7f * unit, center = center, style = Stroke(width = 2f * unit))
+        drawCircle(Color.White, radius = 2.5f * unit, center = center, style = Stroke(width = 2f * unit))
+    }
+}
+
 // --- TOP HEADER (HOME & FAVOURITES ONLY) ---
 @Composable
 fun OttTopHeader(
@@ -248,26 +281,14 @@ fun OttTopHeader(
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                "⌕",
-                color = Color.White,
-                fontSize = 28.sp,
-                modifier = Modifier
-                    .clip(CircleShape)
-                    .clickable { onOpenSearch() }
-                    .focusable()
-                    .padding(horizontal = 6.dp, vertical = 2.dp)
-            )
-            Text(
-                "⛭",
-                color = Color.White,
-                fontSize = 25.sp,
-                modifier = Modifier
-                    .clip(CircleShape)
-                    .clickable { onOpenSettings() }
-                    .focusable()
-                    .padding(horizontal = 6.dp, vertical = 2.dp)
-            )
+            Box(
+                modifier = Modifier.clip(CircleShape).clickable { onOpenSearch() }.focusable().padding(6.dp),
+                contentAlignment = Alignment.Center
+            ) { ModernSearchIcon(Modifier.size(24.dp)) }
+            Box(
+                modifier = Modifier.clip(CircleShape).clickable { onOpenSettings() }.focusable().padding(6.dp),
+                contentAlignment = Alignment.Center
+            ) { ModernSettingsIcon(Modifier.size(24.dp)) }
         }
     }
 }
@@ -375,8 +396,7 @@ fun ChannelCard(
     channel: Channel,
     isSelected: Boolean,
     onSelect: () -> Unit,
-    onUserInteract: () -> Unit,
-    focusRequester: FocusRequester? = null
+    onUserInteract: () -> Unit
 ) {
     var isFocused by remember { mutableStateOf(false) }
 
@@ -396,7 +416,6 @@ fun ChannelCard(
                 color = if (isFocused) AmberDial else if (isSelected) AmberDial.copy(alpha = 0.7f) else Color.Transparent,
                 shape = RoundedCornerShape(10.dp)
             )
-            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .onFocusChanged { 
                 isFocused = it.isFocused
                 if (it.isFocused) onUserInteract()
@@ -406,7 +425,6 @@ fun ChannelCard(
                 onSelect()
                 onUserInteract()
             }
-            .focusGroup()
             .padding(12.dp)
     ) {
         Column(
