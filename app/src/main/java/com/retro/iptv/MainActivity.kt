@@ -1069,30 +1069,24 @@ class MainActivity : ComponentActivity() {
         playChannel(newIndex)
     }
 
-    // Direct Remote Zapping on Left / Right
+    // Menu hidden: Left/Right zap channels, Up/Down/OK/Menu open the menu.
+    // Menu visible: all D-pad keys go to the menu so you can move around in it.
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        when (keyCode) {
-            KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                switchChannel(1)
-                return true
-            }
-            KeyEvent.KEYCODE_DPAD_LEFT -> {
-                switchChannel(-1)
-                return true
-            }
-            KeyEvent.KEYCODE_DPAD_UP -> {
-                audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_RAISE, AudioManager.FLAG_SHOW_UI)
-                return true
-            }
-            KeyEvent.KEYCODE_DPAD_DOWN -> {
-                audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_LOWER, AudioManager.FLAG_SHOW_UI)
-                return true
-            }
-        }
-
         if (!isUiVisible.value) {
             when (keyCode) {
-                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_MENU -> {
+                KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                    switchChannel(1)
+                    return true
+                }
+                KeyEvent.KEYCODE_DPAD_LEFT -> {
+                    switchChannel(-1)
+                    return true
+                }
+                KeyEvent.KEYCODE_DPAD_UP,
+                KeyEvent.KEYCODE_DPAD_DOWN,
+                KeyEvent.KEYCODE_DPAD_CENTER,
+                KeyEvent.KEYCODE_ENTER,
+                KeyEvent.KEYCODE_MENU -> {
                     isUiVisible.value = true
                     resetIdleTimer()
                     return true
@@ -1107,6 +1101,7 @@ class MainActivity : ComponentActivity() {
                 isUiVisible.value = false
                 return true
             }
+            resetIdleTimer()
         }
 
         return super.onKeyDown(keyCode, event)
