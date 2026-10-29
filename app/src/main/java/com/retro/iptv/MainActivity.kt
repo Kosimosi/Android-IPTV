@@ -44,6 +44,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -364,8 +365,8 @@ fun ChannelCard(
 
     Box(
         modifier = Modifier
-            .width(180.dp)
-            .height(104.dp)
+            .width(200.dp)
+            .height(120.dp)
             .graphicsLayer {
                 val scale = if (isFocused) 1.08f else 1.0f
                 scaleX = scale
@@ -401,7 +402,7 @@ fun ChannelCard(
                 RemoteChannelLogo(
                     url = channel.logo,
                     channelTitle = channel.title,
-                    modifier = Modifier.size(34.dp).clip(RoundedCornerShape(6.dp))
+                    modifier = Modifier.size(46.dp).clip(RoundedCornerShape(8.dp))
                 )
 
                 if (channel.status == ChannelStatus.ONLINE) {
@@ -412,9 +413,11 @@ fun ChannelCard(
             Text(
                 text = channel.title,
                 color = Color.White,
-                fontSize = 13.sp,
+                fontSize = 14.sp,
                 fontWeight = if (isSelected || isFocused) FontWeight.Bold else FontWeight.SemiBold,
-                maxLines = 1
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                lineHeight = 17.sp
             )
         }
     }
