@@ -21,6 +21,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -41,6 +42,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
@@ -78,7 +80,8 @@ import java.net.URL
 
 // --- YOUR PERSONAL GITHUB PLAYLIST URL ---
 const val DEFAULT_PLAYLIST_URL = "https://raw.githubusercontent.com/Kosimosi/Android-IPTV/main/playlist.m3u"
-const val IPTV_ORG_PLAYLIST_URL = "https://iptv-org.github.io/iptv/index.m3u"
+const val IPTV_HINDI_PLAYLIST_URL = "https://iptv-org.github.io/iptv/languages/hin.m3u"
+const val IPTV_BENGALI_PLAYLIST_URL = "https://iptv-org.github.io/iptv/languages/ben.m3u"
 
 // --- COLOR PALETTE (Modern Oak) ---
 val OakDarkBackground = Color(0xFF140F0C)
@@ -240,7 +243,93 @@ fun ModernSettingsIcon(modifier: Modifier = Modifier) {
     }
 }
 
-// --- TOP HEADER (HOME & FAVOURITES ONLY) ---
+// --- RETROTV BRAND + GLASS PILL NAVIGATION ---
+@Composable
+fun RetroTvMark(modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier) {
+        val u = size.minDimension / 100f
+        val cx = size.width / 2f
+        drawLine(Color(0xFFE53935), Offset(cx - 13f*u, 28f*u), Offset(cx - 24f*u, 13f*u), 3f*u)
+        drawLine(Color(0xFFE53935), Offset(cx + 13f*u, 28f*u), Offset(cx + 24f*u, 13f*u), 3f*u)
+        drawRoundRect(Color(0xFFE53935), Offset(10f*u, 28f*u), androidx.compose.ui.geometry.Size(80f*u, 56f*u), androidx.compose.ui.geometry.CornerRadius(11f*u))
+        drawRoundRect(Color.White, Offset(17f*u, 35f*u), androidx.compose.ui.geometry.Size(51f*u, 42f*u), androidx.compose.ui.geometry.CornerRadius(6f*u))
+        val play = Path().apply {
+            moveTo(37f*u, 44f*u)
+            lineTo(54f*u, 56f*u)
+            lineTo(37f*u, 68f*u)
+            close()
+        }
+        drawPath(play, Color(0xFFE53935))
+        drawCircle(Color.White, 4f*u, Offset(78f*u, 45f*u))
+        drawCircle(Color.White, 4f*u, Offset(78f*u, 59f*u))
+    }
+}
+
+@Composable
+private fun RetroTopTab(
+    label: String,
+    selected: Boolean,
+    focusRequester: FocusRequester? = null,
+    onSelect: () -> Unit
+) {
+    var focused by remember { mutableStateOf(false) }
+    val pillColor by animateColorAsState(
+        targetValue = when {
+            selected -> AmberDial
+            focused -> AmberDial.copy(alpha = 0.30f)
+            else -> Color.White.copy(alpha = 0.055f)
+        },
+        animationSpec = tween(180),
+        label = "navPillColor"
+    )
+    val borderColor by animateColorAsState(
+        targetValue = if (focused || selected) AmberDial.copy(alpha = if (selected) 0.95f else 0.75f) else Color.White.copy(alpha = 0.10f),
+        animationSpec = tween(180),
+        label = "navPillBorder"
+    )
+    Box(
+        modifier = Modifier
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+            .clip(CircleShape)
+            .background(pillColor)
+            .border(1.dp, borderColor, CircleShape)
+            .onFocusChanged { focused = it.isFocused }
+            .focusable()
+            .clickable(onClick = onSelect)
+            .padding(horizontal = 15.dp, vertical = 9.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(label, color = Color.White, fontWeight = if (selected || focused) FontWeight.Bold else FontWeight.Medium, fontSize = 12.sp)
+    }
+}
+
+@Composable
+private fun RetroTopAction(
+    onClick: () -> Unit,
+    icon: @Composable () -> Unit
+) {
+    var focused by remember { mutableStateOf(false) }
+    val fill by animateColorAsState(
+        if (focused) AmberDial.copy(alpha = 0.32f) else Color.White.copy(alpha = 0.045f),
+        tween(180),
+        label = "actionPillColor"
+    )
+    Box(
+        modifier = Modifier
+            .size(42.dp)
+            .clip(CircleShape)
+            .background(fill)
+            .border(1.dp, if (focused) AmberDial else Color.White.copy(alpha = 0.12f), CircleShape)
+            .onFocusChanged { focused = it.isFocused }
+            .focusable()
+            .clickable(onClick = onClick)
+            .padding(9.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        icon()
+    }
+}
+
 @Composable
 fun OttTopHeader(
     currentTab: String,
@@ -249,46 +338,59 @@ fun OttTopHeader(
     onOpenSearch: () -> Unit,
     onOpenSettings: () -> Unit
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .focusGroup()
-            .padding(horizontal = 32.dp, vertical = 16.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("RETRO", color = AmberDial, fontWeight = FontWeight.Black, fontSize = 20.sp, letterSpacing = 2.sp)
-            Text("TV", color = Color.White, fontWeight = FontWeight.Black, fontSize = 20.sp, letterSpacing = 1.sp)
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        val compact = maxWidth < 600.dp
+        val brand: @Composable () -> Unit = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                RetroTvMark(Modifier.size(if (compact) 30.dp else 36.dp))
+                Text("RETRO", color = Color.White, fontWeight = FontWeight.Black, fontSize = if (compact) 17.sp else 20.sp, letterSpacing = 1.5.sp)
+                Text("TV", color = AmberDial, fontWeight = FontWeight.Black, fontSize = if (compact) 17.sp else 20.sp, letterSpacing = 1.sp)
+            }
         }
-
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            listOf("HOME" to "Home", "FAVOURITES" to "Favourites", "REGION" to "Region", "TOPIC" to "Topic").forEach { (tab, label) ->
-                val selected = currentTab == tab || (tab == "TOPIC" && currentTab == "HOME")
-                Box(
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .background(if (selected) AmberDial else OakSurfaceElevated)
-                        .then(if (tab == "HOME") Modifier.focusRequester(initialFocusRequester) else Modifier)
-                        .clickable { onSelectTab(tab) }
-                        .focusable()
-                        .padding(horizontal = 14.dp, vertical = 8.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(label, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        val tabs: @Composable () -> Unit = {
+            Row(
+                modifier = if (compact) Modifier.horizontalScroll(rememberScrollState()) else Modifier,
+                horizontalArrangement = Arrangement.spacedBy(7.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                listOf("HOME" to "Home", "FAVOURITES" to "Favourites", "REGION" to "Region", "TOPIC" to "Topic").forEach { (tab, label) ->
+                    val selected = currentTab == tab || (tab == "TOPIC" && currentTab == "HOME")
+                    RetroTopTab(
+                        label = label,
+                        selected = selected,
+                        focusRequester = if (tab == "HOME") initialFocusRequester else null,
+                        onSelect = { onSelectTab(tab) }
+                    )
                 }
             }
         }
-
-        Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier.clip(CircleShape).clickable { onOpenSearch() }.focusable().padding(6.dp),
-                contentAlignment = Alignment.Center
-            ) { ModernSearchIcon(Modifier.size(24.dp)) }
-            Box(
-                modifier = Modifier.clip(CircleShape).clickable { onOpenSettings() }.focusable().padding(6.dp),
-                contentAlignment = Alignment.Center
-            ) { ModernSettingsIcon(Modifier.size(24.dp)) }
+        val actions: @Composable () -> Unit = {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                RetroTopAction(onOpenSearch) { ModernSearchIcon(Modifier.fillMaxSize()) }
+                RetroTopAction(onOpenSettings) { ModernSettingsIcon(Modifier.fillMaxSize()) }
+            }
+        }
+        if (compact) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    brand()
+                    actions()
+                }
+                tabs()
+            }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth().focusGroup().padding(horizontal = 32.dp, vertical = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(20.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                brand()
+                Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { tabs() }
+                actions()
+            }
         }
     }
 }
@@ -482,7 +584,7 @@ fun SearchModal(
     ) {
         Box(
             modifier = Modifier
-                .width(480.dp)
+                .fillMaxWidth().padding(horizontal = 16.dp).widthIn(max = 480.dp)
                 .clip(RoundedCornerShape(14.dp))
                 .background(OakSurface)
                 .border(1.5.dp, AmberDial, RoundedCornerShape(14.dp))
@@ -666,6 +768,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var player: ExoPlayer
 
     private val isUiVisible = mutableStateOf(true)
+    private val isStartupVisible = mutableStateOf(true)
     private val isSearchOpen = mutableStateOf(false)
     private val isSettingsOpen = mutableStateOf(false)
     private val isCrtExiting = mutableStateOf(false)
@@ -729,6 +832,10 @@ class MainActivity : ComponentActivity() {
                         isBuffering.value = (state == Player.STATE_BUFFERING)
                         if (state == Player.STATE_READY) {
                             watchdogJob?.cancel()
+                            lifecycleScope.launch {
+                                delay(650)
+                                isStartupVisible.value = false
+                            }
                             val idx = currentChannelIndex.value
                             if (idx in channels.indices) {
                                 channels[idx] = channels[idx].copy(status = ChannelStatus.ONLINE)
@@ -760,6 +867,11 @@ class MainActivity : ComponentActivity() {
         resetIdleTimer()
 
         setContent {
+            LaunchedEffect(Unit) {
+                // Never leave the branded launch cover blocking a slow or unavailable stream.
+                delay(3200)
+                isStartupVisible.value = false
+            }
             val listState = rememberLazyListState()
             val initialMenuFocusRequester = remember { FocusRequester() }
 
@@ -983,9 +1095,45 @@ class MainActivity : ComponentActivity() {
                         )
                     }
 
-                    if (isBuffering.value && !isUiVisible.value) {
+                    if (isBuffering.value && !isUiVisible.value && !isStartupVisible.value) {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             CircularProgressIndicator(color = AmberDial)
+                        }
+                    }
+
+                    AnimatedVisibility(
+                        visible = isStartupVisible.value,
+                        modifier = Modifier.fillMaxSize(),
+                        enter = fadeIn(tween(180)),
+                        exit = fadeOut(tween(260))
+                    ) {
+                        val transition = rememberInfiniteTransition(label = "retroSplash")
+                        val pulse by transition.animateFloat(
+                            initialValue = 0.92f,
+                            targetValue = 1.04f,
+                            animationSpec = infiniteRepeatable(
+                                animation = tween(700, easing = FastOutSlowInEasing),
+                                repeatMode = RepeatMode.Reverse
+                            ),
+                            label = "splashPulse"
+                        )
+                        Column(
+                            modifier = Modifier.fillMaxSize().background(Color.White),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            RetroTvMark(Modifier.size(92.dp).graphicsLayer { scaleX = pulse; scaleY = pulse })
+                            Spacer(Modifier.height(16.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("RETRO", color = Color(0xFF202020), fontSize = 26.sp, fontWeight = FontWeight.Black, letterSpacing = 2.sp)
+                                Text("TV", color = Color(0xFFE53935), fontSize = 26.sp, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
+                            }
+                            Spacer(Modifier.height(18.dp))
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(22.dp),
+                                color = Color(0xFFE53935),
+                                strokeWidth = 2.dp
+                            )
                         }
                     }
                 }
@@ -1048,7 +1196,7 @@ class MainActivity : ComponentActivity() {
 
             // Keep the current/personal playlist and add the IPTV-Org catalogue.
             val primaryUrl = if (customM3uUrl.value.isNotBlank()) customM3uUrl.value else DEFAULT_PLAYLIST_URL
-            val playlistTexts = listOf(primaryUrl, IPTV_ORG_PLAYLIST_URL)
+            val playlistTexts = listOf(primaryUrl, IPTV_HINDI_PLAYLIST_URL, IPTV_BENGALI_PLAYLIST_URL)
                 .distinct()
                 .mapNotNull { url -> fetchUrl(url) }
 
