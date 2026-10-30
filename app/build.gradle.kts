@@ -14,8 +14,8 @@ android {
         targetSdk = 35
         // GitHub Actions assigns a monotonically increasing versionCode for each workflow run.
         // Local builds use 7 until the next CI build.
-        versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 7
-        versionName = "2.0.${System.getenv("GITHUB_RUN_NUMBER") ?: "7"}"
+        versionCode = 1000 + (System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 0)
+        versionName = "2.1.${System.getenv("GITHUB_RUN_NUMBER") ?: "0"}"
     }
 
     compileOptions {
