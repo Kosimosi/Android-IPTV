@@ -117,8 +117,8 @@ data class Channel(
     val status: ChannelStatus = ChannelStatus.UNKNOWN,
     val region: String = "Unknown Region",
     val epgId: String? = null,
-    val language: String = "Unknown",
-    val country: String = "Unknown"
+    val language: String = "Bangla",
+    val country: String = "Bangladesh"
 )
 
 data class Programme(val channelId: String, val title: String, val startTimeMs: Long, val stopTimeMs: Long)
@@ -839,7 +839,7 @@ class MainActivity : ComponentActivity() {
         Channel("NTV", "https://playztv-apps.pages.dev/ntv/index.m3u8", "BD Entertainment", "https://upload.wikimedia.org/wikipedia/en/thumb/e/ef/NTV_%28Bangladesh%29_logo.svg/320px-NTV_%28Bangladesh%29_logo.svg.png"),
         Channel("Deepto TV", "https://playztv-apps.pages.dev/deepto-tv/index.m3u8", "BD Entertainment", "https://i.imgur.com/0sBqVhc.png"),
         Channel("Maasranga TV", "https://playztv-apps.pages.dev/maasranga-tv/index.m3u8", "BD Entertainment", "https://upload.wikimedia.org/wikipedia/en/thumb/2/27/Maasranga_Television_logo.svg/320px-Maasranga_Television_logo.svg.png"),
-        Channel("DD Sports HD", "https://mumbai-edge.smartplaytv.in/DDSportsHD/index.m3u8", "Sports", "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7b/DD_Sports_logo_2023.svg/320px-DD_Sports_logo_2023.svg.png")
+        Channel("DD Sports HD", "https://mumbai-edge.smartplaytv.in/DDSportsHD/index.m3u8", "Sports", "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7b/DD_Sports_logo_2023.svg/320px-DD_Sports_logo_2023.svg.png", region = "Hindi", language = "Hindi", country = "India")
     )
 
     override fun onCreate(savedInstanceState: Bundle?) {
