@@ -1513,7 +1513,7 @@ class MainActivity : ComponentActivity() {
 
         // EPG downloads independently, so a slow guide cannot delay channel playback.
         lifecycleScope.launch(Dispatchers.IO) {
-            val xml = fetchUrl(IPTV_BANGLADESH_EPG_URL)
+            val xml = fetchUrl(IPTV_INDIA_EPG_URL)
             val parsed = if (!xml.isNullOrBlank()) runCatching { parseXmlTv(xml) }.getOrDefault(emptyList()) else emptyList()
             withContext(Dispatchers.Main) {
                 epgPrograms.clear()
