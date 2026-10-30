@@ -972,7 +972,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            BackHandler(enabled = isSearchOpen.value || isSettingsOpen.value || isUiVisible.value || !isUiVisible.value) {
+            BackHandler(enabled = true) {
                 when {
                     isSearchOpen.value -> isSearchOpen.value = false
                     isSettingsOpen.value -> isSettingsOpen.value = false
