@@ -12,6 +12,7 @@ import android.graphics.Color as AndroidColor
 import android.media.AudioManager
 import android.os.Bundle
 import android.view.KeyEvent
+import android.util.Xml
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.core.content.FileProvider
@@ -85,12 +86,18 @@ import java.io.File
 import java.io.IOException
 import java.net.HttpURLConnection
 import org.json.JSONObject
+import org.xmlpull.v1.XmlPullParser
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import kotlin.math.abs
 import java.net.URL
 
 // --- YOUR PERSONAL GITHUB PLAYLIST URL ---
 const val DEFAULT_PLAYLIST_URL = "https://raw.githubusercontent.com/Kosimosi/Android-IPTV/main/playlist.m3u"
 const val IPTV_HINDI_PLAYLIST_URL = "https://iptv-org.github.io/iptv/languages/hin.m3u"
 const val IPTV_BENGALI_PLAYLIST_URL = "https://iptv-org.github.io/iptv/languages/ben.m3u"
+const val IPTV_BANGLADESH_EPG_URL = "https://iptv-org.github.io/epg/guides/bd.xml"
 
 // --- COLOR PALETTE (Modern Oak) ---
 val OakDarkBackground = Color(0xFF140F0C)
@@ -108,8 +115,30 @@ data class Channel(
     val group: String = "General",
     val logo: String? = null,
     val status: ChannelStatus = ChannelStatus.UNKNOWN,
-    val region: String = "Unknown Region"
+    val region: String = "Unknown Region",
+    val epgId: String? = null
 )
+
+data class Programme(val channelId: String, val title: String, val startTimeMs: Long, val stopTimeMs: Long)
+
+@Composable
+fun ProgrammeInfoCard(current: Programme?, upcoming: Programme?) {
+    if (current == null && upcoming == null) return
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)
+            .clip(RoundedCornerShape(10.dp)).background(OakSurface.copy(alpha = 0.94f))
+            .border(1.dp, AmberDial.copy(alpha = 0.45f), RoundedCornerShape(10.dp)).padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(7.dp)
+    ) {
+        Text("PROGRAMME GUIDE", color = AmberDial, fontWeight = FontWeight.Black, fontSize = 11.sp, letterSpacing = 1.sp)
+        current?.let { Text("NOW  ${formatProgrammeTime(it.startTimeMs)}–${formatProgrammeTime(it.stopTimeMs)}  •  ${it.title}",
+            color = ParchmentWhite, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis) }
+        upcoming?.let { Text("NEXT  ${formatProgrammeTime(it.startTimeMs)}–${formatProgrammeTime(it.stopTimeMs)}  •  ${it.title}",
+            color = WarmAshMuted, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis) }
+    }
+}
+
+private fun formatProgrammeTime(timeMs: Long): String = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(timeMs))
 
 // --- RELIABLE LOGO LOADER (Follows Redirects & Decodes PNG/JPG) ---
 @Composable
@@ -408,7 +437,8 @@ fun HeroSection(
     channel: Channel?,
     resolution: String?,
     isFavorite: Boolean,
-    onToggleFavorite: () -> Unit
+    onToggleFavorite: () -> Unit,
+    onFullscreen: () -> Unit
 ) {
     val liveTransition = rememberInfiniteTransition(label = "livePulse")
     val liveAlpha by liveTransition.animateFloat(
@@ -444,12 +474,14 @@ fun HeroSection(
                 }
             }
         }
-        Box(
-            modifier = Modifier.clip(CircleShape).background(OakSurfaceElevated)
-                .border(1.dp, AmberDial.copy(alpha = 0.5f), CircleShape)
-                .clickable { onToggleFavorite() }.padding(horizontal = 12.dp, vertical = 6.dp)
-        ) {
-            Text(if (isFavorite) "★ Saved" else "☆ Favourite", color = ParchmentWhite, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.clip(CircleShape).background(OakSurfaceElevated).border(1.dp, AmberDial.copy(alpha = 0.5f), CircleShape)
+                .clickable { onToggleFavorite() }.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                Text(if (isFavorite) "★ Saved" else "☆ Favourite", color = ParchmentWhite, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+            }
+            Box(Modifier.clip(CircleShape).background(AmberDial).clickable { onFullscreen() }.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                Text("⛶ Watch", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+            }
         }
     }
 }
@@ -781,6 +813,12 @@ class MainActivity : ComponentActivity() {
     private val currentChannelIndex = mutableStateOf(0)
     private val isBuffering = mutableStateOf(true)
     private val isChannelInfoVisible = mutableStateOf(false)
+    private val playbackRetryMessage = mutableStateOf<String?>(null)
+    private val playlistStatus = mutableStateOf("Loading playlists…")
+    private val recentChannelUrls = mutableStateListOf<String>()
+    private val epgPrograms = mutableStateListOf<Programme>()
+    private var retryJob: Job? = null
+    private var retryAttempt = 0
 
     private val customM3uUrl = mutableStateOf("")
     private val isWatchdogEnabled = mutableStateOf(true)
@@ -834,6 +872,9 @@ class MainActivity : ComponentActivity() {
                     override fun onPlaybackStateChanged(state: Int) {
                         isBuffering.value = (state == Player.STATE_BUFFERING)
                         if (state == Player.STATE_READY) {
+                            retryJob?.cancel()
+                            retryAttempt = 0
+                            playbackRetryMessage.value = null
                             watchdogJob?.cancel()
                             lifecycleScope.launch {
                                 delay(650)
@@ -859,8 +900,29 @@ class MainActivity : ComponentActivity() {
                     }
 
                     override fun onPlayerError(error: PlaybackException) {
-                        if (isWatchdogEnabled.value) {
-                            switchChannel(1)
+                        isBuffering.value = false
+                        retryJob?.cancel()
+                        retryAttempt += 1
+                        val maxRetries = 3
+                        if (retryAttempt <= maxRetries) {
+                            val attempt = retryAttempt
+                            playbackRetryMessage.value = "Stream failed — retry $attempt/$maxRetries…"
+                            retryJob = lifecycleScope.launch {
+                                delay(attempt * 1_000L)
+                                if (currentChannelIndex.value in channels.indices) {
+                                    player.setMediaItem(MediaItem.fromUri(channels[currentChannelIndex.value].url))
+                                    player.prepare()
+                                }
+                            }
+                        } else {
+                            playbackRetryMessage.value = "Stream unavailable"
+                            val idx = currentChannelIndex.value
+                            if (idx in channels.indices) channels[idx] = channels[idx].copy(status = ChannelStatus.OFFLINE)
+                            if (isWatchdogEnabled.value) retryJob = lifecycleScope.launch {
+                                delay(1200)
+                                playbackRetryMessage.value = "Switching to next channel…"
+                                switchChannel(1)
+                            }
                         }
                     }
                 })
@@ -929,7 +991,20 @@ class MainActivity : ComponentActivity() {
                                 this.player = this@MainActivity.player
                             }
                         },
-                        modifier = Modifier.fillMaxSize()
+                        modifier = Modifier.fillMaxSize().pointerInput(channels.size, currentChannelIndex.value) {
+                            var dragDistance = 0f
+                            detectHorizontalDragGestures(
+                                onHorizontalDrag = { _, amount -> dragDistance += amount },
+                                onDragEnd = {
+                                    if (abs(dragDistance) > 85f) {
+                                        switchChannel(if (dragDistance < 0) 1 else -1)
+                                        isChannelInfoVisible.value = true
+                                    }
+                                    dragDistance = 0f
+                                },
+                                onDragCancel = { dragDistance = 0f }
+                            )
+                        }
                     )
 
                     // Foreground OTT Interface
@@ -986,9 +1061,42 @@ class MainActivity : ComponentActivity() {
                                             onToggleFavorite = {
                                                 activeChannel?.url?.let { toggleFavorite(it) }
                                                 resetIdleTimer()
+                                            },
+                                            onFullscreen = {
+                                                isUiVisible.value = false
+                                                isSearchOpen.value = false
+                                                isSettingsOpen.value = false
                                             }
                                         )
                                     }
+
+                                    item {
+                                        Text(playlistStatus.value, color = WarmAshMuted, fontSize = 10.sp,
+                                            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp))
+                                    }
+
+                                    val recentlyWatched = recentChannelUrls.mapNotNull { url -> channels.firstOrNull { it.url == url } }
+                                    if (recentlyWatched.isNotEmpty()) {
+                                        item {
+                                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                Text("RECENTLY WATCHED", color = AmberDial, fontSize = 13.sp, fontWeight = FontWeight.Black,
+                                                    letterSpacing = 1.sp, modifier = Modifier.padding(horizontal = 24.dp))
+                                                LazyRow(modifier = Modifier.focusGroup(), horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(horizontal = 24.dp)) {
+                                                    items(recentlyWatched, key = { it.url }) { ch ->
+                                                        ChannelCard(channel = ch, isSelected = ch.url == activeChannel?.url,
+                                                            onSelect = { val idx = channels.indexOfFirst { it.url == ch.url }; if (idx >= 0) { currentChannelIndex.value = idx; playChannel(idx) } },
+                                                            onUserInteract = { resetIdleTimer() })
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    val nowMs = System.currentTimeMillis()
+                                    val schedule = epgPrograms.filter { it.channelId == activeChannel?.epgId }.sortedBy { it.startTimeMs }
+                                    val currentProgramme = schedule.firstOrNull { it.startTimeMs <= nowMs && it.stopTimeMs > nowMs }
+                                    val nextProgramme = schedule.firstOrNull { it.startTimeMs > nowMs }
+                                    if (currentProgramme != null || nextProgramme != null) item { ProgrammeInfoCard(currentProgramme, nextProgramme) }
 
                                     filteredGroups.forEach { (groupName, groupChannels) ->
                                         if (groupChannels.isNotEmpty()) {
@@ -1104,6 +1212,13 @@ class MainActivity : ComponentActivity() {
                     if (isBuffering.value && !isUiVisible.value && !isStartupVisible.value) {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             CircularProgressIndicator(color = AmberDial)
+                        }
+                    }
+                    playbackRetryMessage.value?.let { message ->
+                        Box(modifier = Modifier.fillMaxWidth().align(Alignment.BottomCenter).padding(bottom = 24.dp), contentAlignment = Alignment.Center) {
+                            Text(message, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                                modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(Color.Black.copy(alpha = 0.82f))
+                                    .border(1.dp, AmberDial.copy(alpha = 0.7f), RoundedCornerShape(10.dp)).padding(horizontal = 16.dp, vertical = 10.dp))
                         }
                     }
 
@@ -1304,11 +1419,21 @@ class MainActivity : ComponentActivity() {
         favoriteUrls.clear()
         favoriteUrls.addAll(savedFavs)
         customM3uUrl.value = prefs.getString("custom_m3u_url", "") ?: ""
+        recentChannelUrls.clear()
+        recentChannelUrls.addAll(prefs.getString("recent_channel_urls", "")?.split("\\n")?.filter { it.isNotBlank() }?.take(8) ?: emptyList())
     }
 
     private fun saveSettingsToStorage() {
         val prefs = getSharedPreferences("retro_iptv_prefs", Context.MODE_PRIVATE)
         prefs.edit().putString("custom_m3u_url", customM3uUrl.value).apply()
+    }
+
+    private fun recordRecentlyWatched(channel: Channel) {
+        recentChannelUrls.remove(channel.url)
+        recentChannelUrls.add(0, channel.url)
+        while (recentChannelUrls.size > 8) recentChannelUrls.removeAt(recentChannelUrls.lastIndex)
+        getSharedPreferences("retro_iptv_prefs", Context.MODE_PRIVATE).edit()
+            .putString("recent_channel_urls", recentChannelUrls.joinToString("\\n")).apply()
     }
 
     private fun toggleFavorite(url: String) {
@@ -1326,47 +1451,107 @@ class MainActivity : ComponentActivity() {
     private fun loadPlaylists() {
         lifecycleScope.launch(Dispatchers.IO) {
             val cacheFile = File(filesDir, "cached_playlist.m3u")
-
-            val initialList = if (cacheFile.exists()) {
-                val parsed = parseM3u(cacheFile.readText())
-                if (parsed.isNotEmpty()) parsed else fallbackChannels
-            } else {
-                fallbackChannels
-            }
+            val cachedText = runCatching { if (cacheFile.exists()) cacheFile.readText() else "" }.getOrDefault("")
+            val cachedList = parseM3u(cachedText).distinctBy { it.url }
+            val initialList = cachedList.ifEmpty { fallbackChannels }
 
             withContext(Dispatchers.Main) {
                 channels.clear()
-                channels.addAll(initialList.distinctBy { it.url })
+                channels.addAll(initialList)
+                playlistStatus.value = if (cachedList.isNotEmpty()) "Cached channels ready • refreshing playlists…" else "Loading channels • using local fallback while refreshing…"
                 if (currentChannelIndex.value !in channels.indices) currentChannelIndex.value = 0
-                playChannel(currentChannelIndex.value)
+                if (channels.isNotEmpty()) playChannel(currentChannelIndex.value)
             }
 
-            // Keep the current/personal playlist and add the IPTV-Org catalogue.
             val primaryUrl = if (customM3uUrl.value.isNotBlank()) customM3uUrl.value else DEFAULT_PLAYLIST_URL
-            val playlistTexts = listOf(primaryUrl, IPTV_HINDI_PLAYLIST_URL, IPTV_BENGALI_PLAYLIST_URL)
-                .distinct()
-                .mapNotNull { url -> fetchUrl(url) }
+            val sources = listOf(primaryUrl, IPTV_HINDI_PLAYLIST_URL, IPTV_BENGALI_PLAYLIST_URL).distinct()
+            val fetched = sources.map { url -> url to fetchUrl(url) }
+            val successfulTexts = fetched.mapNotNull { it.second }
+            val failedCount = fetched.count { it.second == null }
+            val combinedText = successfulTexts.joinToString("\n")
+            val freshList = if (combinedText.isNotBlank()) parseM3u(combinedText).distinctBy { it.url } else emptyList()
 
-            if (playlistTexts.isNotEmpty()) {
-                val combinedText = playlistTexts.joinToString("\n")
-                cacheFile.writeText(combinedText)
-                val freshList = parseM3u(combinedText).distinctBy { it.url }
-                withContext(Dispatchers.Main) {
-                    if (freshList.isNotEmpty()) {
-                        val currentPlayingUrl = channels.getOrNull(currentChannelIndex.value)?.url
-                        channels.clear()
-                        channels.addAll(freshList)
-                        val sameIdx = channels.indexOfFirst { it.url == currentPlayingUrl }
-                        if (sameIdx >= 0) {
-                            currentChannelIndex.value = sameIdx
-                        } else {
-                            currentChannelIndex.value = 0
-                            playChannel(0)
-                        }
+            withContext(Dispatchers.Main) {
+                if (failedCount == 0 && freshList.isNotEmpty()) {
+                    runCatching { cacheFile.writeText(combinedText) }
+                    val currentUrl = channels.getOrNull(currentChannelIndex.value)?.url
+                    channels.clear()
+                    channels.addAll(freshList)
+                    val sameIndex = channels.indexOfFirst { it.url == currentUrl }
+                    currentChannelIndex.value = if (sameIndex >= 0) sameIndex else 0
+                    if (sameIndex < 0 && channels.isNotEmpty()) playChannel(0)
+                    playlistStatus.value = "Playlists updated • ${channels.size} channels"
+                } else if (cachedList.isNotEmpty()) {
+                    playlistStatus.value = if (failedCount > 0) {
+                        "Refresh incomplete: $failedCount source(s) unavailable • keeping cached channels"
+                    } else {
+                        "No usable channels returned • keeping cached channels"
                     }
+                } else if (freshList.isNotEmpty()) {
+                    channels.clear()
+                    channels.addAll(freshList)
+                    currentChannelIndex.value = 0
+                    playChannel(0)
+                    playlistStatus.value = "Partial playlist loaded • $failedCount source(s) unavailable"
+                } else {
+                    playlistStatus.value = "Playlist refresh failed • showing local fallback channels"
                 }
             }
         }
+
+        // EPG downloads independently, so a slow guide cannot delay channel playback.
+        lifecycleScope.launch(Dispatchers.IO) {
+            val xml = fetchUrl(IPTV_BANGLADESH_EPG_URL)
+            val parsed = if (!xml.isNullOrBlank()) runCatching { parseXmlTv(xml) }.getOrDefault(emptyList()) else emptyList()
+            withContext(Dispatchers.Main) {
+                epgPrograms.clear()
+                epgPrograms.addAll(parsed)
+            }
+        }
+    }
+
+    private fun parseXmlTv(xml: String): List<Programme> {
+        val parser = Xml.newPullParser()
+        parser.setInput(xml.reader())
+        val programmes = mutableListOf<Programme>()
+        var event = parser.eventType
+        var channelId = ""
+        var title = ""
+        var start = 0L
+        var stop = 0L
+        while (event != XmlPullParser.END_DOCUMENT) {
+            when (event) {
+                XmlPullParser.START_TAG -> when (parser.name) {
+                    "programme" -> {
+                        channelId = parser.getAttributeValue(null, "channel").orEmpty()
+                        start = parseXmlTvTime(parser.getAttributeValue(null, "start"))
+                        stop = parseXmlTvTime(parser.getAttributeValue(null, "stop"))
+                        title = ""
+                    }
+                    "title" -> if (channelId.isNotBlank()) title = parser.nextText().trim()
+                }
+                XmlPullParser.END_TAG -> if (parser.name == "programme" && channelId.isNotBlank() && title.isNotBlank() && start > 0L && stop > start) {
+                    programmes.add(Programme(channelId, title, start, stop))
+                    channelId = ""
+                }
+            }
+            event = parser.next()
+        }
+        return programmes
+    }
+
+    private fun parseXmlTvTime(value: String?): Long {
+        if (value.isNullOrBlank()) return 0L
+        val patterns = listOf("yyyyMMddHHmmss Z", "yyyyMMddHHmmss")
+        for (pattern in patterns) {
+            try {
+                val formatter = SimpleDateFormat(pattern, Locale.US)
+                formatter.isLenient = false
+                if (!pattern.contains("Z")) formatter.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                return formatter.parse(value.trim())?.time ?: 0L
+            } catch (_: Exception) { }
+        }
+        return 0L
     }
 
     private fun fetchUrl(urlString: String): String? {
@@ -1392,6 +1577,7 @@ class MainActivity : ComponentActivity() {
         var currentGroup = "General"
         var currentLogo: String? = null
         var currentRegion = "Unknown Region"
+        var currentEpgId: String? = null
         val lines = content.lines()
 
         for (line in lines) {
@@ -1403,6 +1589,8 @@ class MainActivity : ComponentActivity() {
 
                 val logoMatch = """tvg-logo="([^"]*)"""".toRegex(RegexOption.IGNORE_CASE).find(trimmed)
                 currentLogo = logoMatch?.groupValues?.get(1)?.trim()
+                val epgMatch = """tvg-id="([^"]*)"""".toRegex(RegexOption.IGNORE_CASE).find(trimmed)
+                currentEpgId = epgMatch?.groupValues?.get(1)?.trim()?.takeIf { it.isNotBlank() }
                 val countryMatch = """tvg-country="([^"]*)"""" .trim().toRegex(RegexOption.IGNORE_CASE).find(trimmed)
                 currentRegion = countryMatch?.groupValues?.get(1)?.trim()?.takeIf { it.isNotBlank() } ?: "Unknown Region"
             } else if (trimmed.startsWith("http://", ignoreCase = true) || trimmed.startsWith("https://", ignoreCase = true)) {
@@ -1413,13 +1601,15 @@ class MainActivity : ComponentActivity() {
                             url = trimmed,
                             group = currentGroup,
                             logo = currentLogo,
-                            region = currentRegion
+                            region = currentRegion,
+                            epgId = currentEpgId
                         )
                     )
                     currentTitle = ""
                     currentGroup = "General"
                     currentLogo = null
                     currentRegion = "Unknown Region"
+                    currentEpgId = null
                 }
             }
         }
@@ -1431,6 +1621,10 @@ class MainActivity : ComponentActivity() {
         isBuffering.value = true
         currentResolution.value = null
         isChannelInfoVisible.value = true
+        recordRecentlyWatched(channel)
+        retryJob?.cancel()
+        retryAttempt = 0
+        playbackRetryMessage.value = null
         channelInfoJob?.cancel()
         // Keep the channel banner visible for five seconds after the menu fades away.
         val infoDuration = if (isUiVisible.value) 10_000L else 5_000L
@@ -1512,6 +1706,7 @@ class MainActivity : ComponentActivity() {
         autoHideJob?.cancel()
         watchdogJob?.cancel()
         channelInfoJob?.cancel()
+        retryJob?.cancel()
         player.release()
     }
 }
