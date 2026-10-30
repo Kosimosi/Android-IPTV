@@ -1107,7 +1107,7 @@ class MainActivity : ComponentActivity() {
                                         }
                                     }
 
-                                    item { Spacer(modifier = Modifier.height(260.dp)) }
+                                    item { Spacer(modifier = Modifier.height(500.dp)) }
 
                                     val nowMs = epgClockMs
                                     val schedule = epgPrograms.filter { it.channelId == activeChannel?.epgId }.sortedBy { it.startTimeMs }
