@@ -3,6 +3,10 @@
 package com.retro.iptv
 
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings as AndroidSystemSettings
 import android.graphics.BitmapFactory
 import android.graphics.Color as AndroidColor
 import android.media.AudioManager
@@ -10,6 +14,7 @@ import android.os.Bundle
 import android.view.KeyEvent
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.core.content.FileProvider
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.animation.*
@@ -77,7 +82,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.IOException
 import java.net.HttpURLConnection
+import org.json.JSONObject
 import java.net.URL
 
 // --- YOUR PERSONAL GITHUB PLAYLIST URL ---
@@ -617,6 +624,10 @@ fun SearchModal(
 fun SettingsModal(
     customM3uUrl: String,
     isWatchdogEnabled: Boolean,
+    updateStatus: String,
+    isCheckingForUpdates: Boolean,
+    isUpdateDownloaded: Boolean,
+    onCheckForUpdates: () -> Unit,
     onLoadCustomM3u: (String) -> Unit,
     onResetM3u: () -> Unit,
     onToggleWatchdog: (Boolean) -> Unit,
@@ -723,6 +734,27 @@ fun SettingsModal(
                     Text("15s Watchdog Auto-skip", color = Color.White, fontSize = 12.sp)
                     Text(if (isWatchdogEnabled) "ON" else "OFF", color = if (isWatchdogEnabled) AmberDial else WarmAshMuted, fontWeight = FontWeight.Bold)
                 }
+
+                Text("APP UPDATE", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                Box(
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
+                        .background(AmberDial)
+                        .clickable(enabled = !isCheckingForUpdates) { onCheckForUpdates() }
+                        .padding(vertical = 12.dp, horizontal = 14.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = when {
+                            isCheckingForUpdates -> "Checking / downloading…"
+                            isUpdateDownloaded -> "Install downloaded update"
+                            else -> "Check for updates"
+                        },
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp
+                    )
+                }
+                Text(updateStatus, color = WarmAshMuted, fontSize = 11.sp, lineHeight = 15.sp)
             }
         }
     }
@@ -739,6 +771,10 @@ class MainActivity : ComponentActivity() {
     private val isSearchOpen = mutableStateOf(false)
     private val isSettingsOpen = mutableStateOf(false)
     private val isCrtExiting = mutableStateOf(false)
+    private val updateStatus = mutableStateOf("Check for a newer RETROTV version.")
+    private val isCheckingForUpdates = mutableStateOf(false)
+    private val isUpdateDownloaded = mutableStateOf(false)
+    private var downloadedUpdateApk: File? = null
 
     private val currentTab = mutableStateOf("HOME")
     private val currentResolution = mutableStateOf<String?>(null)
@@ -1046,6 +1082,10 @@ class MainActivity : ComponentActivity() {
                         SettingsModal(
                             customM3uUrl = customM3uUrl.value,
                             isWatchdogEnabled = isWatchdogEnabled.value,
+                            updateStatus = updateStatus.value,
+                            isCheckingForUpdates = isCheckingForUpdates.value,
+                            isUpdateDownloaded = isUpdateDownloaded.value,
+                            onCheckForUpdates = { checkForUpdates() },
                             onLoadCustomM3u = { url ->
                                 customM3uUrl.value = url
                                 saveSettingsToStorage()
@@ -1104,6 +1144,147 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
+        }
+    }
+
+    private data class UpdateCheckResult(
+        val latestTag: String,
+        val apkFile: File?,
+        val updateAvailable: Boolean
+    )
+
+    private fun checkForUpdates() {
+        val existingApk = downloadedUpdateApk
+        if (existingApk != null && existingApk.exists()) {
+            launchUpdateInstaller(existingApk)
+            return
+        }
+        if (isCheckingForUpdates.value) return
+
+        isCheckingForUpdates.value = true
+        updateStatus.value = "Checking GitHub for the latest release…"
+        lifecycleScope.launch {
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    val releaseConnection = (URL("https://api.github.com/repos/Kosimosi/Android-IPTV/releases/latest")
+                        .openConnection() as HttpURLConnection).apply {
+                        connectTimeout = 12000
+                        readTimeout = 15000
+                        requestMethod = "GET"
+                        setRequestProperty("Accept", "application/vnd.github+json")
+                        setRequestProperty("User-Agent", "RETROTV-Android")
+                    }
+                    val releaseJson = try {
+                        if (releaseConnection.responseCode !in 200..299) {
+                            throw IOException("GitHub returned HTTP ${releaseConnection.responseCode}")
+                        }
+                        JSONObject(releaseConnection.inputStream.bufferedReader().use { it.readText() })
+                    } finally {
+                        releaseConnection.disconnect()
+                    }
+
+                    val latestTag = releaseJson.optString("tag_name").trim()
+                    if (latestTag.isBlank()) throw IOException("The latest release has no version tag.")
+                    val assets = releaseJson.optJSONArray("assets") ?: throw IOException("No APK was published in the latest release.")
+                    val apkAsset = (0 until assets.length())
+                        .mapNotNull { assets.optJSONObject(it) }
+                        .firstOrNull {
+                            it.optString("name").endsWith(".apk", ignoreCase = true) &&
+                                it.optString("browser_download_url").startsWith("https://")
+                        } ?: throw IOException("No downloadable APK was found in the latest release.")
+
+                    val installedVersion = packageManager.getPackageInfo(packageName, 0).versionName ?: "0"
+                    if (compareVersions(latestTag, installedVersion) <= 0) {
+                        return@withContext UpdateCheckResult(latestTag, null, false)
+                    }
+
+                    val apkName = apkAsset.optString("name").replace(Regex("[^A-Za-z0-9._-]"), "_")
+                    val updateDir = File(cacheDir, "updates").apply { mkdirs() }
+                    val apkFile = File(updateDir, apkName)
+                    val downloadConnection = (URL(apkAsset.optString("browser_download_url"))
+                        .openConnection() as HttpURLConnection).apply {
+                        connectTimeout = 15000
+                        readTimeout = 60000
+                        requestMethod = "GET"
+                        setRequestProperty("User-Agent", "RETROTV-Android")
+                    }
+                    try {
+                        if (downloadConnection.responseCode !in 200..299) {
+                            throw IOException("APK download failed (HTTP ${downloadConnection.responseCode}).")
+                        }
+                        downloadConnection.inputStream.use { input ->
+                            apkFile.outputStream().use { output -> input.copyTo(output) }
+                        }
+                    } finally {
+                        downloadConnection.disconnect()
+                    }
+                    if (!apkFile.exists() || apkFile.length() == 0L) {
+                        throw IOException("The downloaded APK is empty.")
+                    }
+                    UpdateCheckResult(latestTag, apkFile, true)
+                }
+
+                if (!result.updateAvailable || result.apkFile == null) {
+                    updateStatus.value = "You're using the latest version (${result.latestTag})."
+                    Toast.makeText(this@MainActivity, "RETROTV is up to date", Toast.LENGTH_SHORT).show()
+                } else {
+                    downloadedUpdateApk = result.apkFile
+                    isUpdateDownloaded.value = true
+                    updateStatus.value = "Version ${result.latestTag} downloaded. Opening Android installer…"
+                    launchUpdateInstaller(result.apkFile)
+                }
+            } catch (error: Exception) {
+                updateStatus.value = "Update check failed: ${error.message ?: "network error"}"
+                Toast.makeText(this@MainActivity, "Could not check for updates", Toast.LENGTH_SHORT).show()
+            } finally {
+                isCheckingForUpdates.value = false
+            }
+        }
+    }
+
+    private fun compareVersions(first: String, second: String): Int {
+        val left = Regex("\\d+").findAll(first).mapNotNull { it.value.toIntOrNull() }.toList()
+        val right = Regex("\\d+").findAll(second).mapNotNull { it.value.toIntOrNull() }.toList()
+        for (index in 0 until maxOf(left.size, right.size)) {
+            val a = left.getOrElse(index) { 0 }
+            val b = right.getOrElse(index) { 0 }
+            if (a != b) return a.compareTo(b)
+        }
+        return 0
+    }
+
+    private fun launchUpdateInstaller(apkFile: File) {
+        if (!apkFile.exists()) {
+            downloadedUpdateApk = null
+            isUpdateDownloaded.value = false
+            updateStatus.value = "The downloaded update is missing. Check again."
+            return
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
+            updateStatus.value = "APK downloaded. Allow RETROTV to install apps in Android settings, then tap Install downloaded update."
+            try {
+                startActivity(
+                    Intent(
+                        AndroidSystemSettings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                        Uri.parse("package:$packageName")
+                    )
+                )
+            } catch (_: Exception) {
+                Toast.makeText(this, "Enable permission to install unknown apps for RETROTV", Toast.LENGTH_LONG).show()
+            }
+            return
+        }
+
+        try {
+            val apkUri = FileProvider.getUriForFile(this, "$packageName.fileprovider", apkFile)
+            val installIntent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(apkUri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(installIntent)
+        } catch (error: Exception) {
+            updateStatus.value = "Unable to open installer: ${error.message ?: "unknown error"}"
+            Toast.makeText(this, "Could not open the Android installer", Toast.LENGTH_LONG).show()
         }
     }
 
