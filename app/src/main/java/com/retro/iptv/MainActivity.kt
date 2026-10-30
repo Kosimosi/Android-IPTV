@@ -250,20 +250,20 @@ fun ModernSettingsIcon(modifier: Modifier = Modifier) {
 fun RetroTvMark(modifier: Modifier = Modifier) {
     Canvas(modifier = modifier) {
         val u = size.minDimension / 100f
-        val cx = size.width / 2f
-        drawLine(Color(0xFFE53935), Offset(cx - 13f*u, 28f*u), Offset(cx - 24f*u, 13f*u), 3f*u)
-        drawLine(Color(0xFFE53935), Offset(cx + 13f*u, 28f*u), Offset(cx + 24f*u, 13f*u), 3f*u)
-        drawRoundRect(Color(0xFFE53935), Offset(10f*u, 28f*u), androidx.compose.ui.geometry.Size(80f*u, 56f*u), androidx.compose.ui.geometry.CornerRadius(11f*u))
-        drawRoundRect(Color.White, Offset(17f*u, 35f*u), androidx.compose.ui.geometry.Size(51f*u, 42f*u), androidx.compose.ui.geometry.CornerRadius(6f*u))
+        // Match the launcher icon: red TV shell, white screen and red play mark.
+        drawLine(Color(0xFFE53935), Offset(41f*u, 35f*u), Offset(31f*u, 22f*u), 2.8f*u)
+        drawLine(Color(0xFFE53935), Offset(59f*u, 35f*u), Offset(69f*u, 22f*u), 2.8f*u)
+        drawRoundRect(Color(0xFFE53935), Offset(21f*u, 35f*u), androidx.compose.ui.geometry.Size(58f*u, 43f*u), androidx.compose.ui.geometry.CornerRadius(7f*u))
+        drawRoundRect(Color.White, Offset(27f*u, 41f*u), androidx.compose.ui.geometry.Size(36f*u, 31f*u), androidx.compose.ui.geometry.CornerRadius(3.5f*u))
         val play = Path().apply {
-            moveTo(37f*u, 44f*u)
-            lineTo(54f*u, 56f*u)
-            lineTo(37f*u, 68f*u)
+            moveTo(37f*u, 48f*u)
+            lineTo(53f*u, 56f*u)
+            lineTo(37f*u, 64f*u)
             close()
         }
         drawPath(play, Color(0xFFE53935))
-        drawCircle(Color.White, 4f*u, Offset(78f*u, 45f*u))
-        drawCircle(Color.White, 4f*u, Offset(78f*u, 59f*u))
+        drawCircle(Color.White, 3.2f*u, Offset(68.5f*u, 48.5f*u))
+        drawCircle(Color.White, 3.2f*u, Offset(68.5f*u, 61.5f*u))
     }
 }
 
@@ -401,93 +401,48 @@ fun HeroSection(
     channel: Channel?,
     resolution: String?,
     isFavorite: Boolean,
-    onToggleFavorite: () -> Unit,
-    onWatchFullscreen: () -> Unit
+    onToggleFavorite: () -> Unit
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 36.dp, vertical = 12.dp)
+    val liveTransition = rememberInfiniteTransition(label = "livePulse")
+    val liveAlpha by liveTransition.animateFloat(
+        initialValue = 0.72f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(850, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "liveAlpha"
+    )
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(Color(0xFFE53935))
-                    .padding(horizontal = 8.dp, vertical = 3.dp)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                modifier = Modifier.clip(CircleShape).background(Color(0xFFE53935).copy(alpha = liveAlpha))
+                    .padding(horizontal = 10.dp, vertical = 5.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp)
             ) {
-                Text("● LIVE", color = Color.White, fontWeight = FontWeight.Black, fontSize = 10.sp)
+                Box(Modifier.size(6.dp).clip(CircleShape).background(Color.White))
+                Text("LIVE", color = Color.White, fontWeight = FontWeight.Black, fontSize = 10.sp)
             }
-
             if (resolution != null) {
-                Spacer(modifier = Modifier.width(8.dp))
                 Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(OakSurfaceElevated)
-                        .border(1.dp, AmberDial, RoundedCornerShape(4.dp))
-                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                    modifier = Modifier.clip(CircleShape).background(OakSurfaceElevated)
+                        .border(1.dp, AmberDial, CircleShape).padding(horizontal = 10.dp, vertical = 5.dp)
                 ) {
                     Text(resolution, color = AmberDial, fontWeight = FontWeight.Bold, fontSize = 10.sp)
                 }
             }
         }
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            if (channel?.logo != null) {
-                RemoteChannelLogo(
-                    url = channel.logo,
-                    channelTitle = channel.title,
-                    modifier = Modifier.size(46.dp).clip(RoundedCornerShape(8.dp))
-                )
-                Spacer(modifier = Modifier.width(14.dp))
-            }
-
-            Column {
-                Text(
-                    text = channel?.title ?: "Select a Channel",
-                    color = Color.White,
-                    fontSize = 30.sp,
-                    fontWeight = FontWeight.Black
-                )
-                Text(
-                    text = channel?.group ?: "Live TV",
-                    color = WarmAshMuted,
-                    fontSize = 13.sp
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(14.dp))
-
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(AmberDial)
-                    .clickable { onWatchFullscreen() }
-                    .padding(horizontal = 18.dp, vertical = 10.dp)
-            ) {
-                Text("▶ Fullscreen", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-            }
-
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(OakSurfaceElevated)
-                    .border(1.dp, AmberDial.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
-                    .clickable { onToggleFavorite() }
-                    .padding(horizontal = 16.dp, vertical = 10.dp)
-            ) {
-                Text(
-                    text = if (isFavorite) "★ Favorited" else "☆ Add Favourite",
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 13.sp
-                )
-            }
+        Box(
+            modifier = Modifier.clip(CircleShape).background(OakSurfaceElevated)
+                .border(1.dp, AmberDial.copy(alpha = 0.5f), CircleShape)
+                .clickable { onToggleFavorite() }.padding(horizontal = 12.dp, vertical = 6.dp)
+        ) {
+            Text(if (isFavorite) "★ Saved" else "☆ Favourite", color = ParchmentWhite, fontWeight = FontWeight.Bold, fontSize = 11.sp)
         }
     }
 }
@@ -504,8 +459,8 @@ fun ChannelCard(
 
     Box(
         modifier = Modifier
-            .width(200.dp)
-            .height(120.dp)
+            .width(180.dp)
+            .height(100.dp)
             .graphicsLayer {
                 val scale = if (isFocused) 1.08f else 1.0f
                 scaleX = scale
@@ -995,9 +950,6 @@ class MainActivity : ComponentActivity() {
                                             onToggleFavorite = {
                                                 activeChannel?.url?.let { toggleFavorite(it) }
                                                 resetIdleTimer()
-                                            },
-                                            onWatchFullscreen = {
-                                                isUiVisible.value = false
                                             }
                                         )
                                     }
@@ -1012,13 +964,13 @@ class MainActivity : ComponentActivity() {
                                                         fontSize = 14.sp,
                                                         fontWeight = FontWeight.Black,
                                                         letterSpacing = 1.sp,
-                                                        modifier = Modifier.padding(horizontal = 36.dp, vertical = 6.dp)
+                                                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 3.dp)
                                                     )
 
                                                     LazyRow(
                                                         modifier = Modifier.focusGroup(),
                                                         horizontalArrangement = Arrangement.spacedBy(14.dp),
-                                                        contentPadding = PaddingValues(horizontal = 36.dp)
+                                                        contentPadding = PaddingValues(horizontal = 24.dp)
                                                     ) {
                                                         items(groupChannels) { ch ->
                                                             ChannelCard(
@@ -1046,7 +998,7 @@ class MainActivity : ComponentActivity() {
 
                     AnimatedVisibility(
                         visible = isChannelInfoVisible.value && !isUiVisible.value,
-                        modifier = Modifier.align(Alignment.BottomStart).padding(start = 32.dp, bottom = 28.dp),
+                        modifier = Modifier.align(Alignment.BottomEnd).padding(end = 24.dp, bottom = 22.dp),
                         enter = fadeIn(tween(250)) + slideInVertically(tween(250)) { it / 3 },
                         exit = fadeOut(tween(250)) + slideOutVertically(tween(250)) { it / 3 }
                     ) {
@@ -1056,19 +1008,21 @@ class MainActivity : ComponentActivity() {
                                 .clip(RoundedCornerShape(12.dp))
                                 .background(Color.Black.copy(alpha = 0.78f))
                                 .border(1.dp, AmberDial.copy(alpha = 0.7f), RoundedCornerShape(12.dp))
-                                .padding(horizontal = 18.dp, vertical = 12.dp),
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             if (infoChannel?.logo != null) {
-                                RemoteChannelLogo(infoChannel.logo, infoChannel.title, Modifier.size(42.dp))
-                                Spacer(Modifier.width(12.dp))
+                                RemoteChannelLogo(infoChannel.logo, infoChannel.title, Modifier.size(34.dp))
+                                Spacer(Modifier.width(8.dp))
                             }
                             Column {
-                                Text(infoChannel?.title ?: "Live TV", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                                Text(infoChannel?.title ?: "Live TV", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 Text(
                                     text = listOfNotNull(infoChannel?.group, currentResolution.value).joinToString("  •  "),
                                     color = WarmAshMuted,
-                                    fontSize = 12.sp
+                                    fontSize = 10.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                         }
@@ -1359,7 +1313,11 @@ class MainActivity : ComponentActivity() {
             }
         } else {
             if (keyCode == KeyEvent.KEYCODE_BACK) {
-                isUiVisible.value = false
+                when {
+                    isSearchOpen.value -> isSearchOpen.value = false
+                    isSettingsOpen.value -> isSettingsOpen.value = false
+                    else -> isUiVisible.value = false
+                }
                 return true
             }
             resetIdleTimer()
