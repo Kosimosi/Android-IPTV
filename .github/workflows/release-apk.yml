@@ -30,29 +30,36 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Validate release signing secrets
+      - name: Build debug APK for testing
+        run: gradle assembleDebug
+
+      - name: Upload debug test APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: RETROTV-debug-test-${{ github.run_number }}
+          path: app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 14
+
+      - name: Check release signing secrets
+        id: signing
         env:
           RETROTV_KEYSTORE_BASE64: ${{ secrets.RETROTV_KEYSTORE_BASE64 }}
           RETROTV_KEYSTORE_PASSWORD: ${{ secrets.RETROTV_KEYSTORE_PASSWORD }}
           RETROTV_KEY_ALIAS: ${{ secrets.RETROTV_KEY_ALIAS }}
           RETROTV_KEY_PASSWORD: ${{ secrets.RETROTV_KEY_PASSWORD }}
         run: |
-          missing=0
-          for key in RETROTV_KEYSTORE_BASE64 RETROTV_KEYSTORE_PASSWORD RETROTV_KEY_ALIAS RETROTV_KEY_PASSWORD; do
-            if [ -z "${!key}" ]; then
-              echo "::error::Missing GitHub Actions secret: $key"
-              missing=1
-            fi
-          done
-          if [ "$missing" -ne 0 ]; then
-            echo "Add the four RETROTV signing secrets in Settings > Secrets and variables > Actions."
-            exit 1
+          if [ -z "$RETROTV_KEYSTORE_BASE64" ] || [ -z "$RETROTV_KEYSTORE_PASSWORD" ] || [ -z "$RETROTV_KEY_ALIAS" ] || [ -z "$RETROTV_KEY_PASSWORD" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Release signing is not configured. Debug APK uploaded for testing; signed release publication is skipped."
+            exit 0
           fi
+          echo "ready=true" >> "$GITHUB_OUTPUT"
           mkdir -p "$RUNNER_TEMP/retrotv-signing"
           echo "$RETROTV_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/retrotv-signing/release.jks"
           test -s "$RUNNER_TEMP/retrotv-signing/release.jks"
 
       - name: Build signed release APK
+        if: steps.signing.outputs.ready == 'true'
         env:
           RETROTV_KEYSTORE_PATH: ${{ runner.temp }}/retrotv-signing/release.jks
           RETROTV_KEYSTORE_PASSWORD: ${{ secrets.RETROTV_KEYSTORE_PASSWORD }}
@@ -61,11 +68,13 @@ jobs:
         run: gradle assembleRelease
 
       - name: Prepare release APK
+        if: steps.signing.outputs.ready == 'true'
         run: |
           mkdir -p release
           cp app/build/outputs/apk/release/app-release.apk "release/Retro-TV-2.0.${GITHUB_RUN_NUMBER}.apk"
 
       - name: Publish GitHub Release
+        if: steps.signing.outputs.ready == 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v2.0.${{ github.run_number }}
