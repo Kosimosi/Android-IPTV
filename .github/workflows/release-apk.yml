@@ -1,13 +1,16 @@
-name: Build and Release APK
+name: RETROTV Android Release
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
   workflow_dispatch:
 
 permissions:
   contents: write
+
+concurrency:
+  group: retrotv-release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build-release:
@@ -27,13 +30,40 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Build installable APK
-        run: gradle assembleDebug
+      - name: Validate release signing secrets
+        env:
+          RETROTV_KEYSTORE_BASE64: ${{ secrets.RETROTV_KEYSTORE_BASE64 }}
+          RETROTV_KEYSTORE_PASSWORD: ${{ secrets.RETROTV_KEYSTORE_PASSWORD }}
+          RETROTV_KEY_ALIAS: ${{ secrets.RETROTV_KEY_ALIAS }}
+          RETROTV_KEY_PASSWORD: ${{ secrets.RETROTV_KEY_PASSWORD }}
+        run: |
+          missing=0
+          for key in RETROTV_KEYSTORE_BASE64 RETROTV_KEYSTORE_PASSWORD RETROTV_KEY_ALIAS RETROTV_KEY_PASSWORD; do
+            if [ -z "${!key}" ]; then
+              echo "::error::Missing GitHub Actions secret: $key"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            echo "Add the four RETROTV signing secrets in Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/retrotv-signing"
+          echo "$RETROTV_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/retrotv-signing/release.jks"
+          test -s "$RUNNER_TEMP/retrotv-signing/release.jks"
 
-      - name: Prepare APK
+      - name: Build signed release APK
+        env:
+          RETROTV_KEYSTORE_PATH: ${{ runner.temp }}/retrotv-signing/release.jks
+          RETROTV_KEYSTORE_PASSWORD: ${{ secrets.RETROTV_KEYSTORE_PASSWORD }}
+          RETROTV_KEY_ALIAS: ${{ secrets.RETROTV_KEY_ALIAS }}
+          RETROTV_KEY_PASSWORD: ${{ secrets.RETROTV_KEY_PASSWORD }}
+        run: gradle assembleRelease
+
+      - name: Prepare release APK
         run: |
           mkdir -p release
-          cp app/build/outputs/apk/debug/app-debug.apk "release/Retro-TV-2.0.${GITHUB_RUN_NUMBER}.apk"
+          cp app/build/outputs/apk/release/app-release.apk "release/Retro-TV-2.0.${GITHUB_RUN_NUMBER}.apk"
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
