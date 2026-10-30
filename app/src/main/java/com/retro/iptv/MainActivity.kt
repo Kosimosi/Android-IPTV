@@ -844,6 +844,11 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
         loadSettingsFromStorage()
+        downloadedUpdateApk = File(cacheDir, "updates").listFiles()
+            ?.filter { it.isFile && it.extension.equals("apk", ignoreCase = true) }
+            ?.maxByOrNull { it.lastModified() }
+        isUpdateDownloaded.value = downloadedUpdateApk?.exists() == true
+        if (isUpdateDownloaded.value) updateStatus.value = "A downloaded update is ready to install."
 
         val renderersFactory = DefaultRenderersFactory(this).apply {
             setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
