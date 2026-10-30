@@ -62,9 +62,9 @@ jobs:
         if: steps.signing.outputs.ready == 'true'
         env:
           RETROTV_KEYSTORE_PATH: ${{ runner.temp }}/retrotv-signing/release.jks
-          RETROTV_KEYSTORE_PASSWORD: ${{ secrets.RETROTV_KEYSTORE_PASSWORD }}
-          RETROTV_KEY_ALIAS: ${{ secrets.RETROTV_KEY_ALIAS }}
-          RETROTV_KEY_PASSWORD: ${{ secrets.RETROTV_KEY_PASSWORD }}
+          RETROTV_KEYSTORE_PASSWORD: ${{ secrets.KEY_STORE_PASSWORD || secrets.RETROTV_KEYSTORE_PASSWORD }}
+          RETROTV_KEY_ALIAS: ${{ secrets.ALIAS || secrets.RETROTV_KEY_ALIAS }}
+          RETROTV_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD || secrets.RETROTV_KEY_PASSWORD }}
         run: gradle assembleRelease
 
       - name: Prepare release APK
