@@ -71,14 +71,14 @@ jobs:
         if: steps.signing.outputs.ready == 'true'
         run: |
           mkdir -p release
-          cp app/build/outputs/apk/release/app-release.apk "release/Retro-TV-2.0.${GITHUB_RUN_NUMBER}.apk"
+          cp app/build/outputs/apk/release/app-release.apk "release/Retro-TV-2.1.${GITHUB_RUN_NUMBER}.apk"
 
       - name: Publish GitHub Release
         if: steps.signing.outputs.ready == 'true'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v2.0.${{ github.run_number }}
-          name: Retro TV 2.0.${{ github.run_number }}
+          tag_name: v2.1.${{ github.run_number }}
+          name: Retro TV 2.1.${{ github.run_number }}
           generate_release_notes: true
           make_latest: true
           files: release/Retro-TV-2.0.${{ github.run_number }}.apk
