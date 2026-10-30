@@ -853,7 +853,7 @@ class MainActivity : ComponentActivity() {
         if (isUpdateDownloaded.value) updateStatus.value = "A downloaded update is ready to install."
 
         val renderersFactory = DefaultRenderersFactory(this).apply {
-            setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
+            setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF)
         }
 
         val audioAttributes = AudioAttributes.Builder()
@@ -948,7 +948,7 @@ class MainActivity : ComponentActivity() {
             }
             LaunchedEffect(Unit) {
                 // Never leave the branded launch cover blocking a slow or unavailable stream.
-                delay(3200)
+                delay(1500)
                 isStartupVisible.value = false
             }
             val listState = rememberLazyListState()
@@ -972,12 +972,15 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            BackHandler(enabled = isSearchOpen.value || isSettingsOpen.value || isUiVisible.value || !isCrtExiting.value) {
+            BackHandler(enabled = isSearchOpen.value || isSettingsOpen.value || isUiVisible.value || !isUiVisible.value) {
                 when {
                     isSearchOpen.value -> isSearchOpen.value = false
                     isSettingsOpen.value -> isSettingsOpen.value = false
                     isUiVisible.value -> isUiVisible.value = false
-                    else -> isCrtExiting.value = true
+                    else -> {
+                        isUiVisible.value = true
+                        resetIdleTimer()
+                    }
                 }
             }
 
@@ -1106,8 +1109,6 @@ class MainActivity : ComponentActivity() {
                                             }
                                         }
                                     }
-
-                                    item { Spacer(modifier = Modifier.height(500.dp)) }
 
                                     val nowMs = epgClockMs
                                     val schedule = epgPrograms.filter { it.channelId == activeChannel?.epgId }.sortedBy { it.startTimeMs }
