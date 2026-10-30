@@ -116,7 +116,9 @@ data class Channel(
     val logo: String? = null,
     val status: ChannelStatus = ChannelStatus.UNKNOWN,
     val region: String = "Unknown Region",
-    val epgId: String? = null
+    val epgId: String? = null,
+    val language: String = "Unknown",
+    val country: String = "Unknown"
 )
 
 data class Programme(val channelId: String, val title: String, val startTimeMs: Long, val stopTimeMs: Long)
@@ -314,7 +316,7 @@ private fun RetroTopTab(
     val pillColor by animateColorAsState(
         targetValue = when {
             selected -> AmberDial
-            focused -> AmberDial.copy(alpha = 0.30f)
+            focused -> AmberDial.copy(alpha = 0.78f)
             else -> Color.White.copy(alpha = 0.055f)
         },
         animationSpec = tween(180),
@@ -347,7 +349,7 @@ private fun RetroTopAction(
 ) {
     var focused by remember { mutableStateOf(false) }
     val fill by animateColorAsState(
-        if (focused) AmberDial.copy(alpha = 0.32f) else Color.White.copy(alpha = 0.045f),
+        if (focused) AmberDial.copy(alpha = 0.82f) else Color.White.copy(alpha = 0.045f),
         tween(180),
         label = "actionPillColor"
     )
@@ -506,7 +508,7 @@ fun ChannelCard(
                 scaleY = scale
             }
             .clip(RoundedCornerShape(10.dp))
-            .background(if (isSelected) OakSurfaceElevated else OakSurface)
+            .background(when { isFocused -> AmberDial.copy(alpha = 0.82f); isSelected -> AmberDial.copy(alpha = 0.30f); else -> OakSurface })
             .border(
                 width = if (isFocused) 2.dp else if (isSelected) 1.5.dp else 1.dp,
                 color = if (isFocused) AmberDial else if (isSelected) AmberDial.copy(alpha = 0.7f) else Color.Transparent,
@@ -966,7 +968,7 @@ class MainActivity : ComponentActivity() {
             }
             val dynamicDarkAlpha by remember {
                 derivedStateOf {
-                    (0.35f + (scrollOffset / 600f).coerceIn(0f, 0.60f))
+                    (0.12f + (scrollOffset / 900f).coerceIn(0f, 0.20f))
                 }
             }
 
@@ -1036,7 +1038,8 @@ class MainActivity : ComponentActivity() {
                             val filteredGroups = remember(currentTab.value, channels.toList(), favoriteUrls.toList()) {
                                 when (currentTab.value) {
                                     "FAVOURITES" -> mapOf("Favourites" to channels.filter { favoriteUrls.contains(it.url) })
-                                    "REGION" -> channels.groupBy { it.region.ifBlank { "Unknown Region" } }.toSortedMap()
+                                    "REGION" -> channels.groupBy { if (it.language.equals("Hindi", true)) "Hindi" else "Bangla" }
+                                        .toSortedMap(compareBy { if (it == "Bangla") 0 else 1 })
                                     else -> channels.groupBy { it.group.ifBlank { "General" } }.toSortedMap()
                                 }
                             }
@@ -1096,13 +1099,15 @@ class MainActivity : ComponentActivity() {
                                                 LazyRow(modifier = Modifier.focusGroup(), horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(horizontal = 24.dp)) {
                                                     items(recentlyWatched, key = { it.url }) { ch ->
                                                         ChannelCard(channel = ch, isSelected = ch.url == activeChannel?.url,
-                                                            onSelect = { val idx = channels.indexOfFirst { it.url == ch.url }; if (idx >= 0) { currentChannelIndex.value = idx; playChannel(idx) } },
+                                                            onSelect = { val idx = channels.indexOfFirst { it.url == ch.url }; if (idx >= 0) { currentChannelIndex.value = idx; playChannel(idx); isUiVisible.value = false; isSearchOpen.value = false; isSettingsOpen.value = false } },
                                                             onUserInteract = { resetIdleTimer() })
                                                     }
                                                 }
                                             }
                                         }
                                     }
+
+                                    item { Spacer(modifier = Modifier.height(260.dp)) }
 
                                     val nowMs = epgClockMs
                                     val schedule = epgPrograms.filter { it.channelId == activeChannel?.epgId }.sortedBy { it.startTimeMs }
@@ -1123,12 +1128,18 @@ class MainActivity : ComponentActivity() {
                                                         modifier = Modifier.padding(horizontal = 24.dp, vertical = 3.dp)
                                                     )
 
+                                                    val groupListState = rememberLazyListState()
+                                                    LaunchedEffect(activeChannel?.url, groupChannels) {
+                                                        val selectedIndex = groupChannels.indexOfFirst { it.url == activeChannel?.url }
+                                                        if (selectedIndex >= 0) groupListState.animateScrollToItem(selectedIndex)
+                                                    }
                                                     LazyRow(
+                                                        state = groupListState,
                                                         modifier = Modifier.focusGroup(),
                                                         horizontalArrangement = Arrangement.spacedBy(14.dp),
                                                         contentPadding = PaddingValues(horizontal = 24.dp)
                                                     ) {
-                                                        items(groupChannels) { ch ->
+                                                        items(groupChannels, key = { it.url }) { ch ->
                                                             ChannelCard(
                                                                 channel = ch,
                                                                 isSelected = ch.url == activeChannel?.url,
@@ -1137,6 +1148,9 @@ class MainActivity : ComponentActivity() {
                                                                     if (idx >= 0) {
                                                                         currentChannelIndex.value = idx
                                                                         playChannel(idx)
+                                                                        isUiVisible.value = false
+                                                                        isSearchOpen.value = false
+                                                                        isSettingsOpen.value = false
                                                                     }
                                                                 },
                                                                 onUserInteract = { resetIdleTimer() }
@@ -1154,30 +1168,28 @@ class MainActivity : ComponentActivity() {
 
                     AnimatedVisibility(
                         visible = isChannelInfoVisible.value,
-                        modifier = Modifier.align(Alignment.BottomEnd).padding(end = 24.dp, bottom = 22.dp),
+                        modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(horizontal = 16.dp, vertical = 18.dp),
                         enter = fadeIn(tween(250)) + slideInVertically(tween(250)) { it / 3 },
                         exit = fadeOut(tween(250)) + slideOutVertically(tween(250)) { it / 3 }
                     ) {
                         val infoChannel = channels.getOrNull(currentChannelIndex.value)
                         Row(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(Color.Black.copy(alpha = 0.78f))
-                                .border(1.dp, AmberDial.copy(alpha = 0.7f), RoundedCornerShape(12.dp))
-                                .padding(horizontal = 12.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                            modifier = Modifier.fillMaxWidth().widthIn(max = 620.dp)
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(Color.Black.copy(alpha = 0.88f))
+                                .border(1.dp, AmberDial.copy(alpha = 0.85f), RoundedCornerShape(14.dp))
+                                .padding(horizontal = 16.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            if (infoChannel?.logo != null) {
-                                RemoteChannelLogo(infoChannel.logo, infoChannel.title, Modifier.size(34.dp))
-                                Spacer(Modifier.width(8.dp))
-                            }
-                            Column {
-                                Text(infoChannel?.title ?: "Live TV", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            RemoteChannelLogo(infoChannel?.logo, infoChannel?.title ?: "TV", Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(infoChannel?.title ?: "Live TV", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Black, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 Text(
-                                    text = listOfNotNull(infoChannel?.group, currentResolution.value).joinToString("  •  "),
+                                    text = listOfNotNull(currentResolution.value, infoChannel?.language?.takeIf { it != "Unknown" }, infoChannel?.country?.takeIf { it != "Unknown" }, infoChannel?.group).joinToString("  •  ").ifBlank { "LIVE TV" },
                                     color = WarmAshMuted,
-                                    fontSize = 10.sp,
-                                    maxLines = 1,
+                                    fontSize = 11.sp,
+                                    maxLines = 2,
                                     overflow = TextOverflow.Ellipsis
                                 )
                             }
@@ -1192,6 +1204,9 @@ class MainActivity : ComponentActivity() {
                                 if (idx >= 0) {
                                     currentChannelIndex.value = idx
                                     playChannel(idx)
+                                    isUiVisible.value = false
+                                    isSearchOpen.value = false
+                                    isSettingsOpen.value = false
                                 }
                             },
                             onClose = { isSearchOpen.value = false }
@@ -1589,6 +1604,8 @@ class MainActivity : ComponentActivity() {
         var currentGroup = "General"
         var currentLogo: String? = null
         var currentRegion = "Unknown Region"
+        var currentLanguage = "Unknown"
+        var currentCountry = "Unknown"
         var currentEpgId: String? = null
         val lines = content.lines()
 
@@ -1604,7 +1621,19 @@ class MainActivity : ComponentActivity() {
                 val epgMatch = """tvg-id="([^"]*)"""".toRegex(RegexOption.IGNORE_CASE).find(trimmed)
                 currentEpgId = epgMatch?.groupValues?.get(1)?.trim()?.takeIf { it.isNotBlank() }
                 val countryMatch = """tvg-country="([^"]*)"""" .trim().toRegex(RegexOption.IGNORE_CASE).find(trimmed)
-                currentRegion = countryMatch?.groupValues?.get(1)?.trim()?.takeIf { it.isNotBlank() } ?: "Unknown Region"
+                currentCountry = countryMatch?.groupValues?.get(1)?.trim()?.takeIf { it.isNotBlank() } ?: "Unknown"
+                val languageMatch = """tvg-language="([^"]*)"""" .trim().toRegex(RegexOption.IGNORE_CASE).find(trimmed)
+                currentLanguage = languageMatch?.groupValues?.get(1)?.trim()?.takeIf { it.isNotBlank() } ?: "Unknown"
+                val lowerMeta = (currentLanguage + " " + currentCountry + " " + currentTitle + " " + currentGroup).lowercase(Locale.ROOT)
+                currentLanguage = when {
+                    lowerMeta.contains("hindi") || lowerMeta.contains("hin") || currentCountry.equals("India", true) || currentCountry.equals("IN", true) -> "Hindi"
+                    lowerMeta.contains("bangla") || lowerMeta.contains("bengali") || lowerMeta.contains("ben") ||
+                        currentCountry.equals("Bangladesh", true) || currentCountry.equals("BD", true) ||
+                        listOf("jamuna", "dbc", "ekattor", "ntv", "deepto", "maasranga", "somoy", "channel i", "gazi tv", "banglavision").any { currentTitle.contains(it, true) } -> "Bangla"
+                    else -> "Bangla"
+                }
+                currentRegion = currentLanguage
+                if (currentCountry == "Unknown") currentCountry = if (currentLanguage == "Hindi") "India" else "Bangladesh"
             } else if (trimmed.startsWith("http://", ignoreCase = true) || trimmed.startsWith("https://", ignoreCase = true)) {
                 if (currentTitle.isNotEmpty()) {
                     list.add(
@@ -1614,13 +1643,17 @@ class MainActivity : ComponentActivity() {
                             group = currentGroup,
                             logo = currentLogo,
                             region = currentRegion,
-                            epgId = currentEpgId
+                            epgId = currentEpgId,
+                            language = currentLanguage,
+                            country = currentCountry
                         )
                     )
                     currentTitle = ""
                     currentGroup = "General"
                     currentLogo = null
                     currentRegion = "Unknown Region"
+                    currentLanguage = "Unknown"
+                    currentCountry = "Unknown"
                     currentEpgId = null
                 }
             }
