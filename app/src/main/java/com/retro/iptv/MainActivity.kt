@@ -97,7 +97,7 @@ import java.net.URL
 const val DEFAULT_PLAYLIST_URL = "https://raw.githubusercontent.com/Kosimosi/Android-IPTV/main/playlist.m3u"
 const val IPTV_HINDI_PLAYLIST_URL = "https://iptv-org.github.io/iptv/languages/hin.m3u"
 const val IPTV_BENGALI_PLAYLIST_URL = "https://iptv-org.github.io/iptv/languages/ben.m3u"
-const val IPTV_BANGLADESH_EPG_URL = "https://iptv-epg.org/files/epg-in.xml"
+const val IPTV_INDIA_EPG_URL = "https://iptv-epg.org/files/epg-in.xml"
 
 // --- COLOR PALETTE (Modern Oak) ---
 val OakDarkBackground = Color(0xFF140F0C)
@@ -932,6 +932,13 @@ class MainActivity : ComponentActivity() {
         resetIdleTimer()
 
         setContent {
+            var epgClockMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
+            LaunchedEffect(Unit) {
+                while (true) {
+                    delay(60_000)
+                    epgClockMs = System.currentTimeMillis()
+                }
+            }
             LaunchedEffect(Unit) {
                 // Never leave the branded launch cover blocking a slow or unavailable stream.
                 delay(3200)
@@ -1092,7 +1099,7 @@ class MainActivity : ComponentActivity() {
                                         }
                                     }
 
-                                    val nowMs = System.currentTimeMillis()
+                                    val nowMs = epgClockMs
                                     val schedule = epgPrograms.filter { it.channelId == activeChannel?.epgId }.sortedBy { it.startTimeMs }
                                     val currentProgramme = schedule.firstOrNull { it.startTimeMs <= nowMs && it.stopTimeMs > nowMs }
                                     val nextProgramme = schedule.firstOrNull { it.startTimeMs > nowMs }
