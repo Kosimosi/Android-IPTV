@@ -43,10 +43,10 @@ jobs:
       - name: Check release signing secrets
         id: signing
         env:
-          RETROTV_KEYSTORE_BASE64: ${{ secrets.RETROTV_KEYSTORE_BASE64 }}
-          RETROTV_KEYSTORE_PASSWORD: ${{ secrets.RETROTV_KEYSTORE_PASSWORD }}
-          RETROTV_KEY_ALIAS: ${{ secrets.RETROTV_KEY_ALIAS }}
-          RETROTV_KEY_PASSWORD: ${{ secrets.RETROTV_KEY_PASSWORD }}
+          RETROTV_KEYSTORE_BASE64: ${{ secrets.SIGNING_KEY || secrets.RETROTV_KEYSTORE_BASE64 }}
+          RETROTV_KEYSTORE_PASSWORD: ${{ secrets.KEY_STORE_PASSWORD || secrets.RETROTV_KEYSTORE_PASSWORD }}
+          RETROTV_KEY_ALIAS: ${{ secrets.ALIAS || secrets.RETROTV_KEY_ALIAS }}
+          RETROTV_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD || secrets.RETROTV_KEY_PASSWORD }}
         run: |
           if [ -z "$RETROTV_KEYSTORE_BASE64" ] || [ -z "$RETROTV_KEYSTORE_PASSWORD" ] || [ -z "$RETROTV_KEY_ALIAS" ] || [ -z "$RETROTV_KEY_PASSWORD" ]; then
             echo "ready=false" >> "$GITHUB_OUTPUT"
@@ -81,4 +81,4 @@ jobs:
           name: Retro TV 2.1.${{ github.run_number }}
           generate_release_notes: true
           make_latest: true
-          files: release/Retro-TV-2.0.${{ github.run_number }}.apk
+          files: release/Retro-TV-2.1.${{ github.run_number }}.apk
