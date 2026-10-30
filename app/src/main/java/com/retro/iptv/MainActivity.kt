@@ -559,7 +559,7 @@ fun SearchModal(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text("SEARCH CHANNELS", color = AmberDial, fontSize = 14.sp, fontWeight = FontWeight.Black)
-                    Text("✕", color = Color.White, fontSize = 16.sp, modifier = Modifier.clickable { onClose() })
+                    Text("✕", color = Color.White, fontSize = 16.sp, modifier = Modifier.clip(CircleShape).clickable { onClose() }.padding(8.dp))
                 }
 
                 Spacer(modifier = Modifier.height(14.dp))
@@ -653,7 +653,7 @@ fun SettingsModal(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text("SETTINGS", color = AmberDial, fontSize = 14.sp, fontWeight = FontWeight.Black)
-                    Text("✕", color = Color.White, fontSize = 16.sp, modifier = Modifier.clickable { onClose() })
+                    Text("✕", color = Color.White, fontSize = 16.sp, modifier = Modifier.clip(CircleShape).clickable { onClose() }.padding(8.dp))
                 }
 
                 Text("PLAYLIST SOURCE", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
@@ -997,7 +997,7 @@ class MainActivity : ComponentActivity() {
                     }
 
                     AnimatedVisibility(
-                        visible = isChannelInfoVisible.value && !isUiVisible.value,
+                        visible = isChannelInfoVisible.value,
                         modifier = Modifier.align(Alignment.BottomEnd).padding(end = 24.dp, bottom = 22.dp),
                         enter = fadeIn(tween(250)) + slideInVertically(tween(250)) { it / 3 },
                         exit = fadeOut(tween(250)) + slideOutVertically(tween(250)) { it / 3 }
