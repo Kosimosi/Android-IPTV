@@ -4,19 +4,19 @@
     android:height="180dp"
     android:viewportWidth="320"
     android:viewportHeight="180">
-    <path android:fillColor="#140F0C" android:pathData="M0,0h320v180h-320z" />
+    <path android:fillColor="#101010" android:pathData="M0,0h320v180h-320z" />
+
+    <!-- YouTube-inspired red TV/play mark -->
     <path
-        android:strokeColor="#FAF4ED"
-        android:strokeWidth="3"
+        android:strokeColor="#E62117"
+        android:strokeWidth="5"
         android:strokeLineCap="round"
-        android:pathData="M140,40L120,16M180,40L200,16" />
+        android:pathData="M52,51L40,35M92,51L104,35" />
     <path
-        android:fillColor="#38271D"
-        android:pathData="M96,40h128a12,12 0 0 1 12,12v88a12,12 0 0 1 -12,12h-128a12,12 0 0 1 -12,-12v-88a12,12 0 0 1 12,-12z" />
-    <path
-        android:fillColor="#E07A38"
-        android:pathData="M104,52h112a6,6 0 0 1 6,6v64a6,6 0 0 1 -6,6h-112a6,6 0 0 1 -6,-6v-64a6,6 0 0 1 6,-6z" />
-    <path android:fillColor="#140F0C" android:pathData="M150,74l30,16l-30,16z" />
-    <path android:fillColor="#FAF4ED" android:pathData="M205,140a4,4 0 1 0 8,0a4,4 0 1 0 -8,0z" />
-    <path android:fillColor="#FAF4ED" android:pathData="M217,140a4,4 0 1 0 8,0a4,4 0 1 0 -8,0z" />
+        android:fillColor="#E62117"
+        android:pathData="M32,48h80a13,13 0 0 1 13,13v53a13,13 0 0 1 -13,13h-80a13,13 0 0 1 -13,-13v-53a13,13 0 0 1 13,-13z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M51,64l0,47l39,-23.5z" />
+
+    <!-- RETROTV wordmark -->
+    <path android:strokeColor="#FFFFFF" android:strokeWidth="4" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M151,62h23M151,62v49M151,85h18M151,111h23M151,62v49M184,62v49h24M184,85h19M184,62h24M219,62v49h25M219,85h20M219,62h25M256,62v49M256,62h24M256,85h20M256,111h24M292,62l-13,25l-13,-25M279,87v24" />
 </vector>
