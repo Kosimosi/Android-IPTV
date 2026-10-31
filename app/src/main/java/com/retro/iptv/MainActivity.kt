@@ -82,6 +82,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
 import java.net.HttpURLConnection
@@ -1583,19 +1584,40 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun fetchUrl(urlString: String): String? {
+        // Bound remote responses: some EPG endpoints can return very large XML files,
+        // and readText() can exhaust the small heap available on older Android TV devices.
+        val maxBytes = if (urlString == IPTV_INDIA_EPG_URL) 8L * 1024 * 1024 else 12L * 1024 * 1024
+        var connection: HttpURLConnection? = null
         return try {
-            val connection = (URL(urlString).openConnection() as HttpURLConnection).apply {
+            connection = (URL(urlString).openConnection() as HttpURLConnection).apply {
                 connectTimeout = 8000
                 readTimeout = 30000
                 requestMethod = "GET"
                 setRequestProperty("User-Agent", "Mozilla/5.0")
                 instanceFollowRedirects = true
             }
-            if (connection.responseCode in 200..299) {
-                connection.inputStream.bufferedReader().use { it.readText() }
-            } else null
+            if (connection.responseCode !in 200..299) return null
+            val declaredLength = connection.contentLengthLong
+            if (declaredLength > maxBytes) return null
+
+            connection.inputStream.use { input ->
+                ByteArrayOutputStream().use { output ->
+                    val buffer = ByteArray(8192)
+                    var total = 0L
+                    while (true) {
+                        val count = input.read(buffer)
+                        if (count < 0) break
+                        total += count
+                        if (total > maxBytes) return null
+                        output.write(buffer, 0, count)
+                    }
+                    output.toString("UTF-8")
+                }
+            }
         } catch (e: Exception) {
             null
+        } finally {
+            connection?.disconnect()
         }
     }
 
