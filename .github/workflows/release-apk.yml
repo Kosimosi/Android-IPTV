@@ -40,7 +40,7 @@ jobs:
           path: app/build/outputs/apk/debug/app-debug.apk
           retention-days: 14
 
-      - name: Check release signing secrets
+      - name: Validate release signing credentials
         id: signing
         env:
           RETROTV_KEYSTORE_BASE64: ${{ secrets.SIGNING_KEY || secrets.RETROTV_KEYSTORE_BASE64 }}
@@ -48,15 +48,34 @@ jobs:
           RETROTV_KEY_ALIAS: ${{ secrets.ALIAS || secrets.RETROTV_KEY_ALIAS }}
           RETROTV_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD || secrets.RETROTV_KEY_PASSWORD }}
         run: |
+          set -euo pipefail
           if [ -z "$RETROTV_KEYSTORE_BASE64" ] || [ -z "$RETROTV_KEYSTORE_PASSWORD" ] || [ -z "$RETROTV_KEY_ALIAS" ] || [ -z "$RETROTV_KEY_PASSWORD" ]; then
-            echo "ready=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::Release signing is not configured. Debug APK uploaded for testing; signed release publication is skipped."
-            exit 0
+            echo "::error::Signing secrets are missing. Check SIGNING_KEY, ALIAS, KEY_STORE_PASSWORD, and KEY_PASSWORD."
+            exit 1
           fi
-          echo "ready=true" >> "$GITHUB_OUTPUT"
+
           mkdir -p "$RUNNER_TEMP/retrotv-signing"
-          echo "$RETROTV_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/retrotv-signing/release.jks"
-          test -s "$RUNNER_TEMP/retrotv-signing/release.jks"
+          KEYSTORE="$RUNNER_TEMP/retrotv-signing/release.jks"
+          printf '%s' "$RETROTV_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE"
+          if [ ! -s "$KEYSTORE" ]; then
+            echo "::error::SIGNING_KEY decoded to an empty file."
+            exit 1
+          fi
+
+          if ! keytool -list -keystore "$KEYSTORE" -storepass "$RETROTV_KEYSTORE_PASSWORD" -alias "$RETROTV_KEY_ALIAS" >/dev/null 2>&1; then
+            echo "::error::Keystore check failed. The keystore file, KEY_STORE_PASSWORD, or ALIAS is incorrect."
+            exit 1
+          fi
+
+          TESTSTORE="$RUNNER_TEMP/retrotv-signing/validate.p12"
+          if ! keytool -importkeystore -noprompt             -srckeystore "$KEYSTORE"             -srcstoretype JKS             -srcstorepass "$RETROTV_KEYSTORE_PASSWORD"             -srcalias "$RETROTV_KEY_ALIAS"             -srckeypass "$RETROTV_KEY_PASSWORD"             -destkeystore "$TESTSTORE"             -deststoretype PKCS12             -deststorepass 'TemporaryValidationOnly-4827'             >/dev/null 2>&1; then
+            echo "::error::Private-key check failed. KEY_PASSWORD or ALIAS does not unlock a private key in this keystore."
+            exit 1
+          fi
+          rm -f "$TESTSTORE"
+
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+          echo "Signing keystore, store password, alias, and private-key password validated."
 
       - name: Build signed release APK
         if: steps.signing.outputs.ready == 'true'
@@ -70,6 +89,7 @@ jobs:
       - name: Prepare release APK
         if: steps.signing.outputs.ready == 'true'
         run: |
+          set -euo pipefail
           mkdir -p release
           cp app/build/outputs/apk/release/app-release.apk "release/Retro-TV-2.1.${GITHUB_RUN_NUMBER}.apk"
 
