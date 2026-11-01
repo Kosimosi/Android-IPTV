@@ -1272,18 +1272,7 @@ class MainActivity : ComponentActivity() {
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.Center
                         ) {
-                            RetroTvMark(Modifier.size(92.dp).graphicsLayer { scaleX = pulse; scaleY = pulse })
-                            Spacer(Modifier.height(16.dp))
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("RETRO", color = Color(0xFF202020), fontSize = 26.sp, fontWeight = FontWeight.Black, letterSpacing = 2.sp)
-                                Text("TV", color = Color(0xFFE53935), fontSize = 26.sp, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
-                            }
-                            Spacer(Modifier.height(18.dp))
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(22.dp),
-                                color = Color(0xFFE53935),
-                                strokeWidth = 2.dp
-                            )
+                            RetroTvMark(Modifier.size(150.dp).graphicsLayer { scaleX = pulse; scaleY = pulse })
                         }
                     }
                 }
