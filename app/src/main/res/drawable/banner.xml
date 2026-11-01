@@ -6,6 +6,7 @@
     android:viewportHeight="180">
     <path android:fillColor="#FFFFFFFF" android:pathData="M0,0h320v180h-320z"/>
 
+    <group android:scaleX="0.84" android:scaleY="0.84" android:translateX="25" android:translateY="14">
     <!-- Red retro TV mark -->
     <path
         android:strokeColor="#E62117"
@@ -34,5 +35,7 @@
             M211,63v40c0,6 3,8 9,8M202,78h25
             M232,78v32M232,87c5,-9 10,-10 17,-9
             M254,94a12,16 0,1 0,24 0a12,16 0,1 0,-24 0
-            M284,65h29M298.5,65v45"/>
+            M284,65h29M298.5,65v45
+            M315,65l13,45l13,-45"/>
+    </group>
 </vector>
