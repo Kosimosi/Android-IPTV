@@ -1,4 +1,4 @@
-@file:OptIn(androidx.media3.common.util.UnstableApi::class)
+@file:OptIn(androidx.media3.common.util.UnstableApi::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 
 package com.retro.iptv
 
@@ -497,7 +497,7 @@ fun ChannelCard(
     isSelected: Boolean,
     onSelect: () -> Unit,
     onUserInteract: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier.width(112.dp)
 ) {
     var isFocused by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(8.dp)
