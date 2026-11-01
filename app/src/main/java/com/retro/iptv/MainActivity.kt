@@ -795,6 +795,39 @@ fun SettingsModal(
     }
 }
 
+@Composable
+fun UpdateNoticeDialog(
+    version: String,
+    releaseNotes: String,
+    onInstall: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.78f)), contentAlignment = Alignment.Center) {
+        Column(
+            modifier = Modifier.fillMaxWidth(0.82f).clip(RoundedCornerShape(16.dp))
+                .background(OakSurface).border(1.5.dp, AmberDial, RoundedCornerShape(16.dp)).padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text("RETROTV UPDATE AVAILABLE", color = AmberDial, fontWeight = FontWeight.Black, fontSize = 17.sp)
+            Text("Version $version is ready. Here's what's changed:", color = Color.White, fontSize = 13.sp)
+            Box(Modifier.fillMaxWidth().heightIn(max = 220.dp).clip(RoundedCornerShape(8.dp)).background(OakSurfaceElevated).padding(12.dp)) {
+                Text(
+                    releaseNotes.ifBlank { "This release contains improvements and fixes. See the GitHub release page for details." },
+                    color = ParchmentWhite, fontSize = 12.sp, lineHeight = 18.sp
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Box(Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).background(AmberDial).clickable(onClick = onInstall).padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
+                    Text("Install update", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                }
+                Box(Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).background(OakSurfaceElevated).clickable(onClick = onDismiss).padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
+                    Text("Later", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                }
+            }
+        }
+    }
+}
+
 // --- MAIN ACTIVITY CONTROLLER ---
 class MainActivity : ComponentActivity() {
 
@@ -809,6 +842,7 @@ class MainActivity : ComponentActivity() {
     private val updateStatus = mutableStateOf("Check for a newer RETROTV version.")
     private val isCheckingForUpdates = mutableStateOf(false)
     private val isUpdateDownloaded = mutableStateOf(false)
+    private val updateNotice = mutableStateOf<UpdateNotice?>(null)
     private var downloadedUpdateApk: File? = null
 
     private val currentTab = mutableStateOf("HOME")
@@ -852,6 +886,14 @@ class MainActivity : ComponentActivity() {
             ?.maxByOrNull { it.lastModified() }
         isUpdateDownloaded.value = downloadedUpdateApk?.exists() == true
         if (isUpdateDownloaded.value) updateStatus.value = "A downloaded update is ready to install."
+
+        // Check GitHub after startup; only newer releases trigger a changelog notice.
+        if (!isUpdateDownloaded.value) {
+            lifecycleScope.launch {
+                delay(5000)
+                checkForUpdates()
+            }
+        }
 
         val renderersFactory = DefaultRenderersFactory(this).apply {
             setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF)
@@ -1238,6 +1280,18 @@ class MainActivity : ComponentActivity() {
                         )
                     }
 
+                    updateNotice.value?.let { notice ->
+                        UpdateNoticeDialog(
+                            version = notice.version,
+                            releaseNotes = notice.releaseNotes,
+                            onInstall = {
+                                updateNotice.value = null
+                                notice.apkFile?.let { launchUpdateInstaller(it) }
+                            },
+                            onDismiss = { updateNotice.value = null }
+                        )
+                    }
+
                     if (isBuffering.value && !isUiVisible.value && !isStartupVisible.value) {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             CircularProgressIndicator(color = AmberDial)
@@ -1283,8 +1337,11 @@ class MainActivity : ComponentActivity() {
     private data class UpdateCheckResult(
         val latestTag: String,
         val apkFile: File?,
-        val updateAvailable: Boolean
+        val updateAvailable: Boolean,
+        val releaseNotes: String
     )
+
+    private data class UpdateNotice(val version: String, val releaseNotes: String, val apkFile: File?)
 
     private fun checkForUpdates() {
         val existingApk = downloadedUpdateApk
@@ -1328,7 +1385,7 @@ class MainActivity : ComponentActivity() {
 
                     val installedVersion = packageManager.getPackageInfo(packageName, 0).versionName ?: "0"
                     if (compareVersions(latestTag, installedVersion) <= 0) {
-                        return@withContext UpdateCheckResult(latestTag, null, false)
+                        return@withContext UpdateCheckResult(latestTag, null, false, releaseJson.optString("body"))
                     }
 
                     val apkName = apkAsset.optString("name").replace(Regex("[^A-Za-z0-9._-]"), "_")
@@ -1354,7 +1411,7 @@ class MainActivity : ComponentActivity() {
                     if (!apkFile.exists() || apkFile.length() == 0L) {
                         throw IOException("The downloaded APK is empty.")
                     }
-                    UpdateCheckResult(latestTag, apkFile, true)
+                    UpdateCheckResult(latestTag, apkFile, true, releaseJson.optString("body"))
                 }
 
                 if (!result.updateAvailable || result.apkFile == null) {
@@ -1363,8 +1420,9 @@ class MainActivity : ComponentActivity() {
                 } else {
                     downloadedUpdateApk = result.apkFile
                     isUpdateDownloaded.value = true
-                    updateStatus.value = "Version ${result.latestTag} downloaded. Opening Android installer…"
-                    launchUpdateInstaller(result.apkFile)
+                    updateStatus.value = "Version ${result.latestTag} downloaded. Review the changes and choose Install update."
+                    updateNotice.value = UpdateNotice(result.latestTag.removePrefix("v"), result.releaseNotes, result.apkFile)
+                    Toast.makeText(this@MainActivity, "RETROTV update ${result.latestTag} is ready", Toast.LENGTH_LONG).show()
                 }
             } catch (error: Exception) {
                 updateStatus.value = "Update check failed: ${error.message ?: "network error"}"
