@@ -1,4 +1,4 @@
-@file:OptIn(androidx.media3.common.util.UnstableApi::class)
+@file:OptIn(androidx.media3.common.util.UnstableApi::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 
 package com.retro.iptv
 
@@ -31,6 +31,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -489,71 +490,87 @@ fun HeroSection(
     }
 }
 
-// --- 16:9 CHANNEL CARD WITH LOGO ---
+// --- RESPONSIVE POSTER-STYLE CHANNEL CARD ---
 @Composable
 fun ChannelCard(
     channel: Channel,
     isSelected: Boolean,
     onSelect: () -> Unit,
-    onUserInteract: () -> Unit
+    onUserInteract: () -> Unit,
+    modifier: Modifier = Modifier.width(112.dp)
 ) {
     var isFocused by remember { mutableStateOf(false) }
-
+    val shape = RoundedCornerShape(8.dp)
+    val fill by animateColorAsState(
+        targetValue = when {
+            isFocused -> AmberDial
+            isSelected -> AmberDial.copy(alpha = 0.36f)
+            else -> OakSurface.copy(alpha = 0.76f)
+        },
+        animationSpec = tween(160),
+        label = "channelCardFill"
+    )
     Box(
-        modifier = Modifier
-            .width(180.dp)
-            .height(100.dp)
+        modifier = modifier
+            .height(156.dp)
             .graphicsLayer {
-                val scale = if (isFocused) 1.08f else 1.0f
+                val scale = if (isFocused) 1.06f else 1f
                 scaleX = scale
                 scaleY = scale
+                shadowElevation = if (isFocused) 12f else 1f
             }
-            .clip(RoundedCornerShape(10.dp))
-            .background(when { isFocused -> AmberDial.copy(alpha = 0.82f); isSelected -> AmberDial.copy(alpha = 0.30f); else -> OakSurface })
+            .clip(shape)
+            .background(fill)
             .border(
                 width = if (isFocused) 2.dp else if (isSelected) 1.5.dp else 1.dp,
-                color = if (isFocused) AmberDial else if (isSelected) AmberDial.copy(alpha = 0.7f) else Color.Transparent,
-                shape = RoundedCornerShape(10.dp)
+                color = if (isFocused || isSelected) AmberDial else Color.White.copy(alpha = 0.08f),
+                shape = shape
             )
-            .onFocusChanged { 
+            .onFocusChanged {
                 isFocused = it.isFocused
                 if (it.isFocused) onUserInteract()
             }
             .focusable()
-            .clickable { 
+            .clickable {
                 onSelect()
                 onUserInteract()
             }
-            .padding(12.dp)
+            .padding(horizontal = 7.dp, vertical = 9.dp),
+        contentAlignment = Alignment.Center
     ) {
         Column(
             modifier = Modifier.fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            Box(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                contentAlignment = Alignment.Center
             ) {
                 RemoteChannelLogo(
                     url = channel.logo,
                     channelTitle = channel.title,
-                    modifier = Modifier.size(46.dp).clip(RoundedCornerShape(8.dp))
+                    modifier = Modifier.fillMaxWidth(0.76f).fillMaxHeight(0.76f)
+                        .clip(RoundedCornerShape(6.dp))
                 )
-
                 if (channel.status == ChannelStatus.ONLINE) {
-                    Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(Color(0xFF4CAF50)))
+                    Box(
+                        Modifier.align(Alignment.TopEnd).padding(top = 2.dp, end = 2.dp)
+                            .size(7.dp).clip(CircleShape).background(Color(0xFF4CAF50))
+                    )
                 }
             }
-
+            Spacer(Modifier.height(7.dp))
             Text(
                 text = channel.title,
                 color = Color.White,
-                fontSize = 14.sp,
+                fontSize = 11.sp,
                 fontWeight = if (isSelected || isFocused) FontWeight.Bold else FontWeight.SemiBold,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
-                lineHeight = 17.sp
+                lineHeight = 13.sp,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.fillMaxWidth().heightIn(min = 28.dp)
             )
         }
     }
@@ -1172,33 +1189,40 @@ class MainActivity : ComponentActivity() {
                                                         modifier = Modifier.padding(horizontal = 24.dp, vertical = 3.dp)
                                                     )
 
-                                                    val groupListState = rememberLazyListState()
-                                                    LaunchedEffect(activeChannel?.url, groupChannels) {
-                                                        val selectedIndex = groupChannels.indexOfFirst { it.url == activeChannel?.url }
-                                                        if (selectedIndex >= 0) groupListState.animateScrollToItem(selectedIndex)
-                                                    }
-                                                    LazyRow(
-                                                        state = groupListState,
-                                                        modifier = Modifier.focusGroup(),
-                                                        horizontalArrangement = Arrangement.spacedBy(14.dp),
-                                                        contentPadding = PaddingValues(horizontal = 24.dp)
-                                                    ) {
-                                                        items(groupChannels, key = { it.url }) { ch ->
-                                                            ChannelCard(
-                                                                channel = ch,
-                                                                isSelected = ch.url == activeChannel?.url,
-                                                                onSelect = {
-                                                                    val idx = channels.indexOf(ch)
-                                                                    if (idx >= 0) {
-                                                                        currentChannelIndex.value = idx
-                                                                        playChannel(idx)
-                                                                        isUiVisible.value = false
-                                                                        isSearchOpen.value = false
-                                                                        isSettingsOpen.value = false
-                                                                    }
-                                                                },
-                                                                onUserInteract = { resetIdleTimer() }
-                                                            )
+                                                    BoxWithConstraints(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)) {
+                                                        val columns = when {
+                                                            maxWidth >= 1100.dp -> 8
+                                                            maxWidth >= 850.dp -> 6
+                                                            maxWidth >= 620.dp -> 5
+                                                            maxWidth >= 420.dp -> 4
+                                                            else -> 3
+                                                        }
+                                                        val gap = 10.dp
+                                                        val tileWidth = (maxWidth - gap * (columns - 1)) / columns
+                                                        FlowRow(
+                                                            modifier = Modifier.fillMaxWidth().focusGroup(),
+                                                            horizontalArrangement = Arrangement.spacedBy(gap),
+                                                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                                                            maxItemsInEachRow = columns
+                                                        ) {
+                                                            groupChannels.forEach { ch ->
+                                                                ChannelCard(
+                                                                    channel = ch,
+                                                                    isSelected = ch.url == activeChannel?.url,
+                                                                    modifier = Modifier.width(tileWidth),
+                                                                    onSelect = {
+                                                                        val idx = channels.indexOf(ch)
+                                                                        if (idx >= 0) {
+                                                                            currentChannelIndex.value = idx
+                                                                            playChannel(idx)
+                                                                            isUiVisible.value = false
+                                                                            isSearchOpen.value = false
+                                                                            isSettingsOpen.value = false
+                                                                        }
+                                                                    },
+                                                                    onUserInteract = { resetIdleTimer() }
+                                                                )
+                                                            }
                                                         }
                                                     }
                                                 }
