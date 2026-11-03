@@ -876,6 +876,14 @@ fun UpdateNoticeDialog(
     }
 }
 
+@Composable
+private fun OverlayAction(icon: String, label: String, onClick: () -> Unit) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.clip(RoundedCornerShape(10.dp)).clickable(onClick = onClick).focusable().padding(horizontal = 10.dp, vertical = 7.dp)) {
+        Text(icon, color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.Medium)
+        Text(label, color = Color.White.copy(alpha = 0.9f), fontSize = 10.sp, maxLines = 1)
+    }
+}
+
 // --- MAIN ACTIVITY CONTROLLER ---
 class MainActivity : ComponentActivity() {
 
@@ -883,6 +891,9 @@ class MainActivity : ComponentActivity() {
     private lateinit var player: ExoPlayer
 
     private val isUiVisible = mutableStateOf(true)
+    private val isPlaybackOverlayVisible = mutableStateOf(false)
+    private val isQualityPickerVisible = mutableStateOf(false)
+    private val isEpgOverlayVisible = mutableStateOf(false)
     private val isStartupVisible = mutableStateOf(true)
     private val isSearchOpen = mutableStateOf(false)
     private val isSettingsOpen = mutableStateOf(false)
@@ -1068,6 +1079,14 @@ class MainActivity : ComponentActivity() {
                     runCatching { initialMenuFocusRequester.requestFocus() }
                 }
             }
+            LaunchedEffect(isPlaybackOverlayVisible.value, isUiVisible.value, isSearchOpen.value, isSettingsOpen.value) {
+                if (isPlaybackOverlayVisible.value && !isUiVisible.value && !isSearchOpen.value && !isSettingsOpen.value) {
+                    delay(6500)
+                    isPlaybackOverlayVisible.value = false
+                    isQualityPickerVisible.value = false
+                    isEpgOverlayVisible.value = false
+                }
+            }
 
             val scrollOffset by remember {
                 derivedStateOf {
@@ -1100,10 +1119,7 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier
                         .fillMaxSize()
                         .background(Color.Black)
-                        .clickable {
-                            isUiVisible.value = !isUiVisible.value
-                            if (isUiVisible.value) resetIdleTimer()
-                        }
+                        .clickable { if (!isUiVisible.value) isPlaybackOverlayVisible.value = true }
                 ) {
                     // Video View
                     AndroidView(
@@ -1131,6 +1147,61 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                     )
+
+                    AnimatedVisibility(
+                        visible = isPlaybackOverlayVisible.value && !isUiVisible.value,
+                        modifier = Modifier.fillMaxSize(),
+                        enter = fadeIn(tween(180)),
+                        exit = fadeOut(tween(220))
+                    ) {
+                        val infoChannel = channels.getOrNull(currentChannelIndex.value)
+                        val schedule = epgPrograms.filter { it.channelId == infoChannel?.epgId }.sortedBy { it.startTimeMs }
+                        val currentProgramme = schedule.firstOrNull { it.startTimeMs <= epgClockMs && it.stopTimeMs > epgClockMs }
+                        val nextProgramme = schedule.firstOrNull { it.startTimeMs > epgClockMs }
+                        Box(Modifier.fillMaxSize()) {
+                            Row(Modifier.align(Alignment.TopStart).fillMaxWidth(0.68f).padding(start = 34.dp, top = 24.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                                RemoteChannelLogo(infoChannel?.logo, infoChannel?.title ?: "TV", Modifier.size(54.dp).clip(RoundedCornerShape(8.dp)))
+                                Column(Modifier.weight(1f)) {
+                                    Text(infoChannel?.title ?: "Live TV", color = Color.White, fontSize = 21.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text(listOfNotNull(infoChannel?.language, infoChannel?.country, currentResolution.value).joinToString("  •  ").ifBlank { "Live television" }, color = Color.White.copy(alpha = 0.78f), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
+                            }
+                            Box(Modifier.align(Alignment.TopEnd).padding(top = 22.dp, end = 28.dp)
+                                .clip(CircleShape).background(Color(0xFFE53935))
+                                .padding(horizontal = 15.dp, vertical = 9.dp)) {
+                                Text("● LIVE", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Black)
+                            }
+                            Row(Modifier.align(Alignment.BottomStart).padding(start = 30.dp, bottom = 28.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                OverlayAction(if (favoriteUrls.contains(infoChannel?.url.orEmpty())) "♥" else "♡", "Favourite") { infoChannel?.let { toggleFavorite(it.url) } }
+                                OverlayAction("⌕", "Channel Search") { isSearchOpen.value = true }
+                                OverlayAction("HD", "Quality") { isQualityPickerVisible.value = !isQualityPickerVisible.value }
+                                OverlayAction("▤", "EPG") { isEpgOverlayVisible.value = !isEpgOverlayVisible.value }
+                                OverlayAction("⚙", "Settings") { isSettingsOpen.value = true }
+                            }
+                            Box(Modifier.align(Alignment.BottomEnd).padding(end = 30.dp, bottom = 28.dp).clip(RoundedCornerShape(22.dp)).background(AmberDial).clickable { isPlaybackOverlayVisible.value = false; isUiVisible.value = true; resetIdleTimer() }.padding(horizontal = 22.dp, vertical = 13.dp)) {
+                                Text("▦  MORE CHANNELS", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            }
+                            if (isQualityPickerVisible.value) {
+                                Row(Modifier.align(Alignment.BottomStart).padding(start = 170.dp, bottom = 92.dp).clip(RoundedCornerShape(12.dp)).background(Color.Black.copy(alpha = 0.9f)).border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(12.dp)).padding(7.dp), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                                    listOf("Auto", "1080p", "720p", "480p").forEach { quality ->
+                                        Box(Modifier.clip(RoundedCornerShape(7.dp)).background(if (selectedQuality.value == quality) AmberDial else Color.Transparent).clickable {
+                                            selectedQuality.value = quality
+                                            getSharedPreferences("retro_iptv_prefs", Context.MODE_PRIVATE).edit().putString("stream_quality", quality).apply()
+                                            applyStreamQuality()
+                                            isQualityPickerVisible.value = false
+                                        }.padding(horizontal = 13.dp, vertical = 9.dp)) {
+                                            Text(quality, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                        }
+                                    }
+                                }
+                            }
+                            if (isEpgOverlayVisible.value) {
+                                Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth(0.72f).padding(bottom = 92.dp)) {
+                                    ProgrammeInfoCard(currentProgramme, nextProgramme)
+                                }
+                            }
+                        }
+                    }
 
                     // Foreground OTT Interface
                     AnimatedVisibility(
@@ -1287,35 +1358,7 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
-                    AnimatedVisibility(
-                        visible = isChannelInfoVisible.value,
-                        modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(horizontal = 16.dp, vertical = 18.dp),
-                        enter = fadeIn(tween(250)) + slideInVertically(tween(250)) { it / 3 },
-                        exit = fadeOut(tween(250)) + slideOutVertically(tween(250)) { it / 3 }
-                    ) {
-                        val infoChannel = channels.getOrNull(currentChannelIndex.value)
-                        Row(
-                            modifier = Modifier.fillMaxWidth().widthIn(max = 620.dp)
-                                .clip(RoundedCornerShape(14.dp))
-                                .background(Color.Black.copy(alpha = 0.88f))
-                                .border(1.dp, AmberDial.copy(alpha = 0.85f), RoundedCornerShape(14.dp))
-                                .padding(horizontal = 16.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            RemoteChannelLogo(infoChannel?.logo, infoChannel?.title ?: "TV", Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(infoChannel?.title ?: "Live TV", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Black, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                Text(
-                                    text = listOfNotNull(currentResolution.value, infoChannel?.language?.takeIf { it != "Unknown" }, infoChannel?.country?.takeIf { it != "Unknown" }, infoChannel?.group).joinToString("  •  ").ifBlank { "LIVE TV" },
-                                    color = WarmAshMuted,
-                                    fontSize = 11.sp,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                        }
-                    }
+
 
                     if (isSearchOpen.value) {
                         SearchModal(
@@ -1925,29 +1968,28 @@ class MainActivity : ComponentActivity() {
             return super.onKeyDown(keyCode, event)
         }
         if (!isUiVisible.value) {
-            when (keyCode) {
-                KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                    switchChannel(1)
-                    return true
-                }
-                KeyEvent.KEYCODE_DPAD_LEFT -> {
-                    switchChannel(-1)
-                    return true
-                }
-                KeyEvent.KEYCODE_DPAD_UP,
-                KeyEvent.KEYCODE_DPAD_DOWN,
-                KeyEvent.KEYCODE_DPAD_CENTER,
-                KeyEvent.KEYCODE_ENTER,
-                KeyEvent.KEYCODE_MENU -> {
-                    isUiVisible.value = true
-                    resetIdleTimer()
-                    return true
-                }
-                KeyEvent.KEYCODE_BACK -> {
+            if (keyCode == KeyEvent.KEYCODE_BACK) {
+                if (isPlaybackOverlayVisible.value) {
+                    isPlaybackOverlayVisible.value = false
+                    isQualityPickerVisible.value = false
+                    isEpgOverlayVisible.value = false
+                } else {
                     isCrtExiting.value = true
-                    return true
                 }
+                return true
             }
+            val isDpad = keyCode == KeyEvent.KEYCODE_DPAD_UP ||
+                keyCode == KeyEvent.KEYCODE_DPAD_DOWN ||
+                keyCode == KeyEvent.KEYCODE_DPAD_LEFT ||
+                keyCode == KeyEvent.KEYCODE_DPAD_RIGHT ||
+                keyCode == KeyEvent.KEYCODE_DPAD_CENTER ||
+                keyCode == KeyEvent.KEYCODE_ENTER ||
+                keyCode == KeyEvent.KEYCODE_MENU
+            if (isDpad && !isPlaybackOverlayVisible.value) {
+                isPlaybackOverlayVisible.value = true
+                return true
+            }
+            if (isPlaybackOverlayVisible.value && isDpad) return super.onKeyDown(keyCode, event)
         } else {
             if (keyCode == KeyEvent.KEYCODE_BACK) {
                 when {
