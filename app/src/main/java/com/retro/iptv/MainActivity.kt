@@ -878,7 +878,7 @@ fun UpdateNoticeDialog(
 
 @Composable
 private fun OverlayAction(icon: String, label: String, onClick: () -> Unit) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.clip(RoundedCornerShape(10.dp)).clickable(onClick = onClick).padding(horizontal = 10.dp, vertical = 7.dp)) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.clip(RoundedCornerShape(10.dp)).clickable(onClick = onClick).focusable().padding(horizontal = 10.dp, vertical = 7.dp)) {
         Text(icon, color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.Medium)
         Text(label, color = Color.White.copy(alpha = 0.9f), fontSize = 10.sp, maxLines = 1)
     }
