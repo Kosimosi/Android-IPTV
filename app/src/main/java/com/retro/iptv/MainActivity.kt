@@ -1039,6 +1039,7 @@ class MainActivity : ComponentActivity() {
                 })
             }
 
+        applyStreamQuality(showToast = false)
         loadPlaylists()
         resetIdleTimer()
 
@@ -1553,7 +1554,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun applyStreamQuality() {
+    private fun applyStreamQuality(showToast: Boolean = true) {
         val builder = player.trackSelectionParameters.buildUpon()
         when (selectedQuality.value) {
             "1080p" -> builder.setMaxVideoSize(1920, 1080)
@@ -1562,7 +1563,7 @@ class MainActivity : ComponentActivity() {
             else -> builder.setMaxVideoSize(Int.MAX_VALUE, Int.MAX_VALUE)
         }
         player.trackSelectionParameters = builder.build()
-        Toast.makeText(this, "Stream quality: ${selectedQuality.value}", Toast.LENGTH_SHORT).show()
+        if (showToast) Toast.makeText(this, "Stream quality: ${selectedQuality.value}", Toast.LENGTH_SHORT).show()
     }
 
     private fun resetIdleTimer() {
