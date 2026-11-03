@@ -80,6 +80,8 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.PlayerView
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -1012,13 +1014,25 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
                         } else {
-                            playbackRetryMessage.value = "Stream unavailable"
                             val idx = currentChannelIndex.value
-                            if (idx in channels.indices) channels[idx] = channels[idx].copy(status = ChannelStatus.OFFLINE)
-                            if (isWatchdogEnabled.value) retryJob = lifecycleScope.launch {
-                                delay(1200)
-                                playbackRetryMessage.value = "Switching to next channel…"
-                                switchChannel(1)
+                            val channel = channels.getOrNull(idx)
+                            if (channel != null && backupStreamIndex < channel.backupUrls.size) {
+                                val backupUrl = channel.backupUrls[backupStreamIndex++]
+                                playbackRetryMessage.value = "Primary stream failed — trying backup ${backupStreamIndex}/${channel.backupUrls.size}…"
+                                retryAttempt = 0
+                                retryJob = lifecycleScope.launch {
+                                    delay(350)
+                                    player.setMediaItem(MediaItem.fromUri(backupUrl))
+                                    player.prepare()
+                                }
+                            } else {
+                                playbackRetryMessage.value = "All streams unavailable"
+                                if (idx in channels.indices) channels[idx] = channels[idx].copy(status = ChannelStatus.OFFLINE)
+                                if (isWatchdogEnabled.value) retryJob = lifecycleScope.launch {
+                                    delay(1200)
+                                    playbackRetryMessage.value = "Switching to next channel…"
+                                    switchChannel(1)
+                                }
                             }
                         }
                     }
@@ -1235,7 +1249,7 @@ class MainActivity : ComponentActivity() {
                                                             verticalArrangement = Arrangement.spacedBy(7.dp),
                                                             maxItemsInEachRow = columns
                                                         ) {
-                                                            groupChannels.forEach { ch ->
+                                                            groupChannels.sortedBy { it.status == ChannelStatus.OFFLINE }.forEach { ch ->
                                                                 ChannelCard(
                                                                     channel = ch,
                                                                     isSelected = ch.url == activeChannel?.url,
@@ -1646,6 +1660,7 @@ class MainActivity : ComponentActivity() {
                     playlistStatus.value = "Playlist refresh failed • showing local fallback channels"
                 }
             }
+            checkPlaylistHealth()
         }
 
         // EPG downloads independently, so a slow guide cannot delay channel playback.
@@ -1656,6 +1671,46 @@ class MainActivity : ComponentActivity() {
                 epgPrograms.clear()
                 epgPrograms.addAll(parsed)
             }
+        }
+    }
+
+    private fun checkPlaylistHealth() {
+        lifecycleScope.launch(Dispatchers.IO) {
+            val sample = channels.toList().take(48)
+            val results = sample.map { channel ->
+                async {
+                    val online = (listOf(channel.url) + channel.backupUrls).take(2).any { testStream(it) }
+                    channel.url to if (online) ChannelStatus.ONLINE else ChannelStatus.OFFLINE
+                }
+            }.awaitAll().toMap()
+            withContext(Dispatchers.Main) {
+                channels.indices.forEach { index ->
+                    results[channels[index].url]?.let { status ->
+                        if (channels[index].status != ChannelStatus.ONLINE) channels[index] = channels[index].copy(status = status)
+                    }
+                }
+                val offlineCount = results.values.count { it == ChannelStatus.OFFLINE }
+                playlistStatus.value += " • health checked (${results.size - offlineCount} online, $offlineCount unavailable)"
+            }
+        }
+    }
+
+    private fun testStream(streamUrl: String): Boolean {
+        var connection: HttpURLConnection? = null
+        return try {
+            connection = (URL(streamUrl).openConnection() as HttpURLConnection).apply {
+                connectTimeout = 3500
+                readTimeout = 3500
+                requestMethod = "GET"
+                setRequestProperty("Range", "bytes=0-0")
+                setRequestProperty("User-Agent", "RETROTV-Android")
+                instanceFollowRedirects = true
+            }
+            connection.responseCode in 200..299
+        } catch (_: Exception) {
+            false
+        } finally {
+            connection?.disconnect()
         }
     }
 
@@ -1801,7 +1856,10 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
-        return list
+        return list.groupBy { it.title.trim().lowercase(Locale.ROOT) }.values.map { variants ->
+            val primary = variants.first()
+            primary.copy(backupUrls = variants.map { it.url }.filter { it != primary.url }.distinct())
+        }
     }
 
     private fun playChannel(index: Int) {
@@ -1812,6 +1870,7 @@ class MainActivity : ComponentActivity() {
         recordRecentlyWatched(channel)
         retryJob?.cancel()
         retryAttempt = 0
+        backupStreamIndex = 0
         playbackRetryMessage.value = null
         channelInfoJob?.cancel()
         // Keep the channel banner visible for five seconds after the menu fades away.
