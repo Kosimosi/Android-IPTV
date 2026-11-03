@@ -908,6 +908,7 @@ class MainActivity : ComponentActivity() {
     private val isWatchdogEnabled = mutableStateOf(true)
     private val selectedQuality = mutableStateOf("Auto")
     private var backupStreamIndex = 0
+    private var currentStreamUrl = ""
     private val favoriteUrls = mutableStateListOf<String>()
     private val channels = mutableStateListOf<Channel>()
 
@@ -1009,7 +1010,7 @@ class MainActivity : ComponentActivity() {
                             retryJob = lifecycleScope.launch {
                                 delay(attempt * 1_000L)
                                 if (currentChannelIndex.value in channels.indices) {
-                                    player.setMediaItem(MediaItem.fromUri(channels[currentChannelIndex.value].url))
+                                    player.setMediaItem(MediaItem.fromUri(currentStreamUrl))
                                     player.prepare()
                                 }
                             }
@@ -1018,6 +1019,7 @@ class MainActivity : ComponentActivity() {
                             val channel = channels.getOrNull(idx)
                             if (channel != null && backupStreamIndex < channel.backupUrls.size) {
                                 val backupUrl = channel.backupUrls[backupStreamIndex++]
+                                currentStreamUrl = backupUrl
                                 playbackRetryMessage.value = "Primary stream failed — trying backup ${backupStreamIndex}/${channel.backupUrls.size}…"
                                 retryAttempt = 0
                                 retryJob = lifecycleScope.launch {
@@ -1677,7 +1679,7 @@ class MainActivity : ComponentActivity() {
 
     private fun checkPlaylistHealth() {
         lifecycleScope.launch(Dispatchers.IO) {
-            val sample = channels.toList().take(48)
+            val sample = withContext(Dispatchers.Main) { channels.toList().take(48) }
             val results = sample.map { channel ->
                 async {
                     val online = (listOf(channel.url) + channel.backupUrls).take(2).any { testStream(it) }
@@ -1881,7 +1883,8 @@ class MainActivity : ComponentActivity() {
             isChannelInfoVisible.value = false
         }
 
-        val mediaItem = MediaItem.fromUri(channel.url)
+        currentStreamUrl = channel.url
+        val mediaItem = MediaItem.fromUri(currentStreamUrl)
         player.setMediaItem(mediaItem)
         player.prepare()
 
