@@ -101,6 +101,8 @@ import java.net.URL
 const val DEFAULT_PLAYLIST_URL = "https://raw.githubusercontent.com/Kosimosi/Android-IPTV/main/playlist.m3u"
 const val IPTV_HINDI_PLAYLIST_URL = "https://iptv-org.github.io/iptv/languages/hin.m3u"
 const val IPTV_BENGALI_PLAYLIST_URL = "https://iptv-org.github.io/iptv/languages/ben.m3u"
+const val IPTV_URDU_PLAYLIST_URL = "https://iptv-org.github.io/iptv/languages/urd.m3u"
+const val IPTV_PAKISTAN_PLAYLIST_URL = "https://iptv-org.github.io/iptv/countries/pk.m3u"
 const val IPTV_INDIA_EPG_URL = "https://iptv-epg.org/files/epg-in.xml"
 
 // --- COLOR PALETTE (Modern Oak) ---
@@ -1147,8 +1149,13 @@ class MainActivity : ComponentActivity() {
                             val filteredGroups = remember(currentTab.value, channels.toList(), favoriteUrls.toList()) {
                                 when (currentTab.value) {
                                     "FAVOURITES" -> mapOf("Favourites" to channels.filter { favoriteUrls.contains(it.url) })
-                                    "REGION" -> channels.groupBy { if (it.language.equals("Hindi", true)) "Hindi" else "Bangla" }
-                                        .toSortedMap(compareBy { if (it == "Bangla") 0 else 1 })
+                                    "REGION" -> channels.groupBy {
+                                        when {
+                                            it.language.equals("Urdu", true) || it.country.equals("Pakistan", true) -> "Urdu / Pakistan"
+                                            it.language.equals("Hindi", true) -> "Hindi"
+                                            else -> "Bangla"
+                                        }
+                                    }.toSortedMap(compareBy { when (it) { "Bangla" -> 0; "Hindi" -> 1; "Urdu / Pakistan" -> 2; else -> 3 } })
                                     else -> channels.groupBy { it.group.ifBlank { "General" } }.toSortedMap()
                                 }
                             }
@@ -1629,7 +1636,7 @@ class MainActivity : ComponentActivity() {
             }
 
             val primaryUrl = if (customM3uUrl.value.isNotBlank()) customM3uUrl.value else DEFAULT_PLAYLIST_URL
-            val sources = listOf(primaryUrl, IPTV_HINDI_PLAYLIST_URL, IPTV_BENGALI_PLAYLIST_URL).distinct()
+            val sources = listOf(primaryUrl, IPTV_HINDI_PLAYLIST_URL, IPTV_BENGALI_PLAYLIST_URL, IPTV_URDU_PLAYLIST_URL, IPTV_PAKISTAN_PLAYLIST_URL).distinct()
             val fetched = sources.map { url -> url to fetchUrl(url) }
             val successfulTexts = fetched.mapNotNull { it.second }
             val failedCount = fetched.count { it.second == null }
@@ -1826,14 +1833,19 @@ class MainActivity : ComponentActivity() {
                 currentLanguage = languageMatch?.groupValues?.get(1)?.trim()?.takeIf { it.isNotBlank() } ?: "Unknown"
                 val lowerMeta = (currentLanguage + " " + currentCountry + " " + currentTitle + " " + currentGroup).lowercase(Locale.ROOT)
                 currentLanguage = when {
+                    lowerMeta.contains("urdu") || currentCountry.equals("Pakistan", true) || currentCountry.equals("PK", true) -> "Urdu"
                     lowerMeta.contains("hindi") || lowerMeta.contains("hin") || currentCountry.equals("India", true) || currentCountry.equals("IN", true) -> "Hindi"
                     lowerMeta.contains("bangla") || lowerMeta.contains("bengali") || lowerMeta.contains("ben") ||
                         currentCountry.equals("Bangladesh", true) || currentCountry.equals("BD", true) ||
                         listOf("jamuna", "dbc", "ekattor", "ntv", "deepto", "maasranga", "somoy", "channel i", "gazi tv", "banglavision").any { currentTitle.contains(it, true) } -> "Bangla"
                     else -> "Bangla"
                 }
-                currentRegion = currentLanguage
-                if (currentCountry == "Unknown") currentCountry = if (currentLanguage == "Hindi") "India" else "Bangladesh"
+                currentRegion = if (currentLanguage == "Urdu") "Urdu / Pakistan" else currentLanguage
+                if (currentCountry == "Unknown") currentCountry = when (currentLanguage) {
+                    "Hindi" -> "India"
+                    "Urdu" -> "Pakistan"
+                    else -> "Bangladesh"
+                }
             } else if (trimmed.startsWith("http://", ignoreCase = true) || trimmed.startsWith("https://", ignoreCase = true)) {
                 if (currentTitle.isNotEmpty()) {
                     list.add(
