@@ -1166,17 +1166,17 @@ class MainActivity : ComponentActivity() {
                                     Text(listOfNotNull(infoChannel?.language, infoChannel?.country, currentResolution.value).joinToString("  •  ").ifBlank { "Live television" }, color = Color.White.copy(alpha = 0.78f), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 }
                             }
-                            Row(Modifier.align(Alignment.TopEnd).padding(top = 22.dp, end = 28.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Box(Modifier.clip(CircleShape).background(Color(0xFFE53935)).padding(horizontal = 15.dp, vertical = 9.dp)) {
-                                    Text("● LIVE", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Black)
-                                }
-                                OverlayAction("⚙", "Settings") { isSettingsOpen.value = true }
+                            Box(Modifier.align(Alignment.TopEnd).padding(top = 22.dp, end = 28.dp)
+                                .clip(CircleShape).background(Color(0xFFE53935))
+                                .padding(horizontal = 15.dp, vertical = 9.dp)) {
+                                Text("● LIVE", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Black)
                             }
                             Row(Modifier.align(Alignment.BottomStart).padding(start = 30.dp, bottom = 28.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                                 OverlayAction(if (favoriteUrls.contains(infoChannel?.url.orEmpty())) "♥" else "♡", "Favourite") { infoChannel?.let { toggleFavorite(it.url) } }
-                                OverlayAction("⌕", "Search channels") { isSearchOpen.value = true }
-                                OverlayAction("HD", "Stream quality") { isQualityPickerVisible.value = !isQualityPickerVisible.value }
-                                OverlayAction("▤", "Programme guide") { isEpgOverlayVisible.value = !isEpgOverlayVisible.value }
+                                OverlayAction("⌕", "Channel Search") { isSearchOpen.value = true }
+                                OverlayAction("HD", "Quality") { isQualityPickerVisible.value = !isQualityPickerVisible.value }
+                                OverlayAction("▤", "EPG") { isEpgOverlayVisible.value = !isEpgOverlayVisible.value }
+                                OverlayAction("⚙", "Settings") { isSettingsOpen.value = true }
                             }
                             Box(Modifier.align(Alignment.BottomEnd).padding(end = 30.dp, bottom = 28.dp).clip(RoundedCornerShape(22.dp)).background(AmberDial).clickable { isPlaybackOverlayVisible.value = false; isUiVisible.value = true; resetIdleTimer() }.padding(horizontal = 22.dp, vertical = 13.dp)) {
                                 Text("▦  MORE CHANNELS", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
