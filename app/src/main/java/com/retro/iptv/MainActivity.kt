@@ -46,6 +46,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.aspectRatio
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -120,7 +121,8 @@ data class Channel(
     val region: String = "Unknown Region",
     val epgId: String? = null,
     val language: String = "Bangla",
-    val country: String = "Bangladesh"
+    val country: String = "Bangladesh",
+    val backupUrls: List<String> = emptyList()
 )
 
 data class Programme(val channelId: String, val title: String, val startTimeMs: Long, val stopTimeMs: Long)
@@ -147,12 +149,22 @@ private fun formatProgrammeTime(timeMs: Long): String = SimpleDateFormat("HH:mm"
 // --- RELIABLE LOGO LOADER (Follows Redirects & Decodes PNG/JPG) ---
 @Composable
 fun RemoteChannelLogo(url: String?, channelTitle: String, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
     var bitmap by remember(url) { mutableStateOf<ImageBitmap?>(null) }
 
     LaunchedEffect(url) {
         if (!url.isNullOrBlank()) {
             withContext(Dispatchers.IO) {
                 try {
+                    val cacheDir = File(context.cacheDir, "channel_logos").apply { mkdirs() }
+                    val cacheFile = File(cacheDir, "${url.hashCode().toUInt().toString(16)}.img")
+                    if (cacheFile.exists() && cacheFile.length() > 0L) {
+                        val cached = BitmapFactory.decodeFile(cacheFile.absolutePath)
+                        if (cached != null) {
+                            bitmap = cached.asImageBitmap()
+                            return@withContext
+                        }
+                    }
                     var currentUrl = url
                     var redirects = 0
                     var finalBitmap: ImageBitmap? = null
@@ -178,6 +190,7 @@ fun RemoteChannelLogo(url: String?, channelTitle: String, modifier: Modifier = M
                         if (status in 200..299) {
                             connection.inputStream.use { stream ->
                                 val bytes = stream.readBytes()
+                                if (bytes.size <= 2 * 1024 * 1024) runCatching { cacheFile.writeBytes(bytes) }
                                 val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
                                 finalBitmap = bmp?.asImageBitmap()
                             }
@@ -512,7 +525,7 @@ fun ChannelCard(
     )
     Box(
         modifier = modifier
-            .height(156.dp)
+            .aspectRatio(2f / 3f)
             .graphicsLayer {
                 val scale = if (isFocused) 1.06f else 1f
                 scaleX = scale
@@ -676,6 +689,8 @@ fun SearchModal(
 fun SettingsModal(
     customM3uUrl: String,
     isWatchdogEnabled: Boolean,
+    selectedQuality: String,
+    onSelectQuality: (String) -> Unit,
     updateStatus: String,
     isCheckingForUpdates: Boolean,
     isUpdateDownloaded: Boolean,
@@ -787,6 +802,19 @@ fun SettingsModal(
                     Text(if (isWatchdogEnabled) "ON" else "OFF", color = if (isWatchdogEnabled) AmberDial else WarmAshMuted, fontWeight = FontWeight.Bold)
                 }
 
+                Text("STREAM QUALITY", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("Auto", "1080p", "720p", "480p").forEach { quality ->
+                        val selected = selectedQuality == quality
+                        Box(Modifier.weight(1f).clip(RoundedCornerShape(7.dp))
+                            .background(if (selected) AmberDial else OakSurfaceElevated)
+                            .border(1.dp, if (selected) AmberDial else Color.White.copy(alpha = 0.12f), RoundedCornerShape(7.dp))
+                            .clickable { onSelectQuality(quality) }.padding(vertical = 9.dp), contentAlignment = Alignment.Center) {
+                            Text(quality, color = Color.White, fontSize = 11.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium)
+                        }
+                    }
+                }
+
                 Text("APP UPDATE", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 Box(
                     modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
@@ -876,6 +904,8 @@ class MainActivity : ComponentActivity() {
 
     private val customM3uUrl = mutableStateOf("")
     private val isWatchdogEnabled = mutableStateOf(true)
+    private val selectedQuality = mutableStateOf("Auto")
+    private var backupStreamIndex = 0
     private val favoriteUrls = mutableStateListOf<String>()
     private val channels = mutableStateListOf<Channel>()
 
@@ -1159,7 +1189,7 @@ class MainActivity : ComponentActivity() {
                                             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                                 Text("RECENTLY WATCHED", color = AmberDial, fontSize = 13.sp, fontWeight = FontWeight.Black,
                                                     letterSpacing = 1.sp, modifier = Modifier.padding(horizontal = 24.dp))
-                                                LazyRow(modifier = Modifier.focusGroup(), horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(horizontal = 24.dp)) {
+                                                LazyRow(modifier = Modifier.focusGroup(), horizontalArrangement = Arrangement.spacedBy(6.dp), contentPadding = PaddingValues(horizontal = 24.dp)) {
                                                     items(recentlyWatched, key = { it.url }) { ch ->
                                                         ChannelCard(channel = ch, isSelected = ch.url == activeChannel?.url,
                                                             onSelect = { val idx = channels.indexOfFirst { it.url == ch.url }; if (idx >= 0) { currentChannelIndex.value = idx; playChannel(idx); isUiVisible.value = false; isSearchOpen.value = false; isSettingsOpen.value = false } },
@@ -1197,12 +1227,12 @@ class MainActivity : ComponentActivity() {
                                                             maxWidth >= 420.dp -> 4
                                                             else -> 3
                                                         }
-                                                        val gap = 10.dp
+                                                        val gap = 6.dp
                                                         val tileWidth = (maxWidth - gap * (columns - 1)) / columns
                                                         FlowRow(
                                                             modifier = Modifier.fillMaxWidth().focusGroup(),
                                                             horizontalArrangement = Arrangement.spacedBy(gap),
-                                                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                                                            verticalArrangement = Arrangement.spacedBy(7.dp),
                                                             maxItemsInEachRow = columns
                                                         ) {
                                                             groupChannels.forEach { ch ->
@@ -1285,6 +1315,12 @@ class MainActivity : ComponentActivity() {
                         SettingsModal(
                             customM3uUrl = customM3uUrl.value,
                             isWatchdogEnabled = isWatchdogEnabled.value,
+                            selectedQuality = selectedQuality.value,
+                            onSelectQuality = { quality ->
+                                selectedQuality.value = quality
+                                getSharedPreferences("retro_iptv_prefs", Context.MODE_PRIVATE).edit().putString("stream_quality", quality).apply()
+                                applyStreamQuality()
+                            },
                             updateStatus = updateStatus.value,
                             isCheckingForUpdates = isCheckingForUpdates.value,
                             isUpdateDownloaded = isUpdateDownloaded.value,
@@ -1503,6 +1539,18 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun applyStreamQuality() {
+        val builder = player.trackSelectionParameters.buildUpon()
+        when (selectedQuality.value) {
+            "1080p" -> builder.setMaxVideoSize(1920, 1080)
+            "720p" -> builder.setMaxVideoSize(1280, 720)
+            "480p" -> builder.setMaxVideoSize(854, 480)
+            else -> builder.setMaxVideoSize(Int.MAX_VALUE, Int.MAX_VALUE)
+        }
+        player.trackSelectionParameters = builder.build()
+        Toast.makeText(this, "Stream quality: ${selectedQuality.value}", Toast.LENGTH_SHORT).show()
+    }
+
     private fun resetIdleTimer() {
         autoHideJob?.cancel()
         autoHideJob = lifecycleScope.launch {
@@ -1519,6 +1567,7 @@ class MainActivity : ComponentActivity() {
         favoriteUrls.clear()
         favoriteUrls.addAll(savedFavs)
         customM3uUrl.value = prefs.getString("custom_m3u_url", "") ?: ""
+        selectedQuality.value = prefs.getString("stream_quality", "Auto") ?: "Auto"
         recentChannelUrls.clear()
         recentChannelUrls.addAll(prefs.getString("recent_channel_urls", "")?.split("\\n")?.filter { it.isNotBlank() }?.take(8) ?: emptyList())
     }
