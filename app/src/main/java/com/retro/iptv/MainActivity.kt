@@ -1079,6 +1079,14 @@ class MainActivity : ComponentActivity() {
                     runCatching { initialMenuFocusRequester.requestFocus() }
                 }
             }
+            LaunchedEffect(isPlaybackOverlayVisible.value, isUiVisible.value, isSearchOpen.value, isSettingsOpen.value) {
+                if (isPlaybackOverlayVisible.value && !isUiVisible.value && !isSearchOpen.value && !isSettingsOpen.value) {
+                    delay(6500)
+                    isPlaybackOverlayVisible.value = false
+                    isQualityPickerVisible.value = false
+                    isEpgOverlayVisible.value = false
+                }
+            }
 
             val scrollOffset by remember {
                 derivedStateOf {
@@ -1960,29 +1968,28 @@ class MainActivity : ComponentActivity() {
             return super.onKeyDown(keyCode, event)
         }
         if (!isUiVisible.value) {
-            when (keyCode) {
-                KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                    switchChannel(1)
-                    return true
-                }
-                KeyEvent.KEYCODE_DPAD_LEFT -> {
-                    switchChannel(-1)
-                    return true
-                }
-                KeyEvent.KEYCODE_DPAD_UP,
-                KeyEvent.KEYCODE_DPAD_DOWN,
-                KeyEvent.KEYCODE_DPAD_CENTER,
-                KeyEvent.KEYCODE_ENTER,
-                KeyEvent.KEYCODE_MENU -> {
-                    isUiVisible.value = true
-                    resetIdleTimer()
-                    return true
-                }
-                KeyEvent.KEYCODE_BACK -> {
+            if (keyCode == KeyEvent.KEYCODE_BACK) {
+                if (isPlaybackOverlayVisible.value) {
+                    isPlaybackOverlayVisible.value = false
+                    isQualityPickerVisible.value = false
+                    isEpgOverlayVisible.value = false
+                } else {
                     isCrtExiting.value = true
-                    return true
                 }
+                return true
             }
+            val isDpad = keyCode == KeyEvent.KEYCODE_DPAD_UP ||
+                keyCode == KeyEvent.KEYCODE_DPAD_DOWN ||
+                keyCode == KeyEvent.KEYCODE_DPAD_LEFT ||
+                keyCode == KeyEvent.KEYCODE_DPAD_RIGHT ||
+                keyCode == KeyEvent.KEYCODE_DPAD_CENTER ||
+                keyCode == KeyEvent.KEYCODE_ENTER ||
+                keyCode == KeyEvent.KEYCODE_MENU
+            if (isDpad && !isPlaybackOverlayVisible.value) {
+                isPlaybackOverlayVisible.value = true
+                return true
+            }
+            if (isPlaybackOverlayVisible.value && isDpad) return super.onKeyDown(keyCode, event)
         } else {
             if (keyCode == KeyEvent.KEYCODE_BACK) {
                 when {
