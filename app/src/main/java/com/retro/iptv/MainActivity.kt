@@ -943,18 +943,17 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
         loadSettingsFromStorage()
-        downloadedUpdateApk = File(cacheDir, "updates").listFiles()
-            ?.filter { it.isFile && it.extension.equals("apk", ignoreCase = true) }
-            ?.maxByOrNull { it.lastModified() }
-        isUpdateDownloaded.value = downloadedUpdateApk?.exists() == true
-        if (isUpdateDownloaded.value) updateStatus.value = "A downloaded update is ready to install."
+        // Never trust an APK left in cache across launches: it may belong to an older release.
+        File(cacheDir, "updates").listFiles()?.forEach { cached ->
+            if (cached.isFile && cached.extension.equals("apk", ignoreCase = true)) cached.delete()
+        }
+        downloadedUpdateApk = null
+        isUpdateDownloaded.value = false
 
-        // Check GitHub after startup; only newer releases trigger a changelog notice.
-        if (!isUpdateDownloaded.value) {
-            lifecycleScope.launch {
-                delay(5000)
-                checkForUpdates()
-            }
+        // Always query GitHub on startup before downloading or offering an update.
+        lifecycleScope.launch {
+            delay(5000)
+            checkForUpdates()
         }
 
         val renderersFactory = DefaultRenderersFactory(this).apply {
@@ -1470,11 +1469,9 @@ class MainActivity : ComponentActivity() {
     private data class UpdateNotice(val version: String, val releaseNotes: String, val apkFile: File?)
 
     private fun checkForUpdates() {
-        val existingApk = downloadedUpdateApk
-        if (existingApk != null && existingApk.exists()) {
-            launchUpdateInstaller(existingApk)
-            return
-        }
+        downloadedUpdateApk?.delete()
+        downloadedUpdateApk = null
+        isUpdateDownloaded.value = false
         if (isCheckingForUpdates.value) return
 
         isCheckingForUpdates.value = true
@@ -1516,7 +1513,9 @@ class MainActivity : ComponentActivity() {
 
                     val apkName = apkAsset.optString("name").replace(Regex("[^A-Za-z0-9._-]"), "_")
                     val updateDir = File(cacheDir, "updates").apply { mkdirs() }
-                    val apkFile = File(updateDir, apkName)
+                    val safeTag = latestTag.replace(Regex("[^A-Za-z0-9._-]"), "_")
+                    val apkFile = File(updateDir, "$safeTag-$apkName")
+                    apkFile.delete()
                     val downloadConnection = (URL(apkAsset.optString("browser_download_url"))
                         .openConnection() as HttpURLConnection).apply {
                         connectTimeout = 15000
@@ -1535,7 +1534,23 @@ class MainActivity : ComponentActivity() {
                         downloadConnection.disconnect()
                     }
                     if (!apkFile.exists() || apkFile.length() == 0L) {
+                        apkFile.delete()
                         throw IOException("The downloaded APK is empty.")
+                    }
+                    val archiveInfo = packageManager.getPackageArchiveInfo(apkFile.absolutePath, 0)
+                        ?: run {
+                            apkFile.delete()
+                            throw IOException("The downloaded file is not a valid Android APK.")
+                        }
+                    val archiveVersion = archiveInfo.versionName ?: "0"
+                    if (archiveInfo.packageName != packageName) {
+                        apkFile.delete()
+                        throw IOException("The downloaded APK is for a different application.")
+                    }
+                    if (compareVersions(archiveVersion, installedVersion) <= 0 ||
+                        compareVersions(latestTag, archiveVersion) != 0) {
+                        apkFile.delete()
+                        throw IOException("GitHub's APK version ($archiveVersion) does not match the newer release ($latestTag). Update blocked to prevent installing an older build.")
                     }
                     UpdateCheckResult(latestTag, apkFile, true, releaseJson.optString("body"))
                 }
