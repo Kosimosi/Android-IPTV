@@ -1086,7 +1086,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
             LaunchedEffect(isPlaybackOverlayVisible.value) { if (isPlaybackOverlayVisible.value) selectedPlaybackAction.value = 0 }
-            LaunchedEffect(isPlaybackOverlayVisible.value, isUiVisible.value, isSearchOpen.value, isSettingsOpen.value) {
+            LaunchedEffect(isPlaybackOverlayVisible.value, isUiVisible.value, isSearchOpen.value, isSettingsOpen.value, selectedPlaybackAction.value) {
                 if (isPlaybackOverlayVisible.value && !isUiVisible.value && !isSearchOpen.value && !isSettingsOpen.value) {
                     delay(6500)
                     isPlaybackOverlayVisible.value = false
@@ -1203,7 +1203,12 @@ class MainActivity : ComponentActivity() {
                                     .clickable { openChannelMenuFromPlayback() }
                                     .focusable()
                                     .padding(horizontal = 22.dp, vertical = 16.dp)
-                            ) { Text("▦", color = Color.White, fontSize = 25.sp) }
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                                    Text("▦", color = Color.White, fontSize = 23.sp)
+                                    Text("MORE CHANNELS", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
                             if (isQualityPickerVisible.value) {
                                 Row(Modifier.align(Alignment.BottomStart).padding(start = 170.dp, bottom = 92.dp).clip(RoundedCornerShape(12.dp)).background(Color.Black.copy(alpha = 0.9f)).border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(12.dp)).padding(7.dp), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                                     listOf("Auto", "1080p", "720p", "480p").forEach { quality ->
