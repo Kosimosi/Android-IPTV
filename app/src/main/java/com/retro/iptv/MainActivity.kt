@@ -877,11 +877,16 @@ fun UpdateNoticeDialog(
 }
 
 @Composable
-private fun OverlayAction(icon: String, label: String, onClick: () -> Unit) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.clip(RoundedCornerShape(10.dp)).clickable(onClick = onClick).focusable().padding(horizontal = 10.dp, vertical = 7.dp)) {
-        Text(icon, color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.Medium)
-        Text(label, color = Color.White.copy(alpha = 0.9f), fontSize = 10.sp, maxLines = 1)
-    }
+private fun OverlayIconAction(icon: String, selected: Boolean, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier.size(if (selected) 58.dp else 52.dp)
+            .graphicsLayer { scaleX = if (selected) 1.08f else 1f; scaleY = if (selected) 1.08f else 1f }
+            .clip(CircleShape)
+            .background(if (selected) AmberDial else Color.Transparent)
+            .clickable(onClick = onClick)
+            .focusable(),
+        contentAlignment = Alignment.Center
+    ) { Text(icon, color = Color.White, fontSize = 27.sp, fontWeight = FontWeight.Normal) }
 }
 
 // --- MAIN ACTIVITY CONTROLLER ---
@@ -894,6 +899,7 @@ class MainActivity : ComponentActivity() {
     private val isPlaybackOverlayVisible = mutableStateOf(false)
     private val isQualityPickerVisible = mutableStateOf(false)
     private val isEpgOverlayVisible = mutableStateOf(false)
+    private val selectedPlaybackAction = mutableIntStateOf(0)
     private val isStartupVisible = mutableStateOf(true)
     private val isSearchOpen = mutableStateOf(false)
     private val isSettingsOpen = mutableStateOf(false)
@@ -1079,6 +1085,7 @@ class MainActivity : ComponentActivity() {
                     runCatching { initialMenuFocusRequester.requestFocus() }
                 }
             }
+            LaunchedEffect(isPlaybackOverlayVisible.value) { if (isPlaybackOverlayVisible.value) selectedPlaybackAction.value = 0 }
             LaunchedEffect(isPlaybackOverlayVisible.value, isUiVisible.value, isSearchOpen.value, isSettingsOpen.value) {
                 if (isPlaybackOverlayVisible.value && !isUiVisible.value && !isSearchOpen.value && !isSettingsOpen.value) {
                     delay(6500)
@@ -1171,16 +1178,32 @@ class MainActivity : ComponentActivity() {
                                 .padding(horizontal = 15.dp, vertical = 9.dp)) {
                                 Text("● LIVE", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Black)
                             }
-                            Row(Modifier.align(Alignment.BottomStart).padding(start = 30.dp, bottom = 28.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                OverlayAction(if (favoriteUrls.contains(infoChannel?.url.orEmpty())) "♥" else "♡", "Favourite") { infoChannel?.let { toggleFavorite(it.url) } }
-                                OverlayAction("⌕", "Channel Search") { isSearchOpen.value = true }
-                                OverlayAction("HD", "Quality") { isQualityPickerVisible.value = !isQualityPickerVisible.value }
-                                OverlayAction("▤", "EPG") { isEpgOverlayVisible.value = !isEpgOverlayVisible.value }
-                                OverlayAction("⚙", "Settings") { isSettingsOpen.value = true }
+                            Row(
+                                Modifier.align(Alignment.BottomStart).padding(start = 28.dp, bottom = 24.dp)
+                                    .clip(RoundedCornerShape(34.dp))
+                                    .background(Color.Black.copy(alpha = 0.66f))
+                                    .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(34.dp))
+                                    .padding(horizontal = 9.dp, vertical = 7.dp),
+                                horizontalArrangement = Arrangement.spacedBy(7.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                OverlayIconAction(if (favoriteUrls.contains(infoChannel?.url.orEmpty())) "♥" else "♡", selectedPlaybackAction.value == 0) {
+                                    infoChannel?.let { toggleFavorite(it.url) }
+                                }
+                                OverlayIconAction("⌕", selectedPlaybackAction.value == 1) { isSearchOpen.value = true }
+                                OverlayIconAction("ᴴᴰ", selectedPlaybackAction.value == 2) { isQualityPickerVisible.value = !isQualityPickerVisible.value }
+                                OverlayIconAction("▤", selectedPlaybackAction.value == 3) { isEpgOverlayVisible.value = !isEpgOverlayVisible.value }
+                                OverlayIconAction("⚙", selectedPlaybackAction.value == 4) { isSettingsOpen.value = true }
                             }
-                            Box(Modifier.align(Alignment.BottomEnd).padding(end = 30.dp, bottom = 28.dp).clip(RoundedCornerShape(22.dp)).background(AmberDial).clickable { isPlaybackOverlayVisible.value = false; isUiVisible.value = true; resetIdleTimer() }.padding(horizontal = 22.dp, vertical = 13.dp)) {
-                                Text("▦  MORE CHANNELS", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                            }
+                            Box(
+                                Modifier.align(Alignment.BottomEnd).padding(end = 28.dp, bottom = 24.dp)
+                                    .clip(RoundedCornerShape(28.dp))
+                                    .background(if (selectedPlaybackAction.value == 5) AmberDial else Color.Black.copy(alpha = 0.66f))
+                                    .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(28.dp))
+                                    .clickable { openChannelMenuFromPlayback() }
+                                    .focusable()
+                                    .padding(horizontal = 22.dp, vertical = 16.dp)
+                            ) { Text("▦", color = Color.White, fontSize = 25.sp) }
                             if (isQualityPickerVisible.value) {
                                 Row(Modifier.align(Alignment.BottomStart).padding(start = 170.dp, bottom = 92.dp).clip(RoundedCornerShape(12.dp)).background(Color.Black.copy(alpha = 0.9f)).border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(12.dp)).padding(7.dp), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                                     listOf("Auto", "1080p", "720p", "480p").forEach { quality ->
@@ -1953,6 +1976,23 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun openChannelMenuFromPlayback() {
+        isPlaybackOverlayVisible.value = false
+        isUiVisible.value = true
+        resetIdleTimer()
+    }
+
+    private fun activatePlaybackAction(index: Int) {
+        when (index) {
+            0 -> channels.getOrNull(currentChannelIndex.value)?.let { toggleFavorite(it.url) }
+            1 -> isSearchOpen.value = true
+            2 -> isQualityPickerVisible.value = !isQualityPickerVisible.value
+            3 -> isEpgOverlayVisible.value = !isEpgOverlayVisible.value
+            4 -> isSettingsOpen.value = true
+            5 -> openChannelMenuFromPlayback()
+        }
+    }
+
     private fun switchChannel(delta: Int) {
         if (channels.isEmpty()) return
         val newIndex = (currentChannelIndex.value + delta + channels.size) % channels.size
@@ -1989,7 +2029,17 @@ class MainActivity : ComponentActivity() {
                 isPlaybackOverlayVisible.value = true
                 return true
             }
-            if (isPlaybackOverlayVisible.value && isDpad) return super.onKeyDown(keyCode, event)
+            if (isPlaybackOverlayVisible.value && isDpad) {
+                when (keyCode) {
+                    KeyEvent.KEYCODE_DPAD_LEFT -> selectedPlaybackAction.value = (selectedPlaybackAction.value + 5) % 6
+                    KeyEvent.KEYCODE_DPAD_RIGHT -> selectedPlaybackAction.value = (selectedPlaybackAction.value + 1) % 6
+                    KeyEvent.KEYCODE_DPAD_UP -> selectedPlaybackAction.value = if (selectedPlaybackAction.value == 5) 4 else selectedPlaybackAction.value
+                    KeyEvent.KEYCODE_DPAD_DOWN -> selectedPlaybackAction.value = 5
+                    KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> activatePlaybackAction(selectedPlaybackAction.value)
+                    KeyEvent.KEYCODE_MENU -> openChannelMenuFromPlayback()
+                }
+                return true
+            }
         } else {
             if (keyCode == KeyEvent.KEYCODE_BACK) {
                 when {
