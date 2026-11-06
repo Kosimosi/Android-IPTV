@@ -106,12 +106,12 @@ const val IPTV_PAKISTAN_PLAYLIST_URL = "https://iptv-org.github.io/iptv/countrie
 const val IPTV_INDIA_EPG_URL = "https://iptv-epg.org/files/epg-in.xml"
 
 // --- COLOR PALETTE (Modern Oak) ---
-val OakDarkBackground = Color(0xFF140F0C)
-val OakSurface = Color(0xFF261A13)
-val OakSurfaceElevated = Color(0xFF38271D)
-val AmberDial = Color(0xFFE62117)
-val ParchmentWhite = Color(0xFFFAF4ED)
-val WarmAshMuted = Color(0xFFA8988B)
+val OakDarkBackground = Color(0xFF080808)
+val OakSurface = Color(0xFF151515)
+val OakSurfaceElevated = Color(0xFF222222)
+val FocusRed = Color(0xFFE62117)
+val ParchmentWhite = Color.White
+val WarmAshMuted = Color(0xFFA3A3A3)
 
 enum class ChannelStatus { UNKNOWN, ONLINE, OFFLINE }
 
@@ -136,10 +136,10 @@ fun ProgrammeInfoCard(current: Programme?, upcoming: Programme?) {
     Column(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)
             .clip(RoundedCornerShape(10.dp)).background(OakSurface.copy(alpha = 0.94f))
-            .border(1.dp, AmberDial.copy(alpha = 0.45f), RoundedCornerShape(10.dp)).padding(12.dp),
+            .border(1.dp, Color.White.copy(alpha = 0.14f), RoundedCornerShape(10.dp)).padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(7.dp)
     ) {
-        Text("PROGRAMME GUIDE", color = AmberDial, fontWeight = FontWeight.Black, fontSize = 11.sp, letterSpacing = 1.sp)
+        Text("PROGRAMME GUIDE", color = Color.White, fontWeight = FontWeight.Black, fontSize = 11.sp, letterSpacing = 1.sp)
         current?.let { Text("NOW  ${formatProgrammeTime(it.startTimeMs)}–${formatProgrammeTime(it.stopTimeMs)}  •  ${it.title}",
             color = ParchmentWhite, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis) }
         upcoming?.let { Text("NEXT  ${formatProgrammeTime(it.startTimeMs)}–${formatProgrammeTime(it.stopTimeMs)}  •  ${it.title}",
@@ -225,7 +225,7 @@ fun RemoteChannelLogo(url: String?, channelTitle: String, modifier: Modifier = M
         ) {
             Text(
                 text = channelTitle.take(3).uppercase(),
-                color = AmberDial,
+                color = Color.White,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold
             )
@@ -308,8 +308,8 @@ fun RetroTvMark(modifier: Modifier = Modifier) {
         val u = size.minDimension / 100f
         // Match the launcher icon: red TV shell, white screen and red play mark.
         drawLine(Color(0xFFE62117), Offset(41f*u, 35f*u), Offset(31f*u, 22f*u), 2.8f*u)
-        drawLine(Color(0xFFE53935), Offset(59f*u, 35f*u), Offset(69f*u, 22f*u), 2.8f*u)
-        drawRoundRect(Color(0xFFE53935), Offset(21f*u, 35f*u), androidx.compose.ui.geometry.Size(58f*u, 43f*u), androidx.compose.ui.geometry.CornerRadius(7f*u))
+        drawLine(Color(0xFFE62117), Offset(59f*u, 35f*u), Offset(69f*u, 22f*u), 2.8f*u)
+        drawRoundRect(Color(0xFFE62117), Offset(21f*u, 35f*u), androidx.compose.ui.geometry.Size(58f*u, 43f*u), androidx.compose.ui.geometry.CornerRadius(7f*u))
         drawRoundRect(Color.White, Offset(27f*u, 41f*u), androidx.compose.ui.geometry.Size(36f*u, 31f*u), androidx.compose.ui.geometry.CornerRadius(3.5f*u))
         val play = Path().apply {
             moveTo(37f*u, 48f*u)
@@ -317,7 +317,7 @@ fun RetroTvMark(modifier: Modifier = Modifier) {
             lineTo(37f*u, 64f*u)
             close()
         }
-        drawPath(play, Color(0xFFE53935))
+        drawPath(play, Color(0xFFE62117))
         drawCircle(Color.White, 3.2f*u, Offset(68.5f*u, 48.5f*u))
         drawCircle(Color.White, 3.2f*u, Offset(68.5f*u, 61.5f*u))
     }
@@ -333,15 +333,15 @@ private fun RetroTopTab(
     var focused by remember { mutableStateOf(false) }
     val pillColor by animateColorAsState(
         targetValue = when {
-            selected -> AmberDial
-            focused -> AmberDial.copy(alpha = 0.78f)
+            selected -> FocusRed
+            focused -> FocusRed.copy(alpha = 0.78f)
             else -> Color.White.copy(alpha = 0.055f)
         },
         animationSpec = tween(180),
         label = "navPillColor"
     )
     val borderColor by animateColorAsState(
-        targetValue = if (focused || selected) AmberDial.copy(alpha = if (selected) 0.95f else 0.75f) else Color.White.copy(alpha = 0.10f),
+        targetValue = if (focused || selected) FocusRed.copy(alpha = if (selected) 0.95f else 0.75f) else Color.White.copy(alpha = 0.10f),
         animationSpec = tween(180),
         label = "navPillBorder"
     )
@@ -367,7 +367,7 @@ private fun RetroTopAction(
 ) {
     var focused by remember { mutableStateOf(false) }
     val fill by animateColorAsState(
-        if (focused) AmberDial.copy(alpha = 0.82f) else Color.White.copy(alpha = 0.045f),
+        if (focused) FocusRed.copy(alpha = 0.82f) else Color.White.copy(alpha = 0.045f),
         tween(180),
         label = "actionPillColor"
     )
@@ -376,7 +376,7 @@ private fun RetroTopAction(
             .size(42.dp)
             .clip(CircleShape)
             .background(fill)
-            .border(1.dp, if (focused) AmberDial else Color.White.copy(alpha = 0.12f), CircleShape)
+            .border(1.dp, if (focused) FocusRed else Color.White.copy(alpha = 0.12f), CircleShape)
             .onFocusChanged { focused = it.isFocused }
             .clickable(onClick = onClick)
             .padding(9.dp),
@@ -400,7 +400,7 @@ fun OttTopHeader(
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 RetroTvMark(Modifier.size(if (compact) 30.dp else 36.dp))
                 Text("RETRO", color = Color.White, fontWeight = FontWeight.Black, fontSize = if (compact) 17.sp else 20.sp, letterSpacing = 1.5.sp)
-                Text("TV", color = AmberDial, fontWeight = FontWeight.Black, fontSize = if (compact) 17.sp else 20.sp, letterSpacing = 1.sp)
+                Text("TV", color = Color.White, fontWeight = FontWeight.Black, fontSize = if (compact) 17.sp else 20.sp, letterSpacing = 1.sp)
             }
         }
         val tabs: @Composable () -> Unit = {
@@ -477,7 +477,8 @@ fun HeroSection(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(
-                modifier = Modifier.clip(CircleShape).background(Color(0xFFE62117))
+                modifier = Modifier.clip(CircleShape).background(Color.Black.copy(alpha = 0.72f))
+                    .border(1.dp, Color.White.copy(alpha = 0.18f), CircleShape)
                     .padding(horizontal = 10.dp, vertical = 5.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(5.dp)
@@ -488,19 +489,19 @@ fun HeroSection(
             if (resolution != null) {
                 Box(
                     modifier = Modifier.clip(CircleShape).background(OakSurfaceElevated)
-                        .border(1.dp, AmberDial, CircleShape).padding(horizontal = 10.dp, vertical = 5.dp)
+                        .border(1.dp, Color.White.copy(alpha = 0.18f), CircleShape).padding(horizontal = 10.dp, vertical = 5.dp)
                 ) {
-                    Text(resolution, color = AmberDial, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                    Text(resolution, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 10.sp)
                 }
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.clip(CircleShape).background(OakSurfaceElevated).border(1.dp, AmberDial.copy(alpha = 0.5f), CircleShape)
+            Box(Modifier.clip(CircleShape).background(OakSurfaceElevated).border(1.dp, Color.White.copy(alpha = 0.16f), CircleShape)
                 .clickable { onToggleFavorite() }.padding(horizontal = 12.dp, vertical = 6.dp)) {
                 Text(if (isFavorite) "★ Saved" else "☆ Favourite", color = ParchmentWhite, fontWeight = FontWeight.Bold, fontSize = 11.sp)
             }
-            Box(Modifier.clip(CircleShape).background(AmberDial).clickable { onFullscreen() }.padding(horizontal = 12.dp, vertical = 6.dp)) {
-                Text("⛶ Watch", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+            Box(Modifier.clip(CircleShape).background(Color.White).clickable { onFullscreen() }.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                Text("⛶ Watch", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 11.sp)
             }
         }
     }
@@ -519,8 +520,8 @@ fun ChannelCard(
     val shape = RoundedCornerShape(8.dp)
     val fill by animateColorAsState(
         targetValue = when {
-            isFocused -> AmberDial
-            isSelected -> AmberDial.copy(alpha = 0.36f)
+            isFocused -> FocusRed
+            isSelected -> OakSurfaceElevated.copy(alpha = 0.92f)
             else -> OakSurface.copy(alpha = 0.76f)
         },
         animationSpec = tween(160),
@@ -539,7 +540,7 @@ fun ChannelCard(
             .background(fill)
             .border(
                 width = if (isFocused) 2.dp else if (isSelected) 1.5.dp else 1.dp,
-                color = if (isFocused || isSelected) AmberDial else Color.White.copy(alpha = 0.08f),
+                color = if (isFocused) FocusRed else if (isSelected) Color.White.copy(alpha = 0.65f) else Color.White.copy(alpha = 0.08f),
                 shape = shape
             )
             .onFocusChanged {
@@ -624,7 +625,7 @@ fun SearchModal(
                 .fillMaxWidth().padding(horizontal = 16.dp).widthIn(max = 480.dp)
                 .clip(RoundedCornerShape(14.dp))
                 .background(OakSurface)
-                .border(1.5.dp, AmberDial, RoundedCornerShape(14.dp))
+                .border(1.5.dp, Color.White.copy(alpha = 0.16f), RoundedCornerShape(14.dp))
                 .padding(24.dp)
         ) {
             Column {
@@ -633,7 +634,7 @@ fun SearchModal(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("SEARCH CHANNELS", color = AmberDial, fontSize = 14.sp, fontWeight = FontWeight.Black)
+                    Text("SEARCH CHANNELS", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Black)
                     Text("✕", color = Color.White, fontSize = 16.sp, modifier = Modifier.clip(CircleShape).clickable { onClose() }.padding(8.dp))
                 }
 
@@ -645,7 +646,7 @@ fun SearchModal(
                         .height(44.dp)
                         .clip(RoundedCornerShape(8.dp))
                         .background(OakSurfaceElevated)
-                        .border(1.dp, AmberDial.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                        .border(1.dp, Color.White.copy(alpha = 0.14f), RoundedCornerShape(8.dp))
                         .padding(horizontal = 12.dp),
                     contentAlignment = Alignment.CenterStart
                 ) {
@@ -656,7 +657,7 @@ fun SearchModal(
                         value = query,
                         onValueChange = { query = it },
                         textStyle = TextStyle(color = Color.White, fontSize = 13.sp),
-                        cursorBrush = SolidColor(AmberDial),
+                        cursorBrush = SolidColor(Color.White),
                         modifier = Modifier.fillMaxWidth().focusRequester(searchFocusRequester),
                         singleLine = true
                     )
@@ -724,7 +725,7 @@ fun SettingsModal(
                 .width(480.dp)
                 .clip(RoundedCornerShape(14.dp))
                 .background(OakSurface)
-                .border(1.5.dp, AmberDial, RoundedCornerShape(14.dp))
+                .border(1.5.dp, Color.White.copy(alpha = 0.16f), RoundedCornerShape(14.dp))
                 .padding(24.dp)
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -733,7 +734,7 @@ fun SettingsModal(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("SETTINGS", color = AmberDial, fontSize = 14.sp, fontWeight = FontWeight.Black)
+                    Text("SETTINGS", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Black)
                     Text("✕", color = Color.White, fontSize = 16.sp, modifier = Modifier.clip(CircleShape).clickable { onClose() }.padding(8.dp))
                 }
 
@@ -744,7 +745,7 @@ fun SettingsModal(
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(8.dp))
                         .background(OakSurfaceElevated)
-                        .border(1.dp, AmberDial.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                        .border(1.dp, Color.White.copy(alpha = 0.14f), RoundedCornerShape(8.dp))
                         .padding(12.dp)
                 ) {
                     if (urlInput.isEmpty()) {
@@ -754,7 +755,7 @@ fun SettingsModal(
                         value = urlInput,
                         onValueChange = { urlInput = it },
                         textStyle = TextStyle(color = Color.White, fontSize = 12.sp),
-                        cursorBrush = SolidColor(AmberDial),
+                        cursorBrush = SolidColor(Color.White),
                         modifier = Modifier.fillMaxWidth().focusRequester(settingsFocusRequester)
                     )
                 }
@@ -764,7 +765,7 @@ fun SettingsModal(
                         modifier = Modifier
                             .weight(1f)
                             .clip(RoundedCornerShape(6.dp))
-                            .background(AmberDial)
+                            .background(Color.White)
                             .clickable {
                                 onLoadCustomM3u(urlInput)
                                 onClose()
@@ -772,7 +773,7 @@ fun SettingsModal(
                             .padding(vertical = 10.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("Apply", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        Text("Apply", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                     }
 
                     Box(
@@ -802,7 +803,7 @@ fun SettingsModal(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text("15s Watchdog Auto-skip", color = Color.White, fontSize = 12.sp)
-                    Text(if (isWatchdogEnabled) "ON" else "OFF", color = if (isWatchdogEnabled) AmberDial else WarmAshMuted, fontWeight = FontWeight.Bold)
+                    Text(if (isWatchdogEnabled) "ON" else "OFF", color = if (isWatchdogEnabled) Color.White else WarmAshMuted, fontWeight = FontWeight.Bold)
                 }
 
                 Text("STREAM QUALITY", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
@@ -810,8 +811,8 @@ fun SettingsModal(
                     listOf("Auto", "1080p", "720p", "480p").forEach { quality ->
                         val selected = selectedQuality == quality
                         Box(Modifier.weight(1f).clip(RoundedCornerShape(7.dp))
-                            .background(if (selected) AmberDial else OakSurfaceElevated)
-                            .border(1.dp, if (selected) AmberDial else Color.White.copy(alpha = 0.12f), RoundedCornerShape(7.dp))
+                            .background(if (selected) FocusRed else OakSurfaceElevated)
+                            .border(1.dp, if (selected) FocusRed else Color.White.copy(alpha = 0.12f), RoundedCornerShape(7.dp))
                             .clickable { onSelectQuality(quality) }.padding(vertical = 9.dp), contentAlignment = Alignment.Center) {
                             Text(quality, color = Color.White, fontSize = 11.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium)
                         }
@@ -821,7 +822,7 @@ fun SettingsModal(
                 Text("APP UPDATE", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 Box(
                     modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
-                        .background(AmberDial)
+                        .background(Color.White)
                         .clickable(enabled = !isCheckingForUpdates) { onCheckForUpdates() }
                         .padding(vertical = 12.dp, horizontal = 14.dp),
                     contentAlignment = Alignment.Center
@@ -832,7 +833,7 @@ fun SettingsModal(
                             isUpdateDownloaded -> "Install downloaded update"
                             else -> "Check for updates"
                         },
-                        color = Color.White,
+                        color = Color.Black,
                         fontWeight = FontWeight.Bold,
                         fontSize = 12.sp
                     )
@@ -853,10 +854,10 @@ fun UpdateNoticeDialog(
     Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.78f)), contentAlignment = Alignment.Center) {
         Column(
             modifier = Modifier.fillMaxWidth(0.82f).clip(RoundedCornerShape(16.dp))
-                .background(OakSurface).border(1.5.dp, AmberDial, RoundedCornerShape(16.dp)).padding(24.dp),
+                .background(OakSurface).border(1.5.dp, Color.White.copy(alpha = 0.16f), RoundedCornerShape(16.dp)).padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text("RETROTV UPDATE AVAILABLE", color = AmberDial, fontWeight = FontWeight.Black, fontSize = 17.sp)
+            Text("RETROTV UPDATE AVAILABLE", color = Color.White, fontWeight = FontWeight.Black, fontSize = 17.sp)
             Text("Version $version is ready. Here's what's changed:", color = Color.White, fontSize = 13.sp)
             Box(Modifier.fillMaxWidth().heightIn(max = 220.dp).clip(RoundedCornerShape(8.dp)).background(OakSurfaceElevated).padding(12.dp)) {
                 Text(
@@ -865,8 +866,8 @@ fun UpdateNoticeDialog(
                 )
             }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Box(Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).background(AmberDial).clickable(onClick = onInstall).padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
-                    Text("Install update", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                Box(Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).background(Color.White).clickable(onClick = onInstall).padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
+                    Text("Install update", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 }
                 Box(Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).background(OakSurfaceElevated).clickable(onClick = onDismiss).padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
                     Text("Later", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
@@ -882,7 +883,7 @@ private fun OverlayIconAction(icon: String, selected: Boolean, onClick: () -> Un
         modifier = Modifier.size(if (selected) 58.dp else 52.dp)
             .graphicsLayer { scaleX = if (selected) 1.08f else 1f; scaleY = if (selected) 1.08f else 1f }
             .clip(CircleShape)
-            .background(if (selected) AmberDial else Color.Transparent)
+            .background(if (selected) FocusRed else Color.Transparent)
             .clickable(onClick = onClick)
             .focusable(),
         contentAlignment = Alignment.Center
@@ -1173,7 +1174,8 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
                             Box(Modifier.align(Alignment.TopEnd).padding(top = 22.dp, end = 28.dp)
-                                .clip(CircleShape).background(Color(0xFFE53935))
+                                .clip(CircleShape).background(Color.Black.copy(alpha = 0.72f))
+                                .border(1.dp, Color.White.copy(alpha = 0.18f), CircleShape)
                                 .padding(horizontal = 15.dp, vertical = 9.dp)) {
                                 Text("● LIVE", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Black)
                             }
@@ -1197,7 +1199,7 @@ class MainActivity : ComponentActivity() {
                             Box(
                                 Modifier.align(Alignment.BottomEnd).padding(end = 28.dp, bottom = 24.dp)
                                     .clip(RoundedCornerShape(28.dp))
-                                    .background(if (selectedPlaybackAction.value == 5) AmberDial else Color.Black.copy(alpha = 0.66f))
+                                    .background(if (selectedPlaybackAction.value == 5) FocusRed else Color.Black.copy(alpha = 0.66f))
                                     .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(28.dp))
                                     .clickable { openChannelMenuFromPlayback() }
                                     .focusable()
@@ -1211,7 +1213,7 @@ class MainActivity : ComponentActivity() {
                             if (isQualityPickerVisible.value) {
                                 Row(Modifier.align(Alignment.BottomStart).padding(start = 170.dp, bottom = 92.dp).clip(RoundedCornerShape(12.dp)).background(Color.Black.copy(alpha = 0.9f)).border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(12.dp)).padding(7.dp), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                                     listOf("Auto", "1080p", "720p", "480p").forEach { quality ->
-                                        Box(Modifier.clip(RoundedCornerShape(7.dp)).background(if (selectedQuality.value == quality) AmberDial else Color.Transparent).clickable {
+                                        Box(Modifier.clip(RoundedCornerShape(7.dp)).background(if (selectedQuality.value == quality) FocusRed else Color.Transparent).clickable {
                                             selectedQuality.value = quality
                                             getSharedPreferences("retro_iptv_prefs", Context.MODE_PRIVATE).edit().putString("stream_quality", quality).apply()
                                             applyStreamQuality()
@@ -1308,7 +1310,7 @@ class MainActivity : ComponentActivity() {
                                     if (recentlyWatched.isNotEmpty()) {
                                         item {
                                             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                                Text("RECENTLY WATCHED", color = AmberDial, fontSize = 13.sp, fontWeight = FontWeight.Black,
+                                                Text("RECENTLY WATCHED", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Black,
                                                     letterSpacing = 1.sp, modifier = Modifier.padding(horizontal = 24.dp))
                                                 LazyRow(modifier = Modifier.focusGroup(), horizontalArrangement = Arrangement.spacedBy(6.dp), contentPadding = PaddingValues(horizontal = 24.dp)) {
                                                     items(recentlyWatched, key = { it.url }) { ch ->
@@ -1333,7 +1335,7 @@ class MainActivity : ComponentActivity() {
                                                 Column(modifier = Modifier.fillMaxWidth()) {
                                                     Text(
                                                         text = groupName.uppercase(),
-                                                        color = AmberDial,
+                                                        color = FocusRed,
                                                         fontSize = 14.sp,
                                                         fontWeight = FontWeight.Black,
                                                         letterSpacing = 1.sp,
@@ -1447,14 +1449,14 @@ class MainActivity : ComponentActivity() {
 
                     if (isBuffering.value && !isUiVisible.value && !isStartupVisible.value) {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(color = AmberDial)
+                            CircularProgressIndicator(color = Color.White)
                         }
                     }
                     playbackRetryMessage.value?.let { message ->
                         Box(modifier = Modifier.fillMaxWidth().align(Alignment.BottomCenter).padding(bottom = 24.dp), contentAlignment = Alignment.Center) {
                             Text(message, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold,
                                 modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(Color.Black.copy(alpha = 0.82f))
-                                    .border(1.dp, AmberDial.copy(alpha = 0.7f), RoundedCornerShape(10.dp)).padding(horizontal = 16.dp, vertical = 10.dp))
+                                    .border(1.dp, Color.White.copy(alpha = 0.18f), RoundedCornerShape(10.dp)).padding(horizontal = 16.dp, vertical = 10.dp))
                         }
                     }
 
