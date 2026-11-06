@@ -307,7 +307,7 @@ fun RetroTvMark(modifier: Modifier = Modifier) {
     Canvas(modifier = modifier) {
         val u = size.minDimension / 100f
         // Match the launcher icon: red TV shell, white screen and red play mark.
-        drawLine(Color(0xFFE53935), Offset(41f*u, 35f*u), Offset(31f*u, 22f*u), 2.8f*u)
+        drawLine(Color(0xFFE62117), Offset(41f*u, 35f*u), Offset(31f*u, 22f*u), 2.8f*u)
         drawLine(Color(0xFFE53935), Offset(59f*u, 35f*u), Offset(69f*u, 22f*u), 2.8f*u)
         drawRoundRect(Color(0xFFE53935), Offset(21f*u, 35f*u), androidx.compose.ui.geometry.Size(58f*u, 43f*u), androidx.compose.ui.geometry.CornerRadius(7f*u))
         drawRoundRect(Color.White, Offset(27f*u, 41f*u), androidx.compose.ui.geometry.Size(36f*u, 31f*u), androidx.compose.ui.geometry.CornerRadius(3.5f*u))
@@ -1342,18 +1342,18 @@ class MainActivity : ComponentActivity() {
 
                                                     BoxWithConstraints(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)) {
                                                         val columns = when {
-                                                            maxWidth >= 1100.dp -> 8
-                                                            maxWidth >= 850.dp -> 6
-                                                            maxWidth >= 620.dp -> 5
-                                                            maxWidth >= 420.dp -> 4
+                                                            maxWidth >= 1100.dp -> 10
+                                                            maxWidth >= 850.dp -> 8
+                                                            maxWidth >= 620.dp -> 6
+                                                            maxWidth >= 420.dp -> 5
                                                             else -> 3
                                                         }
-                                                        val gap = 6.dp
+                                                        val gap = 4.dp
                                                         val tileWidth = (maxWidth - gap * (columns - 1)) / columns
                                                         FlowRow(
                                                             modifier = Modifier.fillMaxWidth().focusGroup(),
                                                             horizontalArrangement = Arrangement.spacedBy(gap),
-                                                            verticalArrangement = Arrangement.spacedBy(7.dp),
+                                                            verticalArrangement = Arrangement.spacedBy(5.dp),
                                                             maxItemsInEachRow = columns
                                                         ) {
                                                             groupChannels.sortedBy { it.status == ChannelStatus.OFFLINE }.forEach { ch ->
