@@ -1966,8 +1966,7 @@ class MainActivity : ComponentActivity() {
                 val lowerMeta = (currentLanguage + " " + currentCountry + " " + currentTitle + " " + currentGroup).lowercase(Locale.ROOT)
                 currentLanguage = when {
                     lowerMeta.contains("urdu") || currentCountry.equals("Pakistan", true) || currentCountry.equals("PK", true) -> "Urdu"
-                    lowerMeta.contains("hindi") || currentLanguage.split(',', ';', '/', ' ').any { it.equals("hin", true) } ||
-                        false -> "Hindi"
+                    lowerMeta.contains("hindi") || currentLanguage.split(',', ';', '/', ' ').any { it.equals("hin", true) } -> "Hindi"
                     lowerMeta.contains("bangla") || lowerMeta.contains("bengali") ||
                         currentLanguage.split(',', ';', '/', ' ').any { it.equals("ben", true) } ||
                         currentCountry.equals("Bangladesh", true) || currentCountry.equals("BD", true) ||
