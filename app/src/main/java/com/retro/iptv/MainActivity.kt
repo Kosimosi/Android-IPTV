@@ -109,7 +109,7 @@ const val IPTV_INDIA_EPG_URL = "https://iptv-epg.org/files/epg-in.xml"
 val OakDarkBackground = Color(0xFF140F0C)
 val OakSurface = Color(0xFF261A13)
 val OakSurfaceElevated = Color(0xFF38271D)
-val AmberDial = Color(0xFFE07A38)
+val AmberDial = Color(0xFFE62117)
 val ParchmentWhite = Color(0xFFFAF4ED)
 val WarmAshMuted = Color(0xFFA8988B)
 
@@ -307,7 +307,7 @@ fun RetroTvMark(modifier: Modifier = Modifier) {
     Canvas(modifier = modifier) {
         val u = size.minDimension / 100f
         // Match the launcher icon: red TV shell, white screen and red play mark.
-        drawLine(Color(0xFFE53935), Offset(41f*u, 35f*u), Offset(31f*u, 22f*u), 2.8f*u)
+        drawLine(Color(0xFFE62117), Offset(41f*u, 35f*u), Offset(31f*u, 22f*u), 2.8f*u)
         drawLine(Color(0xFFE53935), Offset(59f*u, 35f*u), Offset(69f*u, 22f*u), 2.8f*u)
         drawRoundRect(Color(0xFFE53935), Offset(21f*u, 35f*u), androidx.compose.ui.geometry.Size(58f*u, 43f*u), androidx.compose.ui.geometry.CornerRadius(7f*u))
         drawRoundRect(Color.White, Offset(27f*u, 41f*u), androidx.compose.ui.geometry.Size(36f*u, 31f*u), androidx.compose.ui.geometry.CornerRadius(3.5f*u))
@@ -462,13 +462,13 @@ fun HeroSection(
 ) {
     val liveTransition = rememberInfiniteTransition(label = "livePulse")
     val liveAlpha by liveTransition.animateFloat(
-        initialValue = 0.72f,
+        initialValue = 0.25f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(850, easing = FastOutSlowInEasing),
+            animation = tween(650, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
-        label = "liveAlpha"
+        label = "liveDotPulse"
     )
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 4.dp),
@@ -477,12 +477,12 @@ fun HeroSection(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(
-                modifier = Modifier.clip(CircleShape).background(Color(0xFFE53935).copy(alpha = liveAlpha))
+                modifier = Modifier.clip(CircleShape).background(Color(0xFFE62117))
                     .padding(horizontal = 10.dp, vertical = 5.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(5.dp)
             ) {
-                Box(Modifier.size(6.dp).clip(CircleShape).background(Color.White))
+                Box(Modifier.size(7.dp).graphicsLayer { alpha = liveAlpha; scaleX = 0.85f + liveAlpha * 0.25f; scaleY = 0.85f + liveAlpha * 0.25f }.clip(CircleShape).background(Color.White))
                 Text("LIVE", color = Color.White, fontWeight = FontWeight.Black, fontSize = 10.sp)
             }
             if (resolution != null) {
@@ -513,7 +513,7 @@ fun ChannelCard(
     isSelected: Boolean,
     onSelect: () -> Unit,
     onUserInteract: () -> Unit,
-    modifier: Modifier = Modifier.width(112.dp)
+    modifier: Modifier = Modifier.width(88.dp)
 ) {
     var isFocused by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(8.dp)
@@ -1342,18 +1342,18 @@ class MainActivity : ComponentActivity() {
 
                                                     BoxWithConstraints(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)) {
                                                         val columns = when {
-                                                            maxWidth >= 1100.dp -> 8
-                                                            maxWidth >= 850.dp -> 6
-                                                            maxWidth >= 620.dp -> 5
-                                                            maxWidth >= 420.dp -> 4
+                                                            maxWidth >= 1100.dp -> 10
+                                                            maxWidth >= 850.dp -> 8
+                                                            maxWidth >= 620.dp -> 6
+                                                            maxWidth >= 420.dp -> 5
                                                             else -> 3
                                                         }
-                                                        val gap = 6.dp
+                                                        val gap = 4.dp
                                                         val tileWidth = (maxWidth - gap * (columns - 1)) / columns
                                                         FlowRow(
                                                             modifier = Modifier.fillMaxWidth().focusGroup(),
                                                             horizontalArrangement = Arrangement.spacedBy(gap),
-                                                            verticalArrangement = Arrangement.spacedBy(7.dp),
+                                                            verticalArrangement = Arrangement.spacedBy(5.dp),
                                                             maxItemsInEachRow = columns
                                                         ) {
                                                             groupChannels.sortedBy { it.status == ChannelStatus.OFFLINE }.forEach { ch ->
@@ -1662,12 +1662,8 @@ class MainActivity : ComponentActivity() {
 
     private fun resetIdleTimer() {
         autoHideJob?.cancel()
-        autoHideJob = lifecycleScope.launch {
-            delay(5000)
-            if (!isSearchOpen.value && !isSettingsOpen.value) {
-                isUiVisible.value = false
-            }
-        }
+        // Main channel browser stays open until BACK is pressed.
+        autoHideJob = null
     }
 
     private fun loadSettingsFromStorage() {
