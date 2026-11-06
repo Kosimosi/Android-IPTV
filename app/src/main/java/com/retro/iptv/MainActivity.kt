@@ -907,7 +907,7 @@ fun UpdateNoticeDialog(
 }
 
 @Composable
-private fun OverlayIconAction(icon: String, selected: Boolean, onClick: () -> Unit, drawableId: Int? = null) {
+private fun OverlayIconAction(icon: String, selected: Boolean, drawableId: Int? = null, onClick: () -> Unit) {
     Box(
         modifier = Modifier.size(if (selected) 58.dp else 52.dp)
             .graphicsLayer { scaleX = if (selected) 1.08f else 1f; scaleY = if (selected) 1.08f else 1f }
@@ -1228,10 +1228,10 @@ class MainActivity : ComponentActivity() {
                                 horizontalArrangement = Arrangement.spacedBy(7.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                OverlayIconAction("", selectedPlaybackAction.value == 0, {
+                                OverlayIconAction("", selectedPlaybackAction.value == 0, R.drawable.ic_favourite) {
                                     infoChannel?.let { toggleFavorite(it.url) }
-                                }, R.drawable.ic_favourite)
-                                OverlayIconAction("", selectedPlaybackAction.value == 1, { isSearchOpen.value = true }, R.drawable.ic_search)
+                                }
+                                OverlayIconAction("", selectedPlaybackAction.value == 1, R.drawable.ic_search) { isSearchOpen.value = true }
                                 OverlayIconAction("ᴴᴰ", selectedPlaybackAction.value == 2) { isQualityPickerVisible.value = !isQualityPickerVisible.value }
                                 OverlayIconAction("▤", selectedPlaybackAction.value == 3) { isEpgOverlayVisible.value = !isEpgOverlayVisible.value }
                                 OverlayIconAction("⚙", selectedPlaybackAction.value == 4) { isSettingsOpen.value = true }
@@ -1300,6 +1300,18 @@ class MainActivity : ComponentActivity() {
                                     else -> channels.groupBy { it.group.ifBlank { "General" } }.toSortedMap()
                                 }
                             }
+
+                            val screenWidth = LocalConfiguration.current.screenWidthDp.dp
+                            val availableWidth = (screenWidth - 48.dp).coerceAtLeast(200.dp)
+                            val columns = when {
+                                screenWidth >= 1100.dp -> 10
+                                screenWidth >= 850.dp -> 8
+                                screenWidth >= 620.dp -> 6
+                                screenWidth >= 420.dp -> 5
+                                else -> 3
+                            }
+                            val gap = 4.dp
+                            val tileWidth = (availableWidth - gap * (columns - 1)) / columns
 
                             Column(modifier = Modifier.fillMaxSize()) {
                                 OttTopHeader(
@@ -1370,17 +1382,6 @@ class MainActivity : ComponentActivity() {
                                     val nextProgramme = schedule.firstOrNull { it.startTimeMs > nowMs }
                                     if (currentProgramme != null || nextProgramme != null) item { ProgrammeInfoCard(currentProgramme, nextProgramme) }
 
-                                    val screenWidth = LocalConfiguration.current.screenWidthDp.dp
-                                    val availableWidth = (screenWidth - 48.dp).coerceAtLeast(200.dp)
-                                    val columns = when {
-                                        screenWidth >= 1100.dp -> 10
-                                        screenWidth >= 850.dp -> 8
-                                        screenWidth >= 620.dp -> 6
-                                        screenWidth >= 420.dp -> 5
-                                        else -> 3
-                                    }
-                                    val gap = 4.dp
-                                    val tileWidth = (availableWidth - gap * (columns - 1)) / columns
                                     filteredGroups.forEach { (groupName, groupChannels) ->
                                         if (groupChannels.isNotEmpty()) {
                                             item {
