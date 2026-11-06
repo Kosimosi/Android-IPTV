@@ -167,8 +167,13 @@ fun RemoteChannelLogo(url: String?, channelTitle: String, modifier: Modifier = M
                 try {
                     val cacheDir = File(context.cacheDir, "channel_logos").apply { mkdirs() }
                     val cacheFile = File(cacheDir, "${url.hashCode().toUInt().toString(16)}.img")
-                    if (cacheFile.exists() && cacheFile.length() > 0L) {
-                        val cached = BitmapFactory.decodeFile(cacheFile.absolutePath)
+                    if (cacheFile.exists() && cacheFile.length() in 1..(2L * 1024 * 1024)) {
+                        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                        BitmapFactory.decodeFile(cacheFile.absolutePath, bounds)
+                        var sample = 1
+                        while (bounds.outWidth / sample > 512 || bounds.outHeight / sample > 512) sample *= 2
+                        val options = BitmapFactory.Options().apply { inSampleSize = sample.coerceAtLeast(1) }
+                        val cached = BitmapFactory.decodeFile(cacheFile.absolutePath, options)
                         if (cached != null) {
                             bitmap = cached.asImageBitmap()
                             return@withContext
@@ -917,7 +922,7 @@ private fun OverlayIconAction(icon: String, selected: Boolean, onClick: () -> Un
                 painter = painterResource(drawableId),
                 contentDescription = null,
                 modifier = Modifier.size(25.dp),
-                colorFilter = ColorFilter.tint(if (selected) Color.White else Color.White)
+                colorFilter = ColorFilter.tint(Color.White)
             )
         } else {
             Text(icon, color = Color.White, fontSize = 27.sp, fontWeight = FontWeight.Normal)
@@ -1789,12 +1794,6 @@ class MainActivity : ComponentActivity() {
                     } else {
                         "No usable channels returned • keeping cached channels"
                     }
-                } else if (freshList.isNotEmpty()) {
-                    channels.clear()
-                    channels.addAll(freshList)
-                    currentChannelIndex.value = 0
-                    playChannel(0)
-                    playlistStatus.value = "Partial playlist loaded • $failedCount source(s) unavailable"
                 } else {
                     playlistStatus.value = "Playlist refresh failed • showing local fallback channels"
                 }
@@ -1968,7 +1967,7 @@ class MainActivity : ComponentActivity() {
                 currentLanguage = when {
                     lowerMeta.contains("urdu") || currentCountry.equals("Pakistan", true) || currentCountry.equals("PK", true) -> "Urdu"
                     lowerMeta.contains("hindi") || currentLanguage.split(',', ';', '/', ' ').any { it.equals("hin", true) } ||
-                        currentCountry.equals("India", true) || currentCountry.equals("IN", true) -> "Hindi"
+                        false -> "Hindi"
                     lowerMeta.contains("bangla") || lowerMeta.contains("bengali") ||
                         currentLanguage.split(',', ';', '/', ' ').any { it.equals("ben", true) } ||
                         currentCountry.equals("Bangladesh", true) || currentCountry.equals("BD", true) ||
