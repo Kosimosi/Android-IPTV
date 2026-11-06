@@ -1335,7 +1335,7 @@ class MainActivity : ComponentActivity() {
                                                 Column(modifier = Modifier.fillMaxWidth()) {
                                                     Text(
                                                         text = groupName.uppercase(),
-                                                        color = FocusRed,
+                                                        color = Color.White,
                                                         fontSize = 14.sp,
                                                         fontWeight = FontWeight.Black,
                                                         letterSpacing = 1.sp,
