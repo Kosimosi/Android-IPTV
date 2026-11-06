@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings as AndroidSystemSettings
 import android.graphics.BitmapFactory
+import android.graphics.Bitmap
 import android.graphics.Color as AndroidColor
 import android.media.AudioManager
 import android.os.Bundle
@@ -53,6 +54,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -60,6 +62,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
@@ -84,6 +88,8 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -192,10 +198,28 @@ fun RemoteChannelLogo(url: String?, channelTitle: String, modifier: Modifier = M
 
                         if (status in 200..299) {
                             connection.inputStream.use { stream ->
-                                val bytes = stream.readBytes()
-                                if (bytes.size <= 2 * 1024 * 1024) runCatching { cacheFile.writeBytes(bytes) }
-                                val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                                finalBitmap = bmp?.asImageBitmap()
+                                // Never buffer an unbounded logo response. Large source images are
+                                // rejected before decoding and accepted images are downsampled.
+                                val maxLogoBytes = 2 * 1024 * 1024
+                                val output = ByteArrayOutputStream()
+                                val buffer = ByteArray(8192)
+                                var total = 0
+                                var count: Int
+                                while (stream.read(buffer).also { count = it } >= 0) {
+                                    total += count
+                                    if (total > maxLogoBytes) break
+                                    output.write(buffer, 0, count)
+                                }
+                                if (total <= maxLogoBytes) {
+                                    val bytes = output.toByteArray()
+                                    runCatching { cacheFile.writeBytes(bytes) }
+                                    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+                                    var sample = 1
+                                    while (bounds.outWidth / sample > 512 || bounds.outHeight / sample > 512) sample *= 2
+                                    val options = BitmapFactory.Options().apply { inSampleSize = sample.coerceAtLeast(1) }
+                                    finalBitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)?.asImageBitmap()
+                                }
                             }
                         }
                         connection.disconnect()
@@ -878,7 +902,7 @@ fun UpdateNoticeDialog(
 }
 
 @Composable
-private fun OverlayIconAction(icon: String, selected: Boolean, onClick: () -> Unit) {
+private fun OverlayIconAction(icon: String, selected: Boolean, onClick: () -> Unit, drawableId: Int? = null) {
     Box(
         modifier = Modifier.size(if (selected) 58.dp else 52.dp)
             .graphicsLayer { scaleX = if (selected) 1.08f else 1f; scaleY = if (selected) 1.08f else 1f }
@@ -887,7 +911,18 @@ private fun OverlayIconAction(icon: String, selected: Boolean, onClick: () -> Un
             .clickable(onClick = onClick)
             .focusable(),
         contentAlignment = Alignment.Center
-    ) { Text(icon, color = Color.White, fontSize = 27.sp, fontWeight = FontWeight.Normal) }
+    ) {
+        if (drawableId != null) {
+            Image(
+                painter = painterResource(drawableId),
+                contentDescription = null,
+                modifier = Modifier.size(25.dp),
+                colorFilter = ColorFilter.tint(if (selected) Color.White else Color.White)
+            )
+        } else {
+            Text(icon, color = Color.White, fontSize = 27.sp, fontWeight = FontWeight.Normal)
+        }
+    }
 }
 
 // --- MAIN ACTIVITY CONTROLLER ---
@@ -1188,10 +1223,10 @@ class MainActivity : ComponentActivity() {
                                 horizontalArrangement = Arrangement.spacedBy(7.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                OverlayIconAction(if (favoriteUrls.contains(infoChannel?.url.orEmpty())) "♥" else "♡", selectedPlaybackAction.value == 0) {
+                                OverlayIconAction("", selectedPlaybackAction.value == 0, {
                                     infoChannel?.let { toggleFavorite(it.url) }
-                                }
-                                OverlayIconAction("⌕", selectedPlaybackAction.value == 1) { isSearchOpen.value = true }
+                                }, R.drawable.ic_favourite)
+                                OverlayIconAction("", selectedPlaybackAction.value == 1, { isSearchOpen.value = true }, R.drawable.ic_search)
                                 OverlayIconAction("ᴴᴰ", selectedPlaybackAction.value == 2) { isQualityPickerVisible.value = !isQualityPickerVisible.value }
                                 OverlayIconAction("▤", selectedPlaybackAction.value == 3) { isEpgOverlayVisible.value = !isEpgOverlayVisible.value }
                                 OverlayIconAction("⚙", selectedPlaybackAction.value == 4) { isSettingsOpen.value = true }
@@ -1253,7 +1288,8 @@ class MainActivity : ComponentActivity() {
                                         when {
                                             it.language.equals("Urdu", true) || it.country.equals("Pakistan", true) -> "Urdu / Pakistan"
                                             it.language.equals("Hindi", true) -> "Hindi"
-                                            else -> "Bangla"
+                                            it.language.equals("Bangla", true) || it.country.equals("Bangladesh", true) -> "Bangla"
+                                            else -> "Other / Unknown"
                                         }
                                     }.toSortedMap(compareBy { when (it) { "Bangla" -> 0; "Hindi" -> 1; "Urdu / Pakistan" -> 2; else -> 3 } })
                                     else -> channels.groupBy { it.group.ifBlank { "General" } }.toSortedMap()
@@ -1329,36 +1365,38 @@ class MainActivity : ComponentActivity() {
                                     val nextProgramme = schedule.firstOrNull { it.startTimeMs > nowMs }
                                     if (currentProgramme != null || nextProgramme != null) item { ProgrammeInfoCard(currentProgramme, nextProgramme) }
 
+                                    val screenWidth = LocalConfiguration.current.screenWidthDp.dp
+                                    val availableWidth = (screenWidth - 48.dp).coerceAtLeast(200.dp)
+                                    val columns = when {
+                                        screenWidth >= 1100.dp -> 10
+                                        screenWidth >= 850.dp -> 8
+                                        screenWidth >= 620.dp -> 6
+                                        screenWidth >= 420.dp -> 5
+                                        else -> 3
+                                    }
+                                    val gap = 4.dp
+                                    val tileWidth = (availableWidth - gap * (columns - 1)) / columns
                                     filteredGroups.forEach { (groupName, groupChannels) ->
                                         if (groupChannels.isNotEmpty()) {
                                             item {
-                                                Column(modifier = Modifier.fillMaxWidth()) {
-                                                    Text(
-                                                        text = groupName.uppercase(),
-                                                        color = Color.White,
-                                                        fontSize = 14.sp,
-                                                        fontWeight = FontWeight.Black,
-                                                        letterSpacing = 1.sp,
-                                                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 3.dp)
-                                                    )
-
-                                                    BoxWithConstraints(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)) {
-                                                        val columns = when {
-                                                            maxWidth >= 1100.dp -> 10
-                                                            maxWidth >= 850.dp -> 8
-                                                            maxWidth >= 620.dp -> 6
-                                                            maxWidth >= 420.dp -> 5
-                                                            else -> 3
-                                                        }
-                                                        val gap = 4.dp
-                                                        val tileWidth = (maxWidth - gap * (columns - 1)) / columns
-                                                        FlowRow(
-                                                            modifier = Modifier.fillMaxWidth().focusGroup(),
-                                                            horizontalArrangement = Arrangement.spacedBy(gap),
-                                                            verticalArrangement = Arrangement.spacedBy(5.dp),
-                                                            maxItemsInEachRow = columns
+                                                Text(
+                                                    text = groupName.uppercase(),
+                                                    color = Color.White,
+                                                    fontSize = 14.sp,
+                                                    fontWeight = FontWeight.Black,
+                                                    letterSpacing = 1.sp,
+                                                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 3.dp)
+                                                )
+                                            }
+                                            // Each visible row is composed lazily by the parent LazyColumn.
+                                            groupChannels.sortedBy { it.status == ChannelStatus.OFFLINE }
+                                                .chunked(columns).forEach { rowChannels ->
+                                                    item {
+                                                        Row(
+                                                            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).focusGroup(),
+                                                            horizontalArrangement = Arrangement.spacedBy(gap)
                                                         ) {
-                                                            groupChannels.sortedBy { it.status == ChannelStatus.OFFLINE }.forEach { ch ->
+                                                            rowChannels.forEach { ch ->
                                                                 ChannelCard(
                                                                     channel = ch,
                                                                     isSelected = ch.url == activeChannel?.url,
@@ -1376,10 +1414,10 @@ class MainActivity : ComponentActivity() {
                                                                     onUserInteract = { resetIdleTimer() }
                                                                 )
                                                             }
+                                                            repeat(columns - rowChannels.size) { Spacer(Modifier.width(tileWidth)) }
                                                         }
                                                     }
                                                 }
-                                            }
                                         }
                                     }
                                 }
@@ -1721,14 +1759,18 @@ class MainActivity : ComponentActivity() {
 
             val primaryUrl = if (customM3uUrl.value.isNotBlank()) customM3uUrl.value else DEFAULT_PLAYLIST_URL
             val sources = listOf(primaryUrl, IPTV_HINDI_PLAYLIST_URL, IPTV_BENGALI_PLAYLIST_URL, IPTV_URDU_PLAYLIST_URL, IPTV_PAKISTAN_PLAYLIST_URL).distinct()
-            val fetched = sources.map { url -> url to fetchUrl(url) }
+            val playlistSemaphore = Semaphore(3)
+            val fetched = sources.map { url ->
+                async { url to playlistSemaphore.withPermit { fetchUrl(url) } }
+            }.awaitAll()
             val successfulTexts = fetched.mapNotNull { it.second }
             val failedCount = fetched.count { it.second == null }
             val combinedText = successfulTexts.joinToString("\n")
             val freshList = if (combinedText.isNotBlank()) parseM3u(combinedText).distinctBy { it.url } else emptyList()
 
             withContext(Dispatchers.Main) {
-                if (failedCount == 0 && freshList.isNotEmpty()) {
+                if (freshList.isNotEmpty()) {
+                    // Keep every successful source even if one provider is temporarily unavailable.
                     runCatching { cacheFile.writeText(combinedText) }
                     val currentUrl = channels.getOrNull(currentChannelIndex.value)?.url
                     channels.clear()
@@ -1736,7 +1778,11 @@ class MainActivity : ComponentActivity() {
                     val sameIndex = channels.indexOfFirst { it.url == currentUrl }
                     currentChannelIndex.value = if (sameIndex >= 0) sameIndex else 0
                     if (sameIndex < 0 && channels.isNotEmpty()) playChannel(0)
-                    playlistStatus.value = "Playlists updated • ${channels.size} channels"
+                    playlistStatus.value = if (failedCount == 0) {
+                        "Playlists updated • ${channels.size} channels"
+                    } else {
+                        "Partial refresh • ${channels.size} channels • $failedCount source(s) unavailable"
+                    }
                 } else if (cachedList.isNotEmpty()) {
                     playlistStatus.value = if (failedCount > 0) {
                         "Refresh incomplete: $failedCount source(s) unavailable • keeping cached channels"
@@ -1770,16 +1816,19 @@ class MainActivity : ComponentActivity() {
     private fun checkPlaylistHealth() {
         lifecycleScope.launch(Dispatchers.IO) {
             val sample = withContext(Dispatchers.Main) { channels.toList().take(48) }
+            val healthSemaphore = Semaphore(4)
             val results = sample.map { channel ->
                 async {
-                    val online = (listOf(channel.url) + channel.backupUrls).take(2).any { testStream(it) }
+                    val online = healthSemaphore.withPermit {
+                        (listOf(channel.url) + channel.backupUrls).take(2).any { testStream(it) }
+                    }
                     channel.url to if (online) ChannelStatus.ONLINE else ChannelStatus.OFFLINE
                 }
             }.awaitAll().toMap()
             withContext(Dispatchers.Main) {
                 channels.indices.forEach { index ->
                     results[channels[index].url]?.let { status ->
-                        if (channels[index].status != ChannelStatus.ONLINE) channels[index] = channels[index].copy(status = status)
+                        channels[index] = channels[index].copy(status = status)
                     }
                 }
                 val offlineCount = results.values.count { it == ChannelStatus.OFFLINE }
@@ -1918,17 +1967,20 @@ class MainActivity : ComponentActivity() {
                 val lowerMeta = (currentLanguage + " " + currentCountry + " " + currentTitle + " " + currentGroup).lowercase(Locale.ROOT)
                 currentLanguage = when {
                     lowerMeta.contains("urdu") || currentCountry.equals("Pakistan", true) || currentCountry.equals("PK", true) -> "Urdu"
-                    lowerMeta.contains("hindi") || lowerMeta.contains("hin") || currentCountry.equals("India", true) || currentCountry.equals("IN", true) -> "Hindi"
-                    lowerMeta.contains("bangla") || lowerMeta.contains("bengali") || lowerMeta.contains("ben") ||
+                    lowerMeta.contains("hindi") || currentLanguage.split(',', ';', '/', ' ').any { it.equals("hin", true) } ||
+                        currentCountry.equals("India", true) || currentCountry.equals("IN", true) -> "Hindi"
+                    lowerMeta.contains("bangla") || lowerMeta.contains("bengali") ||
+                        currentLanguage.split(',', ';', '/', ' ').any { it.equals("ben", true) } ||
                         currentCountry.equals("Bangladesh", true) || currentCountry.equals("BD", true) ||
                         listOf("jamuna", "dbc", "ekattor", "ntv", "deepto", "maasranga", "somoy", "channel i", "gazi tv", "banglavision").any { currentTitle.contains(it, true) } -> "Bangla"
-                    else -> "Bangla"
+                    else -> "Unknown"
                 }
                 currentRegion = if (currentLanguage == "Urdu") "Urdu / Pakistan" else currentLanguage
                 if (currentCountry == "Unknown") currentCountry = when (currentLanguage) {
                     "Hindi" -> "India"
                     "Urdu" -> "Pakistan"
-                    else -> "Bangladesh"
+                    "Bangla" -> "Bangladesh"
+                    else -> "Unknown"
                 }
             } else if (trimmed.startsWith("http://", ignoreCase = true) || trimmed.startsWith("https://", ignoreCase = true)) {
                 if (currentTitle.isNotEmpty()) {
