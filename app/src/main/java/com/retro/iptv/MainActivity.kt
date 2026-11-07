@@ -877,6 +877,7 @@ fun SettingsModal(
 fun UpdateNoticeDialog(
     version: String,
     releaseNotes: String,
+    selectedAction: Int,
     onInstall: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -895,10 +896,16 @@ fun UpdateNoticeDialog(
                 )
             }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Box(Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).background(Color.White).clickable(onClick = onInstall).padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
-                    Text("Install update", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                Box(Modifier.weight(1f).clip(RoundedCornerShape(8.dp))
+                    .background(if (selectedAction == 0) FocusRed else Color.White)
+                    .border(if (selectedAction == 0) 2.dp else 0.dp, Color.White.copy(alpha = 0.9f), RoundedCornerShape(8.dp))
+                    .clickable(onClick = onInstall).focusable().padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
+                    Text("Install update", color = if (selectedAction == 0) Color.White else Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 }
-                Box(Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).background(OakSurfaceElevated).clickable(onClick = onDismiss).padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
+                Box(Modifier.weight(1f).clip(RoundedCornerShape(8.dp))
+                    .background(if (selectedAction == 1) FocusRed else OakSurfaceElevated)
+                    .border(if (selectedAction == 1) 2.dp else 0.dp, Color.White.copy(alpha = 0.9f), RoundedCornerShape(8.dp))
+                    .clickable(onClick = onDismiss).focusable().padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
                     Text("Later", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 }
             }
@@ -951,6 +958,7 @@ class MainActivity : ComponentActivity() {
     private val isCheckingForUpdates = mutableStateOf(false)
     private val isUpdateDownloaded = mutableStateOf(false)
     private val updateNotice = mutableStateOf<UpdateNotice?>(null)
+    private val selectedUpdateAction = mutableIntStateOf(0)
     private var downloadedUpdateApk: File? = null
 
     private val currentTab = mutableStateOf("HOME")
@@ -1528,6 +1536,7 @@ class MainActivity : ComponentActivity() {
                         UpdateNoticeDialog(
                             version = notice.version,
                             releaseNotes = notice.releaseNotes,
+                            selectedAction = selectedUpdateAction.value,
                             onInstall = {
                                 updateNotice.value = null
                                 notice.apkFile?.let { launchUpdateInstaller(it) }
@@ -1681,6 +1690,7 @@ class MainActivity : ComponentActivity() {
                     downloadedUpdateApk = result.apkFile
                     isUpdateDownloaded.value = true
                     updateStatus.value = "Version ${result.latestTag} downloaded. Review the changes and choose Install update."
+                    selectedUpdateAction.value = 0
                     updateNotice.value = UpdateNotice(result.latestTag.removePrefix("v"), result.releaseNotes, result.apkFile)
                     Toast.makeText(this@MainActivity, "RETROTV update ${result.latestTag} is ready", Toast.LENGTH_LONG).show()
                 }
@@ -2128,72 +2138,76 @@ class MainActivity : ComponentActivity() {
         if (keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN || keyCode == KeyEvent.KEYCODE_VOLUME_MUTE) {
             return super.onKeyDown(keyCode, event)
         }
+        // Route remote input to the custom update prompt rather than touch-only actions.
+        if (updateNotice.value != null) {
+            when (keyCode) {
+                KeyEvent.KEYCODE_BACK -> updateNotice.value = null
+                KeyEvent.KEYCODE_DPAD_LEFT -> selectedUpdateAction.value = 0
+                KeyEvent.KEYCODE_DPAD_RIGHT -> selectedUpdateAction.value = 1
+                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
+                    val notice = updateNotice.value
+                    if (selectedUpdateAction.value == 0) {
+                        updateNotice.value = null
+                        notice?.apkFile?.let { launchUpdateInstaller(it) }
+                    } else {
+                        updateNotice.value = null
+                    }
+                }
+            }
+            return true
+        }
+
         if (!isUiVisible.value) {
             if (keyCode == KeyEvent.KEYCODE_BACK) {
-                if (isQualityPickerVisible.value) {
-                    isQualityPickerVisible.value = false
-                    return true
+                when {
+                    isQualityPickerVisible.value -> isQualityPickerVisible.value = false
+                    isEpgOverlayVisible.value -> isEpgOverlayVisible.value = false
+                    isPlaybackOverlayVisible.value -> isPlaybackOverlayVisible.value = false
+                    else -> isCrtExiting.value = true
                 }
-                if (isEpgOverlayVisible.value) {
-                    isEpgOverlayVisible.value = false
-                    return true
+                return true
+            }
+
+            // Playing video: Left/Right change channels. Down opens the playback
+            // toolbar. Up always opens the channel browser/menu.
+            if (keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_MENU) {
+                openChannelMenuFromPlayback()
+                return true
+            }
+            if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                val delta = if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) 1 else -1
+                when {
+                    isQualityPickerVisible.value ->
+                        qualityPickerIndex.value = (qualityPickerIndex.value + delta + qualityOptions.size) % qualityOptions.size
+                    isEpgOverlayVisible.value -> Unit // Guide navigation must never zap the playing channel.
+                    isPlaybackOverlayVisible.value ->
+                        selectedPlaybackAction.value = (selectedPlaybackAction.value + delta + 6) % 6
+                    else -> switchChannel(delta)
                 }
-                if (isPlaybackOverlayVisible.value) {
-                    isPlaybackOverlayVisible.value = false
+                return true
+            }
+            if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                if (!isPlaybackOverlayVisible.value) {
+                    isPlaybackOverlayVisible.value = true
+                    selectedPlaybackAction.value = 0
+                } else if (!isQualityPickerVisible.value && !isEpgOverlayVisible.value) {
+                    selectedPlaybackAction.value = 5
+                }
+                return true
+            }
+            if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
+                if (!isPlaybackOverlayVisible.value) {
+                    isPlaybackOverlayVisible.value = true
+                } else if (isQualityPickerVisible.value) {
+                    selectedQuality.value = qualityOptions[qualityPickerIndex.value]
+                    getSharedPreferences("retro_iptv_prefs", Context.MODE_PRIVATE).edit()
+                        .putString("stream_quality", selectedQuality.value).apply()
+                    applyStreamQuality()
                     isQualityPickerVisible.value = false
+                } else if (isEpgOverlayVisible.value) {
                     isEpgOverlayVisible.value = false
                 } else {
-                    isCrtExiting.value = true
-                }
-                return true
-            }
-            val isDpad = keyCode == KeyEvent.KEYCODE_DPAD_UP ||
-                keyCode == KeyEvent.KEYCODE_DPAD_DOWN ||
-                keyCode == KeyEvent.KEYCODE_DPAD_LEFT ||
-                keyCode == KeyEvent.KEYCODE_DPAD_RIGHT ||
-                keyCode == KeyEvent.KEYCODE_DPAD_CENTER ||
-                keyCode == KeyEvent.KEYCODE_ENTER ||
-                keyCode == KeyEvent.KEYCODE_MENU
-            if (isDpad && !isPlaybackOverlayVisible.value) {
-                isPlaybackOverlayVisible.value = true
-                return true
-            }
-            if (isPlaybackOverlayVisible.value && isDpad) {
-                if (isQualityPickerVisible.value) {
-                    when (keyCode) {
-                        KeyEvent.KEYCODE_DPAD_LEFT -> qualityPickerIndex.value =
-                            (qualityPickerIndex.value - 1 + qualityOptions.size) % qualityOptions.size
-                        KeyEvent.KEYCODE_DPAD_RIGHT -> qualityPickerIndex.value =
-                            (qualityPickerIndex.value + 1) % qualityOptions.size
-                        KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
-                            selectedQuality.value = qualityOptions[qualityPickerIndex.value]
-                            getSharedPreferences("retro_iptv_prefs", Context.MODE_PRIVATE).edit()
-                                .putString("stream_quality", selectedQuality.value).apply()
-                            applyStreamQuality()
-                            isQualityPickerVisible.value = false
-                        }
-                        KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN -> isQualityPickerVisible.value = false
-                        KeyEvent.KEYCODE_MENU -> openChannelMenuFromPlayback()
-                    }
-                    return true
-                }
-                if (isEpgOverlayVisible.value) {
-                    when (keyCode) {
-                        KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER,
-                        KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN -> isEpgOverlayVisible.value = false
-                        KeyEvent.KEYCODE_MENU -> openChannelMenuFromPlayback()
-                        KeyEvent.KEYCODE_DPAD_LEFT -> switchChannel(-1)
-                        KeyEvent.KEYCODE_DPAD_RIGHT -> switchChannel(1)
-                    }
-                    return true
-                }
-                when (keyCode) {
-                    KeyEvent.KEYCODE_DPAD_LEFT -> selectedPlaybackAction.value = (selectedPlaybackAction.value + 5) % 6
-                    KeyEvent.KEYCODE_DPAD_RIGHT -> selectedPlaybackAction.value = (selectedPlaybackAction.value + 1) % 6
-                    KeyEvent.KEYCODE_DPAD_UP -> selectedPlaybackAction.value = if (selectedPlaybackAction.value == 5) 4 else selectedPlaybackAction.value
-                    KeyEvent.KEYCODE_DPAD_DOWN -> selectedPlaybackAction.value = 5
-                    KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> activatePlaybackAction(selectedPlaybackAction.value)
-                    KeyEvent.KEYCODE_MENU -> openChannelMenuFromPlayback()
+                    activatePlaybackAction(selectedPlaybackAction.value)
                 }
                 return true
             }
