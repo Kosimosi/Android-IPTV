@@ -941,6 +941,8 @@ class MainActivity : ComponentActivity() {
     private val isQualityPickerVisible = mutableStateOf(false)
     private val isEpgOverlayVisible = mutableStateOf(false)
     private val selectedPlaybackAction = mutableIntStateOf(0)
+    private val qualityPickerIndex = mutableIntStateOf(0)
+    private val qualityOptions = listOf("Auto", "1080p", "720p", "480p")
     private val isStartupVisible = mutableStateOf(true)
     private val isSearchOpen = mutableStateOf(false)
     private val isSettingsOpen = mutableStateOf(false)
@@ -1126,12 +1128,19 @@ class MainActivity : ComponentActivity() {
                 }
             }
             LaunchedEffect(isPlaybackOverlayVisible.value) { if (isPlaybackOverlayVisible.value) selectedPlaybackAction.value = 0 }
-            LaunchedEffect(isPlaybackOverlayVisible.value, isUiVisible.value, isSearchOpen.value, isSettingsOpen.value, selectedPlaybackAction.value) {
-                if (isPlaybackOverlayVisible.value && !isUiVisible.value && !isSearchOpen.value && !isSettingsOpen.value) {
+            LaunchedEffect(
+                isPlaybackOverlayVisible.value, isUiVisible.value, isSearchOpen.value,
+                isSettingsOpen.value, selectedPlaybackAction.value,
+                isQualityPickerVisible.value, isEpgOverlayVisible.value
+            ) {
+                // Keep the playback toolbar and its open panels available while the user
+                // is navigating them with a TV remote.
+                if (isPlaybackOverlayVisible.value && !isUiVisible.value &&
+                    !isSearchOpen.value && !isSettingsOpen.value &&
+                    !isQualityPickerVisible.value && !isEpgOverlayVisible.value
+                ) {
                     delay(6500)
                     isPlaybackOverlayVisible.value = false
-                    isQualityPickerVisible.value = false
-                    isEpgOverlayVisible.value = false
                 }
             }
 
@@ -1213,11 +1222,29 @@ class MainActivity : ComponentActivity() {
                                     Text(listOfNotNull(infoChannel?.language, infoChannel?.country, currentResolution.value).joinToString("  •  ").ifBlank { "Live television" }, color = Color.White.copy(alpha = 0.78f), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 }
                             }
-                            Box(Modifier.align(Alignment.TopEnd).padding(top = 22.dp, end = 28.dp)
+                            val playbackLiveTransition = rememberInfiniteTransition(label = "playbackLivePulse")
+                            val playbackLiveAlpha by playbackLiveTransition.animateFloat(
+                                initialValue = 0.25f,
+                                targetValue = 1f,
+                                animationSpec = infiniteRepeatable(
+                                    animation = tween(650, easing = FastOutSlowInEasing),
+                                    repeatMode = RepeatMode.Reverse
+                                ),
+                                label = "playbackLiveDot"
+                            )
+                            Row(Modifier.align(Alignment.TopEnd).padding(top = 22.dp, end = 28.dp)
                                 .clip(CircleShape).background(Color.Black.copy(alpha = 0.72f))
                                 .border(1.dp, Color.White.copy(alpha = 0.18f), CircleShape)
-                                .padding(horizontal = 15.dp, vertical = 9.dp)) {
-                                Text("● LIVE", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Black)
+                                .padding(horizontal = 15.dp, vertical = 9.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(7.dp)
+                            ) {
+                                Box(Modifier.size(8.dp).graphicsLayer {
+                                    alpha = playbackLiveAlpha
+                                    scaleX = 0.85f + playbackLiveAlpha * 0.25f
+                                    scaleY = 0.85f + playbackLiveAlpha * 0.25f
+                                }.clip(CircleShape).background(FocusRed))
+                                Text("LIVE", color = FocusRed, fontSize = 12.sp, fontWeight = FontWeight.Black)
                             }
                             Row(
                                 Modifier.align(Alignment.BottomStart).padding(start = 28.dp, bottom = 24.dp)
@@ -1252,21 +1279,39 @@ class MainActivity : ComponentActivity() {
                             }
                             if (isQualityPickerVisible.value) {
                                 Row(Modifier.align(Alignment.BottomStart).padding(start = 170.dp, bottom = 92.dp).clip(RoundedCornerShape(12.dp)).background(Color.Black.copy(alpha = 0.9f)).border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(12.dp)).padding(7.dp), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                                    listOf("Auto", "1080p", "720p", "480p").forEach { quality ->
-                                        Box(Modifier.clip(RoundedCornerShape(7.dp)).background(if (selectedQuality.value == quality) FocusRed else Color.Transparent).clickable {
-                                            selectedQuality.value = quality
-                                            getSharedPreferences("retro_iptv_prefs", Context.MODE_PRIVATE).edit().putString("stream_quality", quality).apply()
-                                            applyStreamQuality()
-                                            isQualityPickerVisible.value = false
-                                        }.padding(horizontal = 13.dp, vertical = 9.dp)) {
+                                    qualityOptions.forEachIndexed { index, quality ->
+                                        Box(Modifier.clip(RoundedCornerShape(7.dp))
+                                            .background(if (qualityPickerIndex.value == index) FocusRed else Color.Transparent)
+                                            .clickable {
+                                                qualityPickerIndex.value = index
+                                                selectedQuality.value = quality
+                                                getSharedPreferences("retro_iptv_prefs", Context.MODE_PRIVATE).edit().putString("stream_quality", quality).apply()
+                                                applyStreamQuality()
+                                                isQualityPickerVisible.value = false
+                                            }
+                                            .focusable()
+                                            .padding(horizontal = 13.dp, vertical = 9.dp)) {
                                             Text(quality, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                                         }
                                     }
                                 }
                             }
                             if (isEpgOverlayVisible.value) {
-                                Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth(0.72f).padding(bottom = 92.dp)) {
-                                    ProgrammeInfoCard(currentProgramme, nextProgramme)
+                                                Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth(0.72f).padding(bottom = 92.dp)) {
+                                    if (schedule.isNotEmpty()) {
+                                        ProgrammeInfoCard(currentProgramme, nextProgramme)
+                                    } else {
+                                        Column(
+                                            Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
+                                                .background(Color.Black.copy(alpha = 0.92f))
+                                                .border(1.dp, Color.White.copy(alpha = 0.16f), RoundedCornerShape(14.dp))
+                                                .padding(18.dp),
+                                            verticalArrangement = Arrangement.spacedBy(5.dp)
+                                        ) {
+                                            Text("PROGRAM GUIDE", color = FocusRed, fontSize = 12.sp, fontWeight = FontWeight.Black)
+                                            Text("No programme data available for this channel.", color = Color.White, fontSize = 14.sp)
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -2055,8 +2100,15 @@ class MainActivity : ComponentActivity() {
         when (index) {
             0 -> channels.getOrNull(currentChannelIndex.value)?.let { toggleFavorite(it.url) }
             1 -> isSearchOpen.value = true
-            2 -> isQualityPickerVisible.value = !isQualityPickerVisible.value
-            3 -> isEpgOverlayVisible.value = !isEpgOverlayVisible.value
+            2 -> {
+                qualityPickerIndex.value = qualityOptions.indexOf(selectedQuality.value).coerceAtLeast(0)
+                isQualityPickerVisible.value = !isQualityPickerVisible.value
+                isEpgOverlayVisible.value = false
+            }
+            3 -> {
+                isEpgOverlayVisible.value = !isEpgOverlayVisible.value
+                isQualityPickerVisible.value = false
+            }
             4 -> isSettingsOpen.value = true
             5 -> openChannelMenuFromPlayback()
         }
@@ -2078,6 +2130,14 @@ class MainActivity : ComponentActivity() {
         }
         if (!isUiVisible.value) {
             if (keyCode == KeyEvent.KEYCODE_BACK) {
+                if (isQualityPickerVisible.value) {
+                    isQualityPickerVisible.value = false
+                    return true
+                }
+                if (isEpgOverlayVisible.value) {
+                    isEpgOverlayVisible.value = false
+                    return true
+                }
                 if (isPlaybackOverlayVisible.value) {
                     isPlaybackOverlayVisible.value = false
                     isQualityPickerVisible.value = false
@@ -2099,6 +2159,34 @@ class MainActivity : ComponentActivity() {
                 return true
             }
             if (isPlaybackOverlayVisible.value && isDpad) {
+                if (isQualityPickerVisible.value) {
+                    when (keyCode) {
+                        KeyEvent.KEYCODE_DPAD_LEFT -> qualityPickerIndex.value =
+                            (qualityPickerIndex.value - 1 + qualityOptions.size) % qualityOptions.size
+                        KeyEvent.KEYCODE_DPAD_RIGHT -> qualityPickerIndex.value =
+                            (qualityPickerIndex.value + 1) % qualityOptions.size
+                        KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
+                            selectedQuality.value = qualityOptions[qualityPickerIndex.value]
+                            getSharedPreferences("retro_iptv_prefs", Context.MODE_PRIVATE).edit()
+                                .putString("stream_quality", selectedQuality.value).apply()
+                            applyStreamQuality()
+                            isQualityPickerVisible.value = false
+                        }
+                        KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN -> isQualityPickerVisible.value = false
+                        KeyEvent.KEYCODE_MENU -> openChannelMenuFromPlayback()
+                    }
+                    return true
+                }
+                if (isEpgOverlayVisible.value) {
+                    when (keyCode) {
+                        KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER,
+                        KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN -> isEpgOverlayVisible.value = false
+                        KeyEvent.KEYCODE_MENU -> openChannelMenuFromPlayback()
+                        KeyEvent.KEYCODE_DPAD_LEFT -> switchChannel(-1)
+                        KeyEvent.KEYCODE_DPAD_RIGHT -> switchChannel(1)
+                    }
+                    return true
+                }
                 when (keyCode) {
                     KeyEvent.KEYCODE_DPAD_LEFT -> selectedPlaybackAction.value = (selectedPlaybackAction.value + 5) % 6
                     KeyEvent.KEYCODE_DPAD_RIGHT -> selectedPlaybackAction.value = (selectedPlaybackAction.value + 1) % 6
