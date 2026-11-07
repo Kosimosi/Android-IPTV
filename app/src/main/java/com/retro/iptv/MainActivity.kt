@@ -512,8 +512,8 @@ fun HeroSection(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(5.dp)
             ) {
-                Box(Modifier.size(7.dp).graphicsLayer { alpha = liveAlpha; scaleX = 0.85f + liveAlpha * 0.25f; scaleY = 0.85f + liveAlpha * 0.25f }.clip(CircleShape).background(Color.White))
-                Text("LIVE", color = Color.White, fontWeight = FontWeight.Black, fontSize = 10.sp)
+                Box(Modifier.size(7.dp).graphicsLayer { alpha = liveAlpha; scaleX = 0.85f + liveAlpha * 0.25f; scaleY = 0.85f + liveAlpha * 0.25f }.clip(CircleShape).background(FocusRed))
+                Text("LIVE", color = FocusRed, fontWeight = FontWeight.Black, fontSize = 10.sp)
             }
             if (resolution != null) {
                 Box(
