@@ -1300,7 +1300,9 @@ class MainActivity : ComponentActivity() {
                                 OverlayIconAction("▦", selectedPlaybackAction.value == 7) { openChannelMenuFromPlayback() }
                             }
                             if (isQualityPickerVisible.value) {
-                                Row(Modifier.align(Alignment.BottomStart).padding(start = 170.dp, bottom = 92.dp).clip(RoundedCornerShape(12.dp)).background(Color.Black.copy(alpha = 0.9f)).border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(12.dp)).padding(7.dp), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                                // Keep the quality choices centred beneath the playback toolbar
+                                // on both narrow mobile screens and wide Android TV layouts.
+                                Row(Modifier.align(Alignment.BottomCenter).padding(bottom = 92.dp).clip(RoundedCornerShape(12.dp)).background(Color.Black.copy(alpha = 0.9f)).border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(12.dp)).padding(7.dp), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                                     qualityOptions.forEachIndexed { index, quality ->
                                         Box(Modifier.clip(RoundedCornerShape(7.dp))
                                             .background(if (qualityPickerIndex.value == index) FocusRed else Color.Transparent)
@@ -2183,6 +2185,26 @@ class MainActivity : ComponentActivity() {
             event.keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER ||
             event.keyCode == KeyEvent.KEYCODE_BUTTON_SELECT
 
+        // The update dialog has its own D-pad selection state. Intercept OK here
+        // so a focused Compose clickable cannot require a long press or double-activate.
+        if (updateNotice.value != null && isConfirmKey) {
+            when (event.action) {
+                KeyEvent.ACTION_DOWN -> {
+                    if (event.repeatCount == 0) {
+                        val notice = updateNotice.value
+                        if (selectedUpdateAction.value == 0) {
+                            updateNotice.value = null
+                            notice?.apkFile?.let { launchUpdateInstaller(it) }
+                        } else {
+                            updateNotice.value = null
+                        }
+                    }
+                    return true
+                }
+                KeyEvent.ACTION_UP -> return true
+            }
+        }
+
         if (!isUiVisible.value && updateNotice.value == null && isConfirmKey) {
             when (event.action) {
                 KeyEvent.ACTION_DOWN -> {
@@ -2246,6 +2268,17 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
+            return true
+        }
+
+        // Modal overlays take Back priority even when the main browser is hidden
+        // (for example, Search opened from the playback toolbar).
+        if (keyCode == KeyEvent.KEYCODE_BACK && isSearchOpen.value) {
+            isSearchOpen.value = false
+            return true
+        }
+        if (keyCode == KeyEvent.KEYCODE_BACK && isSettingsOpen.value) {
+            isSettingsOpen.value = false
             return true
         }
 
