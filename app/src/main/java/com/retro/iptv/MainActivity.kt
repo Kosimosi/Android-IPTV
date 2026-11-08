@@ -936,7 +936,8 @@ private fun OverlayIconAction(icon: String, selected: Boolean, drawableId: Int? 
 class MainActivity : ComponentActivity() {
 
     private lateinit var audioManager: AudioManager
-    private lateinit var player: ExoPlayer
+    private lateinit var playerController: PlayerController
+    private val player: ExoPlayer get() = playerController.player
 
     private val isUiVisible = mutableStateOf(true)
     private val isPlaybackOverlayVisible = mutableStateOf(false)
@@ -971,6 +972,14 @@ class MainActivity : ComponentActivity() {
     private val epgPrograms = mutableStateListOf<Programme>()
     private var retryJob: Job? = null
     private var retryAttempt = 0
+
+    private companion object {
+        const val MAX_PLAYLIST_BYTES = 12L * 1024L * 1024L
+        const val MAX_PLAYLIST_CHARS = 12 * 1024 * 1024
+        const val MAX_PLAYLIST_CHANNELS = 20_000
+        const val MAX_PLAYLIST_LINES = 500_000
+        const val MAX_PLAYLIST_LINE_CHARS = 16 * 1024
+    }
 
     private val customM3uUrl = mutableStateOf("")
     private val isWatchdogEnabled = mutableStateOf(true)
@@ -1012,30 +1021,10 @@ class MainActivity : ComponentActivity() {
             checkForUpdates()
         }
 
-        val renderersFactory = DefaultRenderersFactory(this).apply {
-            setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF)
-        }
-
-        val audioAttributes = AudioAttributes.Builder()
-            .setUsage(C.USAGE_MEDIA)
-            .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
-            .build()
-
-        val httpDataSourceFactory = DefaultHttpDataSource.Factory()
-            .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-            .setAllowCrossProtocolRedirects(true)
-            .setConnectTimeoutMs(10000)
-            .setReadTimeoutMs(10000)
-
-        val mediaSourceFactory = DefaultMediaSourceFactory(this)
-            .setDataSourceFactory(httpDataSourceFactory)
-
-        player = ExoPlayer.Builder(this, renderersFactory)
-            .setMediaSourceFactory(mediaSourceFactory)
-            .setAudioAttributes(audioAttributes, true)
-            .build().apply {
-                playWhenReady = true
-                addListener(object : Player.Listener {
+        playerController = PlayerController(this)
+        player.apply {
+            playWhenReady = true
+            addListener(object : Player.Listener {
                     override fun onPlaybackStateChanged(state: Int) {
                         isBuffering.value = (state == Player.STATE_BUFFERING)
                         if (state == Player.STATE_READY) {
@@ -1105,8 +1094,7 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                     }
-                })
-            }
+            })
 
         applyStreamQuality(showToast = false)
         loadPlaylists()
@@ -1793,7 +1781,9 @@ class MainActivity : ComponentActivity() {
     private fun loadPlaylists() {
         lifecycleScope.launch(Dispatchers.IO) {
             val cacheFile = File(filesDir, "cached_playlist.m3u")
-            val cachedText = runCatching { if (cacheFile.exists()) cacheFile.readText() else "" }.getOrDefault("")
+            val cachedText = runCatching {
+                if (cacheFile.exists() && cacheFile.length() <= MAX_PLAYLIST_BYTES) cacheFile.readText() else ""
+            }.getOrDefault("")
             val cachedList = parseM3u(cachedText).distinctBy { it.url }
             val initialList = cachedList.ifEmpty { fallbackChannels }
 
@@ -1812,8 +1802,20 @@ class MainActivity : ComponentActivity() {
                 async { url to playlistSemaphore.withPermit { fetchUrl(url) } }
             }.awaitAll()
             val successfulTexts = fetched.mapNotNull { it.second }
-            val failedCount = fetched.count { it.second == null }
-            val combinedText = successfulTexts.joinToString("\n")
+            var combinedChars = 0
+            val boundedTexts = mutableListOf<String>()
+            var rejectedOversizeSources = 0
+            for (text in successfulTexts) {
+                val extra = text.length + if (boundedTexts.isEmpty()) 0 else 1
+                if (combinedChars + extra > MAX_PLAYLIST_CHARS) {
+                    rejectedOversizeSources++
+                    continue
+                }
+                boundedTexts.add(text)
+                combinedChars += extra
+            }
+            val failedCount = fetched.count { it.second == null } + rejectedOversizeSources
+            val combinedText = boundedTexts.joinToString("\n")
             val freshList = if (combinedText.isNotBlank()) parseM3u(combinedText).distinctBy { it.url } else emptyList()
 
             withContext(Dispatchers.Main) {
@@ -1981,6 +1983,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun parseM3u(content: String): List<Channel> {
+        if (content.length > MAX_PLAYLIST_CHARS) return emptyList()
         val list = mutableListOf<Channel>()
         var currentTitle = ""
         var currentGroup = "General"
@@ -1989,9 +1992,10 @@ class MainActivity : ComponentActivity() {
         var currentLanguage = "Unknown"
         var currentCountry = "Unknown"
         var currentEpgId: String? = null
-        val lines = content.lines()
-
-        for (line in lines) {
+        var lineCount = 0
+        for (line in content.lineSequence()) {
+            if (++lineCount > MAX_PLAYLIST_LINES || list.size >= MAX_PLAYLIST_CHANNELS) break
+            if (line.length > MAX_PLAYLIST_LINE_CHARS) continue
             val trimmed = line.trim()
             if (trimmed.startsWith("#EXTINF", ignoreCase = true)) {
                 currentTitle = trimmed.substringAfterLast(",").trim()
@@ -2075,6 +2079,8 @@ class MainActivity : ComponentActivity() {
         val mediaItem = MediaItem.fromUri(currentStreamUrl)
         player.setMediaItem(mediaItem)
         player.prepare()
+        // Selecting a channel is an explicit user action; start playback after a foreground pause.
+        playerController.play()
 
         if (isWatchdogEnabled.value) {
             watchdogJob?.cancel()
@@ -2232,12 +2238,20 @@ class MainActivity : ComponentActivity() {
         return super.onKeyDown(keyCode, event)
     }
 
+    override fun onStop() {
+        // Home, app switching, and screen-off must never leave a live stream playing.
+        retryJob?.cancel()
+        watchdogJob?.cancel()
+        playerController.pauseForBackground()
+        super.onStop()
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         autoHideJob?.cancel()
         watchdogJob?.cancel()
         channelInfoJob?.cancel()
         retryJob?.cancel()
-        player.release()
+        playerController.release()
     }
 }
