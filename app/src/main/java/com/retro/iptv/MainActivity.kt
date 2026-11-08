@@ -50,6 +50,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
@@ -62,6 +63,11 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
@@ -548,6 +554,7 @@ fun ChannelCard(
     modifier: Modifier = Modifier.width(88.dp)
 ) {
     var isFocused by remember { mutableStateOf(false) }
+    var confirmPressed by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(8.dp)
     val fill by animateColorAsState(
         targetValue = when {
@@ -577,6 +584,31 @@ fun ChannelCard(
             .onFocusChanged {
                 isFocused = it.isFocused
                 if (it.isFocused) onUserInteract()
+            }
+            // Handle TV OK explicitly on the focused card. Consume key-down so the
+            // clickable modifier cannot also dispatch a second selection on key-up.
+            .onPreviewKeyEvent { keyEvent ->
+                val isConfirm = keyEvent.key == Key.DirectionCenter ||
+                    keyEvent.key == Key.Enter || keyEvent.key == Key.NumPadEnter
+                if (isFocused && isConfirm) {
+                    when (keyEvent.type) {
+                        KeyEventType.KeyDown -> {
+                            if (!confirmPressed) {
+                                confirmPressed = true
+                                onSelect()
+                                onUserInteract()
+                            }
+                            true
+                        }
+                        KeyEventType.KeyUp -> {
+                            confirmPressed = false
+                            true
+                        }
+                        else -> true
+                    }
+                } else {
+                    false
+                }
             }
             .focusable()
             .clickable {
@@ -922,7 +954,10 @@ private fun OverlayIconAction(icon: String, selected: Boolean, drawableId: Int? 
             .graphicsLayer { scaleX = if (selected) 1.04f else 1f; scaleY = if (selected) 1.04f else 1f }
             .clip(CircleShape)
             .background(if (selected) FocusRed.copy(alpha = 0.92f) else Color.Transparent)
-            .clickable(onClick = onClick).focusable(),
+            // Playback toolbar navigation is handled centrally by MainActivity's D-pad
+            // state machine; prevent Compose focus from competing with that selection.
+            .focusProperties { canFocus = false }
+            .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         if (drawableId != null) {
@@ -2143,6 +2178,13 @@ class MainActivity : ComponentActivity() {
     // Menu hidden: Left/Right zap channels, Up/Down/OK/Menu open the menu.
     // Menu visible: all D-pad keys go to the menu so you can move around in it.
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        // OK/Enter is an activation, not a repeatable navigation key. Some TV remotes
+        // emit repeated ACTION_DOWN events while the centre button is held; ignore them
+        // to prevent repeated toggles and flickering overlays.
+        if ((keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER ||
+                keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER) && (event?.repeatCount ?: 0) > 0
+        ) return true
+
         // Let Android handle hardware volume keys normally.
         if (keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN || keyCode == KeyEvent.KEYCODE_VOLUME_MUTE) {
             return super.onKeyDown(keyCode, event)
