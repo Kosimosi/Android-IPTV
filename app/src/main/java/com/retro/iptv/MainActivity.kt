@@ -68,7 +68,6 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.input.key.nativeKeyEvent
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
@@ -555,6 +554,7 @@ fun ChannelCard(
     modifier: Modifier = Modifier.width(88.dp)
 ) {
     var isFocused by remember { mutableStateOf(false) }
+    var confirmPressed by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(8.dp)
     val fill by animateColorAsState(
         targetValue = when {
@@ -590,14 +590,24 @@ fun ChannelCard(
             .onPreviewKeyEvent { keyEvent ->
                 val isConfirm = keyEvent.key == Key.DirectionCenter ||
                     keyEvent.key == Key.Enter || keyEvent.key == Key.NumPadEnter
-                if (isFocused && isConfirm && keyEvent.type == KeyEventType.KeyDown &&
-                    keyEvent.nativeKeyEvent.repeatCount == 0
-                ) {
-                    onSelect()
-                    onUserInteract()
-                    true
+                if (isFocused && isConfirm) {
+                    when (keyEvent.type) {
+                        KeyEventType.KeyDown -> {
+                            if (!confirmPressed) {
+                                confirmPressed = true
+                                onSelect()
+                                onUserInteract()
+                            }
+                            true
+                        }
+                        KeyEventType.KeyUp -> {
+                            confirmPressed = false
+                            true
+                        }
+                        else -> true
+                    }
                 } else {
-                    isFocused && isConfirm
+                    false
                 }
             }
             .focusable()
