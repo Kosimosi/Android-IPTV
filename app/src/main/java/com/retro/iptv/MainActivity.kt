@@ -2175,6 +2175,47 @@ class MainActivity : ComponentActivity() {
         playChannel(newIndex)
     }
 
+    // Intercept playback confirmation before Compose clickable/focus handlers.
+    // This makes the Activity the sole owner of OK/Select while the video controls are open.
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        val isConfirmKey = event.keyCode == KeyEvent.KEYCODE_DPAD_CENTER ||
+            event.keyCode == KeyEvent.KEYCODE_ENTER ||
+            event.keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER ||
+            event.keyCode == KeyEvent.KEYCODE_BUTTON_SELECT
+
+        if (!isUiVisible.value && updateNotice.value == null && isConfirmKey) {
+            when (event.action) {
+                KeyEvent.ACTION_DOWN -> {
+                    // Ignore long-press repeats, but consume them so Compose cannot
+                    // interpret the held centre button as a second click.
+                    if (event.repeatCount == 0) {
+                        if (playbackControlsLocked.value) {
+                            playbackControlsLocked.value = false
+                            isPlaybackOverlayVisible.value = true
+                            selectedPlaybackAction.value = 6
+                        } else if (!isPlaybackOverlayVisible.value) {
+                            isPlaybackOverlayVisible.value = true
+                            selectedPlaybackAction.value = 0
+                        } else if (isQualityPickerVisible.value) {
+                            selectedQuality.value = qualityOptions[qualityPickerIndex.value]
+                            getSharedPreferences("retro_iptv_prefs", Context.MODE_PRIVATE).edit()
+                                .putString("stream_quality", selectedQuality.value).apply()
+                            applyStreamQuality()
+                            isQualityPickerVisible.value = false
+                        } else if (isEpgOverlayVisible.value) {
+                            isEpgOverlayVisible.value = false
+                        } else {
+                            activatePlaybackAction(selectedPlaybackAction.value)
+                        }
+                    }
+                    return true
+                }
+                KeyEvent.ACTION_UP -> return true
+            }
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
     // Menu hidden: Left/Right zap channels, Up/Down/OK/Menu open the menu.
     // Menu visible: all D-pad keys go to the menu so you can move around in it.
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
