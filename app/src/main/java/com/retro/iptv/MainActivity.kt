@@ -51,6 +51,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.SolidColor
@@ -916,23 +917,17 @@ fun UpdateNoticeDialog(
 @Composable
 private fun OverlayIconAction(icon: String, selected: Boolean, drawableId: Int? = null, onClick: () -> Unit) {
     Box(
-        modifier = Modifier.size(if (selected) 58.dp else 52.dp)
-            .graphicsLayer { scaleX = if (selected) 1.08f else 1f; scaleY = if (selected) 1.08f else 1f }
+        modifier = Modifier.size(if (selected) 42.dp else 38.dp)
+            .graphicsLayer { scaleX = if (selected) 1.04f else 1f; scaleY = if (selected) 1.04f else 1f }
             .clip(CircleShape)
-            .background(if (selected) FocusRed else Color.Transparent)
-            .clickable(onClick = onClick)
-            .focusable(),
+            .background(if (selected) FocusRed.copy(alpha = 0.92f) else Color.Transparent)
+            .clickable(onClick = onClick).focusable(),
         contentAlignment = Alignment.Center
     ) {
         if (drawableId != null) {
-            Image(
-                painter = painterResource(drawableId),
-                contentDescription = null,
-                modifier = Modifier.size(25.dp),
-                colorFilter = ColorFilter.tint(Color.White)
-            )
+            Image(painter = painterResource(drawableId), contentDescription = null, modifier = Modifier.size(19.dp), colorFilter = ColorFilter.tint(Color.White))
         } else {
-            Text(icon, color = Color.White, fontSize = 27.sp, fontWeight = FontWeight.Normal)
+            Text(icon, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Normal)
         }
     }
 }
@@ -948,6 +943,10 @@ class MainActivity : ComponentActivity() {
     private val isQualityPickerVisible = mutableStateOf(false)
     private val isEpgOverlayVisible = mutableStateOf(false)
     private val selectedPlaybackAction = mutableIntStateOf(0)
+    private val playbackControlsLocked = mutableStateOf(false)
+    private val scalingModeIndex = mutableIntStateOf(0)
+    private val scalingModes = listOf("Fit", "Fill", "Zoom")
+    private var playbackPlayerView: PlayerView? = null
     private val qualityPickerIndex = mutableIntStateOf(0)
     private val qualityOptions = listOf("Auto", "1080p", "720p", "480p")
     private val isStartupVisible = mutableStateOf(true)
@@ -1194,6 +1193,8 @@ class MainActivity : ComponentActivity() {
                                 isFocusable = false
                                 isClickable = false
                                 this.player = this@MainActivity.player
+                                playbackPlayerView = this
+                                resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT
                             }
                         },
                         modifier = Modifier.fillMaxSize().pointerInput(channels.size, currentChannelIndex.value) {
@@ -1218,6 +1219,7 @@ class MainActivity : ComponentActivity() {
                         enter = fadeIn(tween(180)),
                         exit = fadeOut(tween(220))
                     ) {
+                        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0f to Color.Black.copy(alpha = 0.22f), 0.42f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.72f))))
                         val infoChannel = channels.getOrNull(currentChannelIndex.value)
                         val schedule = epgPrograms.filter { it.channelId == infoChannel?.epgId }.sortedBy { it.startTimeMs }
                         val currentProgramme = schedule.firstOrNull { it.startTimeMs <= epgClockMs && it.stopTimeMs > epgClockMs }
@@ -1255,35 +1257,20 @@ class MainActivity : ComponentActivity() {
                                 Text("LIVE", color = FocusRed, fontSize = 12.sp, fontWeight = FontWeight.Black)
                             }
                             Row(
-                                Modifier.align(Alignment.BottomStart).padding(start = 28.dp, bottom = 24.dp)
-                                    .clip(RoundedCornerShape(34.dp))
-                                    .background(Color.Black.copy(alpha = 0.66f))
-                                    .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(34.dp))
-                                    .padding(horizontal = 9.dp, vertical = 7.dp),
-                                horizontalArrangement = Arrangement.spacedBy(7.dp),
+                                Modifier.align(Alignment.BottomCenter).padding(horizontal = 18.dp, vertical = 22.dp)
+                                    .clip(CircleShape).background(Color.Black.copy(alpha = 0.22f))
+                                    .padding(horizontal = 8.dp, vertical = 5.dp),
+                                horizontalArrangement = Arrangement.spacedBy(3.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                OverlayIconAction("", selectedPlaybackAction.value == 0, R.drawable.ic_favourite) {
-                                    infoChannel?.let { toggleFavorite(it.url) }
-                                }
+                                OverlayIconAction("", selectedPlaybackAction.value == 0, R.drawable.ic_favourite) { infoChannel?.let { toggleFavorite(it.url) } }
                                 OverlayIconAction("", selectedPlaybackAction.value == 1, R.drawable.ic_search) { isSearchOpen.value = true }
-                                OverlayIconAction("ᴴᴰ", selectedPlaybackAction.value == 2) { isQualityPickerVisible.value = !isQualityPickerVisible.value }
-                                OverlayIconAction("▤", selectedPlaybackAction.value == 3) { isEpgOverlayVisible.value = !isEpgOverlayVisible.value }
+                                OverlayIconAction("ᴴᴰ", selectedPlaybackAction.value == 2) { qualityPickerIndex.value = qualityOptions.indexOf(selectedQuality.value).coerceAtLeast(0); isQualityPickerVisible.value = !isQualityPickerVisible.value; isEpgOverlayVisible.value = false }
+                                OverlayIconAction("▤", selectedPlaybackAction.value == 3) { isEpgOverlayVisible.value = !isEpgOverlayVisible.value; isQualityPickerVisible.value = false }
                                 OverlayIconAction("⚙", selectedPlaybackAction.value == 4) { isSettingsOpen.value = true }
-                            }
-                            Box(
-                                Modifier.align(Alignment.BottomEnd).padding(end = 28.dp, bottom = 24.dp)
-                                    .clip(RoundedCornerShape(28.dp))
-                                    .background(if (selectedPlaybackAction.value == 5) FocusRed else Color.Black.copy(alpha = 0.66f))
-                                    .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(28.dp))
-                                    .clickable { openChannelMenuFromPlayback() }
-                                    .focusable()
-                                    .padding(horizontal = 22.dp, vertical = 16.dp)
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                                    Text("▦", color = Color.White, fontSize = 23.sp)
-                                    Text("MORE CHANNELS", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                }
+                                OverlayIconAction("⛶", selectedPlaybackAction.value == 5) { cycleVideoScaling() }
+                                OverlayIconAction("▣", selectedPlaybackAction.value == 6) { playbackControlsLocked.value = !playbackControlsLocked.value }
+                                OverlayIconAction("▦", selectedPlaybackAction.value == 7) { openChannelMenuFromPlayback() }
                             }
                             if (isQualityPickerVisible.value) {
                                 Row(Modifier.align(Alignment.BottomStart).padding(start = 170.dp, bottom = 92.dp).clip(RoundedCornerShape(12.dp)).background(Color.Black.copy(alpha = 0.9f)).border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(12.dp)).padding(7.dp), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
@@ -2100,6 +2087,15 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun cycleVideoScaling() {
+        scalingModeIndex.value = (scalingModeIndex.value + 1) % scalingModes.size
+        playbackPlayerView?.resizeMode = when (scalingModes[scalingModeIndex.value]) {
+            "Fill" -> androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FILL
+            "Zoom" -> androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+            else -> androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT
+        }
+    }
+
     private fun openChannelMenuFromPlayback() {
         isPlaybackOverlayVisible.value = false
         isUiVisible.value = true
@@ -2120,7 +2116,9 @@ class MainActivity : ComponentActivity() {
                 isQualityPickerVisible.value = false
             }
             4 -> isSettingsOpen.value = true
-            5 -> openChannelMenuFromPlayback()
+            5 -> cycleVideoScaling()
+            6 -> playbackControlsLocked.value = !playbackControlsLocked.value
+            7 -> openChannelMenuFromPlayback()
         }
     }
 
@@ -2158,6 +2156,14 @@ class MainActivity : ComponentActivity() {
         }
 
         if (!isUiVisible.value) {
+            if (playbackControlsLocked.value) {
+                if (keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
+                    playbackControlsLocked.value = false
+                    isPlaybackOverlayVisible.value = true
+                    selectedPlaybackAction.value = 6
+                }
+                return true
+            }
             if (keyCode == KeyEvent.KEYCODE_BACK) {
                 when {
                     isQualityPickerVisible.value -> isQualityPickerVisible.value = false
@@ -2181,7 +2187,7 @@ class MainActivity : ComponentActivity() {
                         qualityPickerIndex.value = (qualityPickerIndex.value + delta + qualityOptions.size) % qualityOptions.size
                     isEpgOverlayVisible.value -> Unit // Guide navigation must never zap the playing channel.
                     isPlaybackOverlayVisible.value ->
-                        selectedPlaybackAction.value = (selectedPlaybackAction.value + delta + 6) % 6
+                        selectedPlaybackAction.value = (selectedPlaybackAction.value + delta + 8) % 8
                     else -> switchChannel(delta)
                 }
                 return true
@@ -2191,7 +2197,7 @@ class MainActivity : ComponentActivity() {
                     isPlaybackOverlayVisible.value = true
                     selectedPlaybackAction.value = 0
                 } else if (!isQualityPickerVisible.value && !isEpgOverlayVisible.value) {
-                    selectedPlaybackAction.value = 5
+                    selectedPlaybackAction.value = 7
                 }
                 return true
             }
