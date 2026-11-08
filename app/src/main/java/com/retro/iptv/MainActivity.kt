@@ -1098,6 +1098,7 @@ class MainActivity : ComponentActivity() {
                         }
                     }
             })
+        }
 
         applyStreamQuality(showToast = false)
         loadPlaylists()
