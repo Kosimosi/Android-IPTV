@@ -12,6 +12,7 @@ import android.graphics.Bitmap
 import android.graphics.Color as AndroidColor
 import android.media.AudioManager
 import android.os.Bundle
+import android.os.SystemClock
 import android.view.KeyEvent
 import android.util.Xml
 import android.widget.Toast
@@ -972,6 +973,7 @@ class MainActivity : ComponentActivity() {
     private val epgPrograms = mutableStateListOf<Programme>()
     private var retryJob: Job? = null
     private var retryAttempt = 0
+    private var isHostForeground = false
 
     private companion object {
         const val MAX_PLAYLIST_BYTES = 12L * 1024L * 1024L
@@ -1056,6 +1058,7 @@ class MainActivity : ComponentActivity() {
                     }
 
                     override fun onPlayerError(error: PlaybackException) {
+                        if (!isHostForeground) return
                         isBuffering.value = false
                         retryJob?.cancel()
                         retryAttempt += 1
@@ -1945,14 +1948,14 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun fetchUrl(urlString: String): String? {
-        // Bound remote responses: some EPG endpoints can return very large XML files,
-        // and readText() can exhaust the small heap available on older Android TV devices.
+        // Bound remote responses and total read time; older Android TV devices have a small heap.
         val maxBytes = if (urlString == IPTV_INDIA_EPG_URL) 8L * 1024 * 1024 else 12L * 1024 * 1024
         var connection: HttpURLConnection? = null
+        val deadlineMs = SystemClock.elapsedRealtime() + 30_000L
         return try {
             connection = (URL(urlString).openConnection() as HttpURLConnection).apply {
                 connectTimeout = 8000
-                readTimeout = 30000
+                readTimeout = 5000
                 requestMethod = "GET"
                 setRequestProperty("User-Agent", "Mozilla/5.0")
                 instanceFollowRedirects = true
@@ -1966,6 +1969,7 @@ class MainActivity : ComponentActivity() {
                     val buffer = ByteArray(8192)
                     var total = 0L
                     while (true) {
+                        if (SystemClock.elapsedRealtime() > deadlineMs) return null
                         val count = input.read(buffer)
                         if (count < 0) break
                         total += count
@@ -2238,8 +2242,14 @@ class MainActivity : ComponentActivity() {
         return super.onKeyDown(keyCode, event)
     }
 
+    override fun onStart() {
+        super.onStart()
+        isHostForeground = true
+    }
+
     override fun onStop() {
         // Home, app switching, and screen-off must never leave a live stream playing.
+        isHostForeground = false
         retryJob?.cancel()
         watchdogJob?.cancel()
         playerController.pauseForBackground()
