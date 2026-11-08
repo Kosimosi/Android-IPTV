@@ -1197,12 +1197,12 @@ class MainActivity : ComponentActivity() {
                                 resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT
                             }
                         },
-                        modifier = Modifier.fillMaxSize().pointerInput(channels.size, currentChannelIndex.value) {
+                        modifier = Modifier.fillMaxSize().pointerInput(channels.size, currentChannelIndex.value, playbackControlsLocked.value) {
                             var dragDistance = 0f
                             detectHorizontalDragGestures(
                                 onHorizontalDrag = { _, amount -> dragDistance += amount },
                                 onDragEnd = {
-                                    if (abs(dragDistance) > 85f) {
+                                    if (!playbackControlsLocked.value && abs(dragDistance) > 85f) {
                                         switchChannel(if (dragDistance < 0) 1 else -1)
                                         isChannelInfoVisible.value = true
                                     }
@@ -1269,7 +1269,7 @@ class MainActivity : ComponentActivity() {
                                 OverlayIconAction("▤", selectedPlaybackAction.value == 3) { isEpgOverlayVisible.value = !isEpgOverlayVisible.value; isQualityPickerVisible.value = false }
                                 OverlayIconAction("⚙", selectedPlaybackAction.value == 4) { isSettingsOpen.value = true }
                                 OverlayIconAction("⛶", selectedPlaybackAction.value == 5) { cycleVideoScaling() }
-                                OverlayIconAction("▣", selectedPlaybackAction.value == 6) { playbackControlsLocked.value = !playbackControlsLocked.value }
+                                OverlayIconAction(if (playbackControlsLocked.value) "🔒" else "▣", selectedPlaybackAction.value == 6) { playbackControlsLocked.value = !playbackControlsLocked.value }
                                 OverlayIconAction("▦", selectedPlaybackAction.value == 7) { openChannelMenuFromPlayback() }
                             }
                             if (isQualityPickerVisible.value) {
