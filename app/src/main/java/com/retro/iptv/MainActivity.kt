@@ -1030,15 +1030,15 @@ class MainActivity : ComponentActivity() {
     private var watchdogJob: Job? = null
     private var channelInfoJob: Job? = null
 
-    // Verified 7-Channel Local Fallback
+    // WalaTV directory fallback: first seven entries from the replacement directory.
     private val fallbackChannels = listOf(
-        Channel("Jamuna TV", "https://playztv-apps.pages.dev/jamuna-tv/index.m3u8", "BD News", "https://i.imgur.com/6xLp0Mf.png"),
-        Channel("DBC News", "https://playztv-apps.pages.dev/dbc-news/index.m3u8", "BD News", "https://upload.wikimedia.org/wikipedia/commons/9/9f/DBC_News_logo.png"),
-        Channel("Ekattor TV", "https://playztv-apps.pages.dev/ekattor-tv/index.m3u8", "BD News", "https://i.imgur.com/8neLbDd.jpg"),
-        Channel("NTV", "https://playztv-apps.pages.dev/ntv/index.m3u8", "BD Entertainment", "https://upload.wikimedia.org/wikipedia/en/thumb/e/ef/NTV_%28Bangladesh%29_logo.svg/320px-NTV_%28Bangladesh%29_logo.svg.png"),
-        Channel("Deepto TV", "https://playztv-apps.pages.dev/deepto-tv/index.m3u8", "BD Entertainment", "https://i.imgur.com/0sBqVhc.png"),
-        Channel("Maasranga TV", "https://playztv-apps.pages.dev/maasranga-tv/index.m3u8", "BD Entertainment", "https://upload.wikimedia.org/wikipedia/en/thumb/2/27/Maasranga_Television_logo.svg/320px-Maasranga_Television_logo.svg.png"),
-        Channel("DD Sports HD", "https://mumbai-edge.smartplaytv.in/DDSportsHD/index.m3u8", "Sports", "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7b/DD_Sports_logo_2023.svg/320px-DD_Sports_logo_2023.svg.png", region = "Hindi", language = "Hindi", country = "India")
+        Channel("Somoy TV", "https://ireentv.pages.dev/Somoy_TV_Server_6.m3u8", "News", "https://dl.dropbox.com/s/leielj83em5kg7h/somoy_news.png", region = "Bangla", language = "Bangla", country = "Bangladesh", backupUrls = listOf("http://116.204.149.16/somoytv/index.m3u8", "https://tvsen6.aynaott.com/4XcqdovJzbbC9WdJA9gk/index.m3u8", "https://ireentv.pages.dev/Somoy_TV_Server_3.m3u8")),
+        Channel("Jamuna TV", "https://tvsen6.aynaott.com/KGdZEdA7qQ43dmPkgk1j/index.m3u8", "News", "https://raw.githubusercontent.com/time2shine/IPTV-logos/main/logos/bd_jamuna_tv.png", region = "Bangla", language = "Bangla", country = "Bangladesh", backupUrls = listOf("https://tvsen6.aynaott.com/KGdZEdA7qQ43dmPkgk1j/index.m3u8?e=1784102531&u=ee5437a7-c16b-4700-b317-a41b77d5cba9&token=d17e86aa2e6745043e84e0547d4fb69a", "https://playztv-apps.pages.dev/jamuna-tv/index.m3u8")),
+        Channel("Ekattor TV", "https://tvsen6.aynaott.com/EWDrV5QskgarZEUBb3pU/index.m3u8", "News", "https://raw.githubusercontent.com/time2shine/IPTV-logos/main/logos/bd_ekattor_tv.png", region = "Bangla", language = "Bangla", country = "Bangladesh", backupUrls = listOf("https://ireentv.pages.dev/Ekattor_TV_Server_1.m3u8", "https://tvsen6.aynaott.com/EWDrV5QskgarZEUBb3pU/index.m3u8?e=1784102532&u=ee5437a7-c16b-4700-b317-a41b77d5cba9&token=3b9afdda2bd5332e8f49ed7dfa321a06")),
+        Channel("DBC News", "https://tvsen6.aynaott.com/pF66Tkz0qFwP2aMMqHyt/index.m3u8", "News", "https://i.imgur.com/Qbt6q4z.png", region = "Bangla", language = "Bangla", country = "Bangladesh", backupUrls = listOf("https://iptv-proxy.ahmed-bd-org.workers.dev/dbc-news/index.m3u8", "https://iptvlive.ahmed-bd-org.workers.dev/dbc-news-hd-1/index.m3u8", "https://tvsen6.aynaott.com/pF66Tkz0qFwP2aMMqHyt/index.m3u8?e=1784102535&u=ee5437a7-c16b-4700-b317-a41b77d5cba9&token=d1848b7fd84cef719a89b61f0f5704ee", "https://playztv-apps.pages.dev/dbc-news/index.m3u8")),
+        Channel("Channel 24", "https://tvsen6.aynaott.com/YrVDF8gujkdh/index.m3u8", "News", "https://raw.githubusercontent.com/time2shine/IPTV-logos/main/logos/bd_channel_24.png", region = "Bangla", language = "Bangla", country = "Bangladesh", backupUrls = listOf("https://ireentv.pages.dev/Channel_24_Backup_3.m3u8", "https://live-vestinn.cdnvideo.ru/vestinn/nn24-khl/playlist.m3u8")),
+        Channel("RTV", "http://116.204.149.16/rtvhd/index.m3u8", "Bangladesh", "https://i.imgur.com/yu8ugqt.png", region = "Bangla", language = "Bangla", country = "Bangladesh", backupUrls = listOf("https://j6nfugukcl.gpcdn.net/tile_6/master.m3u8", "https://tvsen5.aynaott.com/RtvHD/index.m3u8", "https://tvsen5.aynaott.com/RtvHD/index.m3u8?e=1784102560&u=ee5437a7-c16b-4700-b317-a41b77d5cba9&token=341d28b0504fc6b2cb3fd78fafa0a854", "https://app24.jagobd.com.bd/c3VydmVyX8RpbEU9Mi8xNy8yMFDEEHGcfRgzQ6NTAgdEoaeFzbF92YWxIZTO0U0ezN1IzMyfvcEdsEfeDeKiNkVN3PTOmdFseWRtaW51aiPhnPTI2/rtv-sg.stream/index.m3u8")),
+        Channel("Maasranga TV", "https://mtv.sunplex.live/MAASRANGA/index.m3u8", "Bangladesh", "https://i.imgur.com/uVZJMed.png", region = "Bangla", language = "Bangla", country = "Bangladesh", backupUrls = listOf("https://tvsen5.aynaott.com/maasrangatv/index.m3u8", "http://116.204.149.16/maasranga/index.m3u8", "https://ireentv.pages.dev/Maasranga_TV_Server_1.m3u8", "https://ireentv.pages.dev/Maasranga_TV_Backup_3.m3u8"))
     )
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -1820,6 +1820,12 @@ class MainActivity : ComponentActivity() {
     private fun loadPlaylists() {
         lifecycleScope.launch(Dispatchers.IO) {
             val cacheFile = File(filesDir, "cached_playlist.m3u")
+            // Drop the previous multi-source cache exactly once when migrating to WalaTV.
+            val directoryPrefs = getSharedPreferences("retro_iptv_prefs", Context.MODE_PRIVATE)
+            if (directoryPrefs.getString("channel_directory_version", "") != "wala_tv_2026_11") {
+                runCatching { cacheFile.delete() }
+                directoryPrefs.edit().putString("channel_directory_version", "wala_tv_2026_11").apply()
+            }
             val cachedText = runCatching {
                 if (cacheFile.exists() && cacheFile.length() <= MAX_PLAYLIST_BYTES) cacheFile.readText() else ""
             }.getOrDefault("")
@@ -1835,7 +1841,8 @@ class MainActivity : ComponentActivity() {
             }
 
             val primaryUrl = if (customM3uUrl.value.isNotBlank()) customM3uUrl.value else DEFAULT_PLAYLIST_URL
-            val sources = listOf(primaryUrl, IPTV_HINDI_PLAYLIST_URL, IPTV_BENGALI_PLAYLIST_URL, IPTV_URDU_PLAYLIST_URL, IPTV_PAKISTAN_PLAYLIST_URL).distinct()
+            // WalaTV is now the sole default directory; a user-configured custom URL remains an explicit override.
+            val sources = listOf(primaryUrl).distinct()
             val playlistSemaphore = Semaphore(3)
             val fetched = sources.map { url ->
                 async { url to playlistSemaphore.withPermit { fetchUrl(url) } }
@@ -2032,13 +2039,26 @@ class MainActivity : ComponentActivity() {
         var currentLanguage = "Unknown"
         var currentCountry = "Unknown"
         var currentEpgId: String? = null
+        var currentBackupUrls: List<String> = emptyList()
+        var currentCategoryCode = ""
         var lineCount = 0
         for (line in content.lineSequence()) {
             if (++lineCount > MAX_PLAYLIST_LINES || list.size >= MAX_PLAYLIST_CHANNELS) break
             if (line.length > MAX_PLAYLIST_LINE_CHARS) continue
             val trimmed = line.trim()
             if (trimmed.startsWith("#EXTINF", ignoreCase = true)) {
-                currentTitle = trimmed.substringAfterLast(",").trim()
+                var insideQuotes = false
+                var titleComma = -1
+                trimmed.forEachIndexed { index, character ->
+                    if (character == '"') insideQuotes = !insideQuotes
+                    else if (character == ',' && !insideQuotes) titleComma = index
+                }
+                currentTitle = if (titleComma >= 0) trimmed.substring(titleComma + 1).trim() else ""
+                val backupMatches = Regex("""x-backup\\d*="([^"]*)"""", RegexOption.IGNORE_CASE)
+                    .findAll(trimmed).map { it.groupValues[1] }.filter { it.startsWith("http://") || it.startsWith("https://") }.toList()
+                currentBackupUrls = backupMatches.distinct()
+                val categoryMatch = """x-cat="([^"]*)"""".toRegex(RegexOption.IGNORE_CASE).find(trimmed)
+                currentCategoryCode = categoryMatch?.groupValues?.get(1)?.trim()?.lowercase(Locale.ROOT) ?: ""
                 val groupMatch = """group-title="([^"]*)"""".toRegex(RegexOption.IGNORE_CASE).find(trimmed)
                 currentGroup = groupMatch?.groupValues?.get(1)?.trim() ?: "General"
 
@@ -2067,6 +2087,14 @@ class MainActivity : ComponentActivity() {
                     "Bangla" -> "Bangladesh"
                     else -> "Unknown"
                 }
+                // WalaTV's x-cat is country/source metadata, separate from group-title topic categories.
+                when (currentCategoryCode) {
+                    "bd" -> { currentLanguage = "Bangla"; currentCountry = "Bangladesh"; currentRegion = "Bangla" }
+                    "pk" -> { currentLanguage = "Urdu"; currentCountry = "Pakistan"; currentRegion = "Urdu / Pakistan" }
+                    "in" -> { currentCountry = "India"; if (currentLanguage == "Unknown") currentRegion = "India" }
+                    "int" -> { currentCountry = "International"; currentRegion = "International" }
+                    "sports" -> { currentCountry = "Unknown"; currentRegion = "Sports" }
+                }
             } else if (trimmed.startsWith("http://", ignoreCase = true) || trimmed.startsWith("https://", ignoreCase = true)) {
                 if (currentTitle.isNotEmpty()) {
                     list.add(
@@ -2078,7 +2106,8 @@ class MainActivity : ComponentActivity() {
                             region = currentRegion,
                             epgId = currentEpgId,
                             language = currentLanguage,
-                            country = currentCountry
+                            country = currentCountry,
+                            backupUrls = currentBackupUrls
                         )
                     )
                     currentTitle = ""
@@ -2088,12 +2117,16 @@ class MainActivity : ComponentActivity() {
                     currentLanguage = "Unknown"
                     currentCountry = "Unknown"
                     currentEpgId = null
+                    currentBackupUrls = emptyList()
+                    currentCategoryCode = ""
                 }
             }
         }
         return list.groupBy { it.title.trim().lowercase(Locale.ROOT) }.values.map { variants ->
             val primary = variants.first()
-            primary.copy(backupUrls = variants.map { it.url }.filter { it != primary.url }.distinct())
+            val mergedBackups = (primary.backupUrls + variants.drop(1).map { it.url } + variants.flatMap { it.backupUrls })
+                .filter { it != primary.url }.distinct()
+            primary.copy(backupUrls = mergedBackups)
         }
     }
 
