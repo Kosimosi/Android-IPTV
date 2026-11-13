@@ -503,6 +503,14 @@ fun HeroSection(
         ),
         label = "liveDotPulse"
     )
+    val heroClockMs by produceState(initialValue = System.currentTimeMillis(), key1 = "heroClock") {
+        while (true) {
+            delay(1000L)
+            value = System.currentTimeMillis()
+        }
+    }
+    val heroTimeFormat = remember { SimpleDateFormat("hh:mm a", Locale.getDefault()) }
+    val heroDateFormat = remember { SimpleDateFormat("dd MMM", Locale.getDefault()) }
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -518,6 +526,17 @@ fun HeroSection(
             ) {
                 Box(Modifier.size(7.dp).graphicsLayer { alpha = liveAlpha; scaleX = 0.85f + liveAlpha * 0.25f; scaleY = 0.85f + liveAlpha * 0.25f }.clip(CircleShape).background(FocusRed))
                 Text("LIVE", color = FocusRed, fontWeight = FontWeight.Black, fontSize = 10.sp)
+            }
+            Row(
+                modifier = Modifier.clip(CircleShape).background(Color.Black.copy(alpha = 0.72f))
+                    .border(1.dp, Color.White.copy(alpha = 0.16f), CircleShape)
+                    .padding(horizontal = 10.dp, vertical = 5.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text(heroTimeFormat.format(Date(heroClockMs)), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                Box(Modifier.width(1.dp).height(10.dp).background(Color.White.copy(alpha = 0.25f)))
+                Text(heroDateFormat.format(Date(heroClockMs)), color = Color.White.copy(alpha = 0.7f), fontSize = 10.sp)
             }
             if (resolution != null) {
                 Box(
@@ -1268,19 +1287,57 @@ class MainActivity : ComponentActivity() {
                                 ),
                                 label = "playbackLiveDot"
                             )
-                            Row(Modifier.align(Alignment.TopEnd).padding(top = 22.dp, end = 28.dp)
-                                .clip(CircleShape).background(Color.Black.copy(alpha = 0.72f))
-                                .border(1.dp, Color.White.copy(alpha = 0.18f), CircleShape)
-                                .padding(horizontal = 15.dp, vertical = 9.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(7.dp)
+                            val playbackClockMs by produceState(initialValue = System.currentTimeMillis(), key1 = "playbackClock") {
+                                while (true) {
+                                    delay(1000L)
+                                    value = System.currentTimeMillis()
+                                }
+                            }
+                            val playbackTimeFormat = remember { SimpleDateFormat("hh:mm:ss a", Locale.getDefault()) }
+                            val playbackDateFormat = remember { SimpleDateFormat("EEE, dd MMM yyyy", Locale.getDefault()) }
+                            Column(
+                                Modifier.align(Alignment.TopEnd).padding(top = 22.dp, end = 28.dp),
+                                horizontalAlignment = Alignment.End,
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                Box(Modifier.size(8.dp).graphicsLayer {
-                                    alpha = playbackLiveAlpha
-                                    scaleX = 0.85f + playbackLiveAlpha * 0.25f
-                                    scaleY = 0.85f + playbackLiveAlpha * 0.25f
-                                }.clip(CircleShape).background(FocusRed))
-                                Text("LIVE", color = FocusRed, fontSize = 12.sp, fontWeight = FontWeight.Black)
+                                Row(
+                                    modifier = Modifier
+                                        .clip(CircleShape)
+                                        .background(Color.Black.copy(alpha = 0.72f))
+                                        .border(1.dp, Color.White.copy(alpha = 0.18f), CircleShape)
+                                        .padding(horizontal = 15.dp, vertical = 9.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(7.dp)
+                                ) {
+                                    Box(Modifier.size(8.dp).graphicsLayer {
+                                        alpha = playbackLiveAlpha
+                                        scaleX = 0.85f + playbackLiveAlpha * 0.25f
+                                        scaleY = 0.85f + playbackLiveAlpha * 0.25f
+                                    }.clip(CircleShape).background(FocusRed))
+                                    Text("LIVE", color = FocusRed, fontSize = 12.sp, fontWeight = FontWeight.Black)
+                                }
+                                Column(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(Color.Black.copy(alpha = 0.72f))
+                                        .border(1.dp, Color.White.copy(alpha = 0.16f), RoundedCornerShape(10.dp))
+                                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                                    horizontalAlignment = Alignment.End
+                                ) {
+                                    Text(
+                                        playbackTimeFormat.format(Date(playbackClockMs)),
+                                        color = Color.White,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1
+                                    )
+                                    Text(
+                                        playbackDateFormat.format(Date(playbackClockMs)),
+                                        color = Color.White.copy(alpha = 0.72f),
+                                        fontSize = 10.sp,
+                                        maxLines = 1
+                                    )
+                                }
                             }
                             Row(
                                 Modifier.align(Alignment.BottomCenter).padding(horizontal = 18.dp, vertical = 22.dp)
