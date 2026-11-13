@@ -1941,4 +1941,410 @@ class MainActivity : ComponentActivity() {
     private fun parseXmlTv(xml: String): List<Programme> {
         val parser = Xml.newPullParser()
         parser.setInput(xml.reader())
-        val programmes = mutableListO
+        val programmes = mutableListOf<Programme>()
+        var event = parser.eventType
+        var channelId = ""
+        var title = ""
+        var start = 0L
+        var stop = 0L
+        while (event != XmlPullParser.END_DOCUMENT) {
+            when (event) {
+                XmlPullParser.START_TAG -> when (parser.name) {
+                    "programme" -> {
+                        channelId = parser.getAttributeValue(null, "channel").orEmpty()
+                        start = parseXmlTvTime(parser.getAttributeValue(null, "start"))
+                        stop = parseXmlTvTime(parser.getAttributeValue(null, "stop"))
+                        title = ""
+                    }
+                    "title" -> if (channelId.isNotBlank()) title = parser.nextText().trim()
+                }
+                XmlPullParser.END_TAG -> if (parser.name == "programme" && channelId.isNotBlank() && title.isNotBlank() && start > 0L && stop > start) {
+                    programmes.add(Programme(channelId, title, start, stop))
+                    channelId = ""
+                }
+            }
+            event = parser.next()
+        }
+        return programmes
+    }
+
+    private fun parseXmlTvTime(value: String?): Long {
+        if (value.isNullOrBlank()) return 0L
+        val patterns = listOf("yyyyMMddHHmmss Z", "yyyyMMddHHmmss")
+        for (pattern in patterns) {
+            try {
+                val formatter = SimpleDateFormat(pattern, Locale.US)
+                formatter.isLenient = false
+                if (!pattern.contains("Z")) formatter.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                return formatter.parse(value.trim())?.time ?: 0L
+            } catch (_: Exception) { }
+        }
+        return 0L
+    }
+
+    private fun fetchUrl(urlString: String): String? {
+        // Bound remote responses and total read time; older Android TV devices have a small heap.
+        val maxBytes = if (urlString == IPTV_INDIA_EPG_URL) 8L * 1024 * 1024 else 12L * 1024 * 1024
+        var connection: HttpURLConnection? = null
+        val deadlineMs = SystemClock.elapsedRealtime() + 30_000L
+        return try {
+            connection = (URL(urlString).openConnection() as HttpURLConnection).apply {
+                connectTimeout = 8000
+                readTimeout = 5000
+                requestMethod = "GET"
+                setRequestProperty("User-Agent", "Mozilla/5.0")
+                instanceFollowRedirects = true
+            }
+            if (connection.responseCode !in 200..299) return null
+            val declaredLength = connection.contentLengthLong
+            if (declaredLength > maxBytes) return null
+
+            connection.inputStream.use { input ->
+                ByteArrayOutputStream().use { output ->
+                    val buffer = ByteArray(8192)
+                    var total = 0L
+                    while (true) {
+                        if (SystemClock.elapsedRealtime() > deadlineMs) return null
+                        val count = input.read(buffer)
+                        if (count < 0) break
+                        total += count
+                        if (total > maxBytes) return null
+                        output.write(buffer, 0, count)
+                    }
+                    output.toString("UTF-8")
+                }
+            }
+        } catch (e: Exception) {
+            null
+        } finally {
+            connection?.disconnect()
+        }
+    }
+
+    private fun parseM3u(content: String): List<Channel> {
+        if (content.length > MAX_PLAYLIST_CHARS) return emptyList()
+        val list = mutableListOf<Channel>()
+        var currentTitle = ""
+        var currentGroup = "General"
+        var currentLogo: String? = null
+        var currentRegion = "Unknown Region"
+        var currentLanguage = "Unknown"
+        var currentCountry = "Unknown"
+        var currentEpgId: String? = null
+        var lineCount = 0
+        for (line in content.lineSequence()) {
+            if (++lineCount > MAX_PLAYLIST_LINES || list.size >= MAX_PLAYLIST_CHANNELS) break
+            if (line.length > MAX_PLAYLIST_LINE_CHARS) continue
+            val trimmed = line.trim()
+            if (trimmed.startsWith("#EXTINF", ignoreCase = true)) {
+                currentTitle = trimmed.substringAfterLast(",").trim()
+                val groupMatch = """group-title="([^"]*)"""".toRegex(RegexOption.IGNORE_CASE).find(trimmed)
+                currentGroup = groupMatch?.groupValues?.get(1)?.trim() ?: "General"
+
+                val logoMatch = """tvg-logo="([^"]*)"""".toRegex(RegexOption.IGNORE_CASE).find(trimmed)
+                currentLogo = logoMatch?.groupValues?.get(1)?.trim()
+                val epgMatch = """tvg-id="([^"]*)"""".toRegex(RegexOption.IGNORE_CASE).find(trimmed)
+                currentEpgId = epgMatch?.groupValues?.get(1)?.trim()?.takeIf { it.isNotBlank() }
+                val countryMatch = """tvg-country="([^"]*)"""" .trim().toRegex(RegexOption.IGNORE_CASE).find(trimmed)
+                currentCountry = countryMatch?.groupValues?.get(1)?.trim()?.takeIf { it.isNotBlank() } ?: "Unknown"
+                val languageMatch = """tvg-language="([^"]*)"""" .trim().toRegex(RegexOption.IGNORE_CASE).find(trimmed)
+                currentLanguage = languageMatch?.groupValues?.get(1)?.trim()?.takeIf { it.isNotBlank() } ?: "Unknown"
+                val lowerMeta = (currentLanguage + " " + currentCountry + " " + currentTitle + " " + currentGroup).lowercase(Locale.ROOT)
+                currentLanguage = when {
+                    lowerMeta.contains("urdu") || currentCountry.equals("Pakistan", true) || currentCountry.equals("PK", true) -> "Urdu"
+                    lowerMeta.contains("hindi") || currentLanguage.split(',', ';', '/', ' ').any { it.equals("hin", true) } -> "Hindi"
+                    lowerMeta.contains("bangla") || lowerMeta.contains("bengali") ||
+                        currentLanguage.split(',', ';', '/', ' ').any { it.equals("ben", true) } ||
+                        currentCountry.equals("Bangladesh", true) || currentCountry.equals("BD", true) ||
+                        listOf("jamuna", "dbc", "ekattor", "ntv", "deepto", "maasranga", "somoy", "channel i", "gazi tv", "banglavision").any { currentTitle.contains(it, true) } -> "Bangla"
+                    else -> "Unknown"
+                }
+                currentRegion = if (currentLanguage == "Urdu") "Urdu / Pakistan" else currentLanguage
+                if (currentCountry == "Unknown") currentCountry = when (currentLanguage) {
+                    "Hindi" -> "India"
+                    "Urdu" -> "Pakistan"
+                    "Bangla" -> "Bangladesh"
+                    else -> "Unknown"
+                }
+            } else if (trimmed.startsWith("http://", ignoreCase = true) || trimmed.startsWith("https://", ignoreCase = true)) {
+                if (currentTitle.isNotEmpty()) {
+                    list.add(
+                        Channel(
+                            title = currentTitle,
+                            url = trimmed,
+                            group = currentGroup,
+                            logo = currentLogo,
+                            region = currentRegion,
+                            epgId = currentEpgId,
+                            language = currentLanguage,
+                            country = currentCountry
+                        )
+                    )
+                    currentTitle = ""
+                    currentGroup = "General"
+                    currentLogo = null
+                    currentRegion = "Unknown Region"
+                    currentLanguage = "Unknown"
+                    currentCountry = "Unknown"
+                    currentEpgId = null
+                }
+            }
+        }
+        return list.groupBy { it.title.trim().lowercase(Locale.ROOT) }.values.map { variants ->
+            val primary = variants.first()
+            primary.copy(backupUrls = variants.map { it.url }.filter { it != primary.url }.distinct())
+        }
+    }
+
+    private fun playChannel(index: Int) {
+        val channel = channels.getOrNull(index) ?: return
+        isBuffering.value = true
+        currentResolution.value = null
+        isChannelInfoVisible.value = true
+        recordRecentlyWatched(channel)
+        retryJob?.cancel()
+        retryAttempt = 0
+        backupStreamIndex = 0
+        playbackRetryMessage.value = null
+        channelInfoJob?.cancel()
+        // Keep the channel banner visible for five seconds after the menu fades away.
+        val infoDuration = if (isUiVisible.value) 10_000L else 5_000L
+        channelInfoJob = lifecycleScope.launch {
+            delay(infoDuration)
+            isChannelInfoVisible.value = false
+        }
+
+        currentStreamUrl = channel.url
+        val mediaItem = MediaItem.fromUri(currentStreamUrl)
+        player.setMediaItem(mediaItem)
+        player.prepare()
+        // Selecting a channel is an explicit user action; start playback after a foreground pause.
+        playerController.play()
+
+        if (isWatchdogEnabled.value) {
+            watchdogJob?.cancel()
+            watchdogJob = lifecycleScope.launch {
+                delay(15_000)
+                if (isBuffering.value) {
+                    switchChannel(1)
+                }
+            }
+        }
+    }
+
+    private fun cycleVideoScaling() {
+        scalingModeIndex.value = (scalingModeIndex.value + 1) % scalingModes.size
+        playbackPlayerView?.resizeMode = when (scalingModes[scalingModeIndex.value]) {
+            "Fill" -> androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FILL
+            "Zoom" -> androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+            else -> androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT
+        }
+    }
+
+    private fun openChannelMenuFromPlayback() {
+        isPlaybackOverlayVisible.value = false
+        isUiVisible.value = true
+        resetIdleTimer()
+    }
+
+    private fun activatePlaybackAction(index: Int) {
+        when (index) {
+            0 -> channels.getOrNull(currentChannelIndex.value)?.let { toggleFavorite(it.url) }
+            1 -> isSearchOpen.value = true
+            2 -> {
+                qualityPickerIndex.value = qualityOptions.indexOf(selectedQuality.value).coerceAtLeast(0)
+                isQualityPickerVisible.value = !isQualityPickerVisible.value
+                isEpgOverlayVisible.value = false
+            }
+            3 -> {
+                isEpgOverlayVisible.value = !isEpgOverlayVisible.value
+                isQualityPickerVisible.value = false
+            }
+            4 -> isSettingsOpen.value = true
+            5 -> cycleVideoScaling()
+            6 -> playbackControlsLocked.value = !playbackControlsLocked.value
+            7 -> openChannelMenuFromPlayback()
+        }
+    }
+
+    private fun switchChannel(delta: Int) {
+        if (channels.isEmpty()) return
+        val newIndex = (currentChannelIndex.value + delta + channels.size) % channels.size
+        currentChannelIndex.value = newIndex
+        playChannel(newIndex)
+    }
+
+    // Intercept playback confirmation before Compose clickable/focus handlers.
+    // This makes the Activity the sole owner of OK/Select while the video controls are open.
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        val isConfirmKey = event.keyCode == KeyEvent.KEYCODE_DPAD_CENTER ||
+            event.keyCode == KeyEvent.KEYCODE_ENTER ||
+            event.keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER ||
+            event.keyCode == KeyEvent.KEYCODE_BUTTON_SELECT
+
+        if (!isUiVisible.value && updateNotice.value == null && isConfirmKey) {
+            when (event.action) {
+                KeyEvent.ACTION_DOWN -> {
+                    // Ignore long-press repeats, but consume them so Compose cannot
+                    // interpret the held centre button as a second click.
+                    if (event.repeatCount == 0) {
+                        if (playbackControlsLocked.value) {
+                            playbackControlsLocked.value = false
+                            isPlaybackOverlayVisible.value = true
+                            selectedPlaybackAction.value = 6
+                        } else if (!isPlaybackOverlayVisible.value) {
+                            isPlaybackOverlayVisible.value = true
+                            selectedPlaybackAction.value = 0
+                        } else if (isQualityPickerVisible.value) {
+                            selectedQuality.value = qualityOptions[qualityPickerIndex.value]
+                            getSharedPreferences("retro_iptv_prefs", Context.MODE_PRIVATE).edit()
+                                .putString("stream_quality", selectedQuality.value).apply()
+                            applyStreamQuality()
+                            isQualityPickerVisible.value = false
+                        } else if (isEpgOverlayVisible.value) {
+                            isEpgOverlayVisible.value = false
+                        } else {
+                            activatePlaybackAction(selectedPlaybackAction.value)
+                        }
+                    }
+                    return true
+                }
+                KeyEvent.ACTION_UP -> return true
+            }
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
+    // Menu hidden: Left/Right zap channels, Up/Down/OK/Menu open the menu.
+    // Menu visible: all D-pad keys go to the menu so you can move around in it.
+    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        // OK/Enter is an activation, not a repeatable navigation key. Some TV remotes
+        // emit repeated ACTION_DOWN events while the centre button is held; ignore them
+        // to prevent repeated toggles and flickering overlays.
+        if ((keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER ||
+                keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER) && (event?.repeatCount ?: 0) > 0
+        ) return true
+
+        // Let Android handle hardware volume keys normally.
+        if (keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN || keyCode == KeyEvent.KEYCODE_VOLUME_MUTE) {
+            return super.onKeyDown(keyCode, event)
+        }
+        // Route remote input to the custom update prompt rather than touch-only actions.
+        if (updateNotice.value != null) {
+            when (keyCode) {
+                KeyEvent.KEYCODE_BACK -> updateNotice.value = null
+                KeyEvent.KEYCODE_DPAD_LEFT -> selectedUpdateAction.value = 0
+                KeyEvent.KEYCODE_DPAD_RIGHT -> selectedUpdateAction.value = 1
+                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
+                    val notice = updateNotice.value
+                    if (selectedUpdateAction.value == 0) {
+                        updateNotice.value = null
+                        notice?.apkFile?.let { launchUpdateInstaller(it) }
+                    } else {
+                        updateNotice.value = null
+                    }
+                }
+            }
+            return true
+        }
+
+        if (!isUiVisible.value) {
+            if (playbackControlsLocked.value) {
+                if (keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
+                    playbackControlsLocked.value = false
+                    isPlaybackOverlayVisible.value = true
+                    selectedPlaybackAction.value = 6
+                }
+                return true
+            }
+            if (keyCode == KeyEvent.KEYCODE_BACK) {
+                when {
+                    isQualityPickerVisible.value -> isQualityPickerVisible.value = false
+                    isEpgOverlayVisible.value -> isEpgOverlayVisible.value = false
+                    isPlaybackOverlayVisible.value -> isPlaybackOverlayVisible.value = false
+                    else -> isCrtExiting.value = true
+                }
+                return true
+            }
+
+            // Playing video: Left/Right change channels. Down opens the playback
+            // toolbar. Up always opens the channel browser/menu.
+            if (keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_MENU) {
+                openChannelMenuFromPlayback()
+                return true
+            }
+            if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                val delta = if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) 1 else -1
+                when {
+                    isQualityPickerVisible.value ->
+                        qualityPickerIndex.value = (qualityPickerIndex.value + delta + qualityOptions.size) % qualityOptions.size
+                    isEpgOverlayVisible.value -> Unit // Guide navigation must never zap the playing channel.
+                    isPlaybackOverlayVisible.value ->
+                        selectedPlaybackAction.value = (selectedPlaybackAction.value + delta + 8) % 8
+                    else -> switchChannel(delta)
+                }
+                return true
+            }
+            if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                if (!isPlaybackOverlayVisible.value) {
+                    isPlaybackOverlayVisible.value = true
+                    selectedPlaybackAction.value = 0
+                } else if (!isQualityPickerVisible.value && !isEpgOverlayVisible.value) {
+                    selectedPlaybackAction.value = 7
+                }
+                return true
+            }
+            if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
+                if (!isPlaybackOverlayVisible.value) {
+                    isPlaybackOverlayVisible.value = true
+                } else if (isQualityPickerVisible.value) {
+                    selectedQuality.value = qualityOptions[qualityPickerIndex.value]
+                    getSharedPreferences("retro_iptv_prefs", Context.MODE_PRIVATE).edit()
+                        .putString("stream_quality", selectedQuality.value).apply()
+                    applyStreamQuality()
+                    isQualityPickerVisible.value = false
+                } else if (isEpgOverlayVisible.value) {
+                    isEpgOverlayVisible.value = false
+                } else {
+                    activatePlaybackAction(selectedPlaybackAction.value)
+                }
+                return true
+            }
+        } else {
+            if (keyCode == KeyEvent.KEYCODE_BACK) {
+                when {
+                    isSearchOpen.value -> isSearchOpen.value = false
+                    isSettingsOpen.value -> isSettingsOpen.value = false
+                    else -> isUiVisible.value = false
+                }
+                return true
+            }
+            resetIdleTimer()
+        }
+
+        return super.onKeyDown(keyCode, event)
+    }
+
+    override fun onStart() {
+        super.onStart()
+        isHostForeground = true
+    }
+
+    override fun onStop() {
+        // Home, app switching, and screen-off must never leave a live stream playing.
+        isHostForeground = false
+        retryJob?.cancel()
+        watchdogJob?.cancel()
+        playerController.pauseForBackground()
+        super.onStop()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        autoHideJob?.cancel()
+        watchdogJob?.cancel()
+        channelInfoJob?.cancel()
+        retryJob?.cancel()
+        playerController.release()
+    }
+}
