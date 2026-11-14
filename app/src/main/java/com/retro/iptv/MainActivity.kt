@@ -135,8 +135,23 @@ data class Channel(
     val epgId: String? = null,
     val language: String = "Bangla",
     val country: String = "Bangladesh",
-    val backupUrls: List<String> = emptyList()
-)
+    val backupUrls: List<String> = emptyList(),
+    val linkLabels: List<String> = emptyList()
+) {
+    val allUrls: List<String>
+        get() = listOf(url) + backupUrls
+
+    fun labelForStream(index: Int): String {
+        val total = allUrls.size
+        val raw = linkLabels.getOrNull(index)?.trim().orEmpty()
+        return when {
+            raw.isEmpty() -> "Link ${index + 1}"
+            total > 1 && linkLabels.count { it.trim().equals(raw, ignoreCase = true) } > 1 ->
+                "Link ${index + 1} ($raw)"
+            else -> raw
+        }
+    }
+}
 
 data class Programme(val channelId: String, val title: String, val startTimeMs: Long, val stopTimeMs: Long)
 
@@ -963,7 +978,15 @@ fun UpdateNoticeDialog(
 }
 
 @Composable
-private fun OverlayIconAction(icon: String, selected: Boolean, drawableId: Int? = null, onClick: () -> Unit) {
+private fun OverlayIconAction(
+    icon: String,
+    selected: Boolean,
+    drawableId: Int? = null,
+    enabled: Boolean = true,
+    badge: String? = null,
+    onClick: () -> Unit
+) {
+    val contentAlpha = if (enabled) 1f else 0.38f
     Box(
         modifier = Modifier.size(if (selected) 42.dp else 38.dp)
             .graphicsLayer { scaleX = if (selected) 1.04f else 1f; scaleY = if (selected) 1.04f else 1f }
@@ -976,9 +999,27 @@ private fun OverlayIconAction(icon: String, selected: Boolean, drawableId: Int? 
         contentAlignment = Alignment.Center
     ) {
         if (drawableId != null) {
-            Image(painter = painterResource(drawableId), contentDescription = null, modifier = Modifier.size(19.dp), colorFilter = ColorFilter.tint(Color.White))
+            Image(
+                painter = painterResource(drawableId),
+                contentDescription = null,
+                modifier = Modifier.size(19.dp).graphicsLayer { alpha = contentAlpha },
+                colorFilter = ColorFilter.tint(Color.White)
+            )
         } else {
-            Text(icon, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Normal)
+            Text(icon, color = Color.White.copy(alpha = contentAlpha), fontSize = 20.sp, fontWeight = FontWeight.Normal)
+        }
+        if (!badge.isNullOrBlank()) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 2.dp, bottom = 2.dp)
+                    .clip(CircleShape)
+                    .background(if (selected) Color.Black.copy(alpha = 0.78f) else FocusRed)
+                    .padding(horizontal = 3.5.dp, vertical = 0.5.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(badge, color = Color.White, fontSize = 8.sp, fontWeight = FontWeight.Black, lineHeight = 9.sp)
+            }
         }
     }
 }
@@ -993,6 +1034,7 @@ class MainActivity : ComponentActivity() {
     private val isUiVisible = mutableStateOf(true)
     private val isPlaybackOverlayVisible = mutableStateOf(false)
     private val isQualityPickerVisible = mutableStateOf(false)
+    private val isLinkPickerVisible = mutableStateOf(false)
     private val isEpgOverlayVisible = mutableStateOf(false)
     private val selectedPlaybackAction = mutableIntStateOf(0)
     private val playbackControlsLocked = mutableStateOf(false)
@@ -1001,6 +1043,9 @@ class MainActivity : ComponentActivity() {
     private var playbackPlayerView: PlayerView? = null
     private val qualityPickerIndex = mutableIntStateOf(0)
     private val qualityOptions = listOf("Auto", "1080p", "720p", "480p")
+    private val linkPickerIndex = mutableIntStateOf(0)
+    private val activeStreamIndex = mutableIntStateOf(0)
+    private val triedStreamIndices = mutableSetOf<Int>()
     private val isStartupVisible = mutableStateOf(true)
     private val isSearchOpen = mutableStateOf(false)
     private val isSettingsOpen = mutableStateOf(false)
@@ -1031,12 +1076,23 @@ class MainActivity : ComponentActivity() {
         const val MAX_PLAYLIST_CHANNELS = 20_000
         const val MAX_PLAYLIST_LINES = 500_000
         const val MAX_PLAYLIST_LINE_CHARS = 16 * 1024
+        // Playback toolbar action indices (must stay in sync with the toolbar layout).
+        const val ACTION_FAVOURITE = 0
+        const val ACTION_SEARCH = 1
+        const val ACTION_QUALITY = 2
+        const val ACTION_CHANGE_LINK = 3
+        const val ACTION_EPG = 4
+        const val ACTION_SETTINGS = 5
+        const val ACTION_SCALING = 6
+        const val ACTION_LOCK = 7
+        const val ACTION_MENU = 8
+        const val PLAYBACK_ACTION_COUNT = 9
+        const val WATCHDOG_TIMEOUT_MS = 15_000L
     }
 
     private val customM3uUrl = mutableStateOf("")
     private val isWatchdogEnabled = mutableStateOf(true)
     private val selectedQuality = mutableStateOf("Auto")
-    private var backupStreamIndex = 0
     private var currentStreamUrl = ""
     private val favoriteUrls = mutableStateListOf<String>()
     private val channels = mutableStateListOf<Channel>()
@@ -1047,16 +1103,125 @@ class MainActivity : ComponentActivity() {
 
     // Local fallback (first 10 channels from playlist.m3u), used only until the live playlist loads
     private val fallbackChannels = listOf(
-        Channel("Somoy TV", "https://ireentv.pages.dev/Somoy_TV_Server_6.m3u8", "News", "https://dl.dropbox.com/s/leielj83em5kg7h/somoy_news.png"),
-        Channel("Jamuna TV", "https://tvsen6.aynaott.com/KGdZEdA7qQ43dmPkgk1j/index.m3u8", "News", "https://raw.githubusercontent.com/time2shine/IPTV-logos/main/logos/bd_jamuna_tv.png"),
-        Channel("Ekattor TV", "https://tvsen6.aynaott.com/EWDrV5QskgarZEUBb3pU/index.m3u8", "News", "https://raw.githubusercontent.com/time2shine/IPTV-logos/main/logos/bd_ekattor_tv.png"),
-        Channel("DBC News", "https://tvsen6.aynaott.com/pF66Tkz0qFwP2aMMqHyt/index.m3u8", "News", "https://i.imgur.com/Qbt6q4z.png"),
-        Channel("Channel 24", "https://tvsen6.aynaott.com/YrVDF8gujkdh/index.m3u8", "News", "https://raw.githubusercontent.com/time2shine/IPTV-logos/main/logos/bd_channel_24.png"),
-        Channel("RTV", "http://116.204.149.16/rtvhd/index.m3u8", "Bangladesh", "https://i.imgur.com/yu8ugqt.png"),
-        Channel("Maasranga TV", "https://mtv.sunplex.live/MAASRANGA/index.m3u8", "Bangladesh", "https://i.imgur.com/uVZJMed.png"),
-        Channel("News 24", "https://tvsen6.aynaott.com/cdgr3tw6WoG7JyRnLbi0/index.m3u8", "News"),
-        Channel("Independent TV", "https://ireentv.pages.dev/Independent_TV_Server_1.m3u8", "News", "https://raw.githubusercontent.com/time2shine/IPTV-logos/main/logos/bd_independent_television.png"),
-        Channel("Ekhon TV", "https://tvsen6.aynaott.com/fbgZV3X17hwWcyfZ4pdb/index.m3u8", "News", "https://i.imgur.com/tRrDh6z.png")
+        Channel(
+            title = "Somoy TV",
+            url = "https://ireentv.pages.dev/Somoy_TV_Server_6.m3u8",
+            group = "News",
+            logo = "https://dl.dropbox.com/s/leielj83em5kg7h/somoy_news.png",
+            backupUrls = listOf(
+                "http://116.204.149.16/somoytv/index.m3u8",
+                "https://tvsen6.aynaott.com/4XcqdovJzbbC9WdJA9gk/index.m3u8",
+                "https://ireentv.pages.dev/Somoy_TV_Server_3.m3u8"
+            ),
+            linkLabels = listOf("HD", "HD", "Link 3", "Link 5")
+        ),
+        Channel(
+            title = "Jamuna TV",
+            url = "https://tvsen6.aynaott.com/KGdZEdA7qQ43dmPkgk1j/index.m3u8",
+            group = "News",
+            logo = "https://raw.githubusercontent.com/time2shine/IPTV-logos/main/logos/bd_jamuna_tv.png",
+            backupUrls = listOf(
+                "https://tvsen6.aynaott.com/KGdZEdA7qQ43dmPkgk1j/index.m3u8?e=1784102531&u=ee5437a7-c16b-4700-b317-a41b77d5cba9&token=d17e86aa2e6745043e84e0547d4fb69a",
+                "https://playztv-apps.pages.dev/jamuna-tv/index.m3u8"
+            ),
+            linkLabels = listOf("Link 1", "Link 2", "Link 3")
+        ),
+        Channel(
+            title = "Ekattor TV",
+            url = "https://tvsen6.aynaott.com/EWDrV5QskgarZEUBb3pU/index.m3u8",
+            group = "News",
+            logo = "https://raw.githubusercontent.com/time2shine/IPTV-logos/main/logos/bd_ekattor_tv.png",
+            backupUrls = listOf(
+                "https://ireentv.pages.dev/Ekattor_TV_Server_1.m3u8",
+                "https://tvsen6.aynaott.com/EWDrV5QskgarZEUBb3pU/index.m3u8?e=1784102532&u=ee5437a7-c16b-4700-b317-a41b77d5cba9&token=3b9afdda2bd5332e8f49ed7dfa321a06"
+            ),
+            linkLabels = listOf("HD", "HD", "HD")
+        ),
+        Channel(
+            title = "DBC News",
+            url = "https://tvsen6.aynaott.com/pF66Tkz0qFwP2aMMqHyt/index.m3u8",
+            group = "News",
+            logo = "https://i.imgur.com/Qbt6q4z.png",
+            backupUrls = listOf(
+                "https://iptv-proxy.ahmed-bd-org.workers.dev/dbc-news/index.m3u8",
+                "https://iptvlive.ahmed-bd-org.workers.dev/dbc-news-hd-1/index.m3u8",
+                "https://tvsen6.aynaott.com/pF66Tkz0qFwP2aMMqHyt/index.m3u8?e=1784102535&u=ee5437a7-c16b-4700-b317-a41b77d5cba9&token=d1848b7fd84cef719a89b61f0f5704ee",
+                "https://playztv-apps.pages.dev/dbc-news/index.m3u8"
+            ),
+            linkLabels = listOf("Link 1", "Link 2", "Link 3", "Link 4", "Link 5")
+        ),
+        Channel(
+            title = "Channel 24",
+            url = "https://tvsen6.aynaott.com/YrVDF8gujkdh/index.m3u8",
+            group = "News",
+            logo = "https://raw.githubusercontent.com/time2shine/IPTV-logos/main/logos/bd_channel_24.png",
+            backupUrls = listOf(
+                "https://ireentv.pages.dev/Channel_24_Backup_3.m3u8",
+                "https://live-vestinn.cdnvideo.ru/vestinn/nn24-khl/playlist.m3u8"
+            ),
+            linkLabels = listOf("Link 1", "Link 2", "Link 3")
+        ),
+        Channel(
+            title = "RTV",
+            url = "http://116.204.149.16/rtvhd/index.m3u8",
+            group = "Bangladesh",
+            logo = "https://i.imgur.com/yu8ugqt.png",
+            backupUrls = listOf(
+                "https://j6nfugukcl.gpcdn.net/tile_6/master.m3u8",
+                "https://tvsen5.aynaott.com/RtvHD/index.m3u8",
+                "https://tvsen5.aynaott.com/RtvHD/index.m3u8?e=1784102560&u=ee5437a7-c16b-4700-b317-a41b77d5cba9&token=341d28b0504fc6b2cb3fd78fafa0a854",
+                "https://app24.jagobd.com.bd/c3VydmVyX8RpbEU9Mi8xNy8yMFDEEHGcfRgzQ6NTAgdEoaeFzbF92YWxIZTO0U0ezN1IzMyfvcEdsEfeDeKiNkVN3PTOmdFseWRtaW51aiPhnPTI2/rtv-sg.stream/index.m3u8"
+            ),
+            linkLabels = listOf("Link 1", "Link 2", "Link 3", "Link 4", "Link 6")
+        ),
+        Channel(
+            title = "Maasranga TV",
+            url = "https://mtv.sunplex.live/MAASRANGA/index.m3u8",
+            group = "Bangladesh",
+            logo = "https://i.imgur.com/uVZJMed.png",
+            backupUrls = listOf(
+                "https://tvsen5.aynaott.com/maasrangatv/index.m3u8",
+                "http://116.204.149.16/maasranga/index.m3u8",
+                "https://ireentv.pages.dev/Maasranga_TV_Server_1.m3u8",
+                "https://ireentv.pages.dev/Maasranga_TV_Backup_3.m3u8",
+                "https://tvsen5.aynaott.com/maasrangatv/index.m3u8?e=1784102562&u=ee5437a7-c16b-4700-b317-a41b77d5cba9&token=2044540ee613d44b1175f2885b2ab1ee"
+            ),
+            linkLabels = listOf("HD", "HD", "HD", "HD", "HD", "HD")
+        ),
+        Channel(
+            title = "News 24",
+            url = "https://tvsen6.aynaott.com/cdgr3tw6WoG7JyRnLbi0/index.m3u8",
+            group = "News",
+            backupUrls = listOf(
+                "https://iptvlive.ahmed-bd-org.workers.dev/news-24-hd-1/index.m3u8",
+                "https://ireentv.pages.dev/News_24_Backup_1.m3u8",
+                "https://tvsen6.aynaott.com/cdgr3tw6WoG7JyRnLbi0/index.m3u8?e=1784102534&u=ee5437a7-c16b-4700-b317-a41b77d5cba9",
+                "https://iptvlive.ahmed-bd-org.workers.dev/news-24-1/index.m3u8",
+                "https://ireentv.pages.dev/News_24_HD_Server_1.m3u8"
+            ),
+            linkLabels = listOf("HD", "HD", "HD", "HD", "HD", "HD")
+        ),
+        Channel(
+            title = "Independent TV",
+            url = "https://ireentv.pages.dev/Independent_TV_Server_1.m3u8",
+            group = "News",
+            logo = "https://raw.githubusercontent.com/time2shine/IPTV-logos/main/logos/bd_independent_television.png",
+            backupUrls = listOf(
+                "https://tvsen6.aynaott.com/Wef2Vj67njeYGDqQNFB9/index.m3u8"
+            ),
+            linkLabels = listOf("Link 1", "Link 2")
+        ),
+        Channel(
+            title = "Ekhon TV",
+            url = "https://tvsen6.aynaott.com/fbgZV3X17hwWcyfZ4pdb/index.m3u8",
+            group = "News",
+            logo = "https://i.imgur.com/tRrDh6z.png",
+            backupUrls = listOf(
+                "https://ireentv.pages.dev/Ekhon_TV_Server_1.m3u8",
+                "https://tvsen6.aynaott.com/fbgZV3X17hwWcyfZ4pdb/tracks-v1a1/mono.ts.m3u8"
+            ),
+            linkLabels = listOf("HD", "HD", "HD")
+        )
     )
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -1087,6 +1252,9 @@ class MainActivity : ComponentActivity() {
                             retryAttempt = 0
                             playbackRetryMessage.value = null
                             watchdogJob?.cancel()
+                            // The link that works now is the only one in the new failover cycle.
+                            triedStreamIndices.clear()
+                            triedStreamIndices.add(activeStreamIndex.value)
                             lifecycleScope.launch {
                                 delay(650)
                                 isStartupVisible.value = false
@@ -1115,7 +1283,7 @@ class MainActivity : ComponentActivity() {
                         isBuffering.value = false
                         retryJob?.cancel()
                         retryAttempt += 1
-                        val maxRetries = 3
+                        val maxRetries = 2
                         if (retryAttempt <= maxRetries) {
                             val attempt = retryAttempt
                             playbackRetryMessage.value = "Stream failed — retry $attempt/$maxRetries…"
@@ -1127,27 +1295,7 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
                         } else {
-                            val idx = currentChannelIndex.value
-                            val channel = channels.getOrNull(idx)
-                            if (channel != null && backupStreamIndex < channel.backupUrls.size) {
-                                val backupUrl = channel.backupUrls[backupStreamIndex++]
-                                currentStreamUrl = backupUrl
-                                playbackRetryMessage.value = "Primary stream failed — trying backup ${backupStreamIndex}/${channel.backupUrls.size}…"
-                                retryAttempt = 0
-                                retryJob = lifecycleScope.launch {
-                                    delay(350)
-                                    player.setMediaItem(MediaItem.fromUri(backupUrl))
-                                    player.prepare()
-                                }
-                            } else {
-                                playbackRetryMessage.value = "All streams unavailable"
-                                if (idx in channels.indices) channels[idx] = channels[idx].copy(status = ChannelStatus.OFFLINE)
-                                if (isWatchdogEnabled.value) retryJob = lifecycleScope.launch {
-                                    delay(1200)
-                                    playbackRetryMessage.value = "Switching to next channel…"
-                                    switchChannel(1)
-                                }
-                            }
+                            tryNextBackupOrAdvanceChannel("Stream failed")
                         }
                     }
             })
@@ -1179,17 +1327,25 @@ class MainActivity : ComponentActivity() {
                     runCatching { initialMenuFocusRequester.requestFocus() }
                 }
             }
-            LaunchedEffect(isPlaybackOverlayVisible.value) { if (isPlaybackOverlayVisible.value) selectedPlaybackAction.value = 0 }
+            LaunchedEffect(isPlaybackOverlayVisible.value) {
+                if (isPlaybackOverlayVisible.value) {
+                    selectedPlaybackAction.value = ACTION_FAVOURITE
+                } else {
+                    isQualityPickerVisible.value = false
+                    isLinkPickerVisible.value = false
+                    isEpgOverlayVisible.value = false
+                }
+            }
             LaunchedEffect(
                 isPlaybackOverlayVisible.value, isUiVisible.value, isSearchOpen.value,
                 isSettingsOpen.value, selectedPlaybackAction.value,
-                isQualityPickerVisible.value, isEpgOverlayVisible.value
+                isQualityPickerVisible.value, isLinkPickerVisible.value, isEpgOverlayVisible.value
             ) {
                 // Keep the playback toolbar and its open panels available while the user
                 // is navigating them with a TV remote.
                 if (isPlaybackOverlayVisible.value && !isUiVisible.value &&
                     !isSearchOpen.value && !isSettingsOpen.value &&
-                    !isQualityPickerVisible.value && !isEpgOverlayVisible.value
+                    !isQualityPickerVisible.value && !isLinkPickerVisible.value && !isEpgOverlayVisible.value
                 ) {
                     delay(6500)
                     isPlaybackOverlayVisible.value = false
@@ -1209,6 +1365,7 @@ class MainActivity : ComponentActivity() {
 
             BackHandler(enabled = true) {
                 when {
+                    isLinkPickerVisible.value -> isLinkPickerVisible.value = false
                     isSearchOpen.value -> isSearchOpen.value = false
                     isSettingsOpen.value -> isSettingsOpen.value = false
                     isUiVisible.value -> isUiVisible.value = false
@@ -1270,11 +1427,17 @@ class MainActivity : ComponentActivity() {
                         val currentProgramme = schedule.firstOrNull { it.startTimeMs <= epgClockMs && it.stopTimeMs > epgClockMs }
                         val nextProgramme = schedule.firstOrNull { it.startTimeMs > epgClockMs }
                         Box(Modifier.fillMaxSize()) {
+                            val channelLinks = infoChannel?.allUrls.orEmpty()
+                            val hasAlternativeLinks = channelLinks.size > 1
+                            val activeLinkSubtitle = if (hasAlternativeLinks) {
+                                val safeIdx = activeStreamIndex.value.coerceIn(0, channelLinks.lastIndex)
+                                "${infoChannel?.labelForStream(safeIdx)} (${safeIdx + 1}/${channelLinks.size})"
+                            } else null
                             Row(Modifier.align(Alignment.TopStart).fillMaxWidth(0.68f).padding(start = 34.dp, top = 24.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                                 RemoteChannelLogo(infoChannel?.logo, infoChannel?.title ?: "TV", Modifier.size(54.dp).clip(RoundedCornerShape(8.dp)))
                                 Column(Modifier.weight(1f)) {
                                     Text(infoChannel?.title ?: "Live TV", color = Color.White, fontSize = 21.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    Text(listOfNotNull(infoChannel?.language, infoChannel?.country, currentResolution.value).joinToString("  •  ").ifBlank { "Live television" }, color = Color.White.copy(alpha = 0.78f), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text(listOfNotNull(infoChannel?.language, infoChannel?.country, currentResolution.value, activeLinkSubtitle).joinToString("  •  ").ifBlank { "Live television" }, color = Color.White.copy(alpha = 0.78f), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 }
                             }
                             val playbackLiveTransition = rememberInfiniteTransition(label = "playbackLivePulse")
@@ -1346,14 +1509,32 @@ class MainActivity : ComponentActivity() {
                                 horizontalArrangement = Arrangement.spacedBy(3.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                OverlayIconAction("", selectedPlaybackAction.value == 0, R.drawable.ic_favourite) { infoChannel?.let { toggleFavorite(it.url) } }
-                                OverlayIconAction("", selectedPlaybackAction.value == 1, R.drawable.ic_search) { isSearchOpen.value = true }
-                                OverlayIconAction("ᴴᴰ", selectedPlaybackAction.value == 2) { qualityPickerIndex.value = qualityOptions.indexOf(selectedQuality.value).coerceAtLeast(0); isQualityPickerVisible.value = !isQualityPickerVisible.value; isEpgOverlayVisible.value = false }
-                                OverlayIconAction("▤", selectedPlaybackAction.value == 3) { isEpgOverlayVisible.value = !isEpgOverlayVisible.value; isQualityPickerVisible.value = false }
-                                OverlayIconAction("⚙", selectedPlaybackAction.value == 4) { isSettingsOpen.value = true }
-                                OverlayIconAction("⛶", selectedPlaybackAction.value == 5) { cycleVideoScaling() }
-                                OverlayIconAction(if (playbackControlsLocked.value) "🔒" else "▣", selectedPlaybackAction.value == 6) { playbackControlsLocked.value = !playbackControlsLocked.value }
-                                OverlayIconAction("▦", selectedPlaybackAction.value == 7) { openChannelMenuFromPlayback() }
+                                OverlayIconAction("", selectedPlaybackAction.value == ACTION_FAVOURITE, R.drawable.ic_favourite) { infoChannel?.let { toggleFavorite(it.url) } }
+                                OverlayIconAction("", selectedPlaybackAction.value == ACTION_SEARCH, R.drawable.ic_search) { isSearchOpen.value = true }
+                                OverlayIconAction("ᴴᴰ", selectedPlaybackAction.value == ACTION_QUALITY) {
+                                    qualityPickerIndex.value = qualityOptions.indexOf(selectedQuality.value).coerceAtLeast(0)
+                                    isQualityPickerVisible.value = !isQualityPickerVisible.value
+                                    isLinkPickerVisible.value = false
+                                    isEpgOverlayVisible.value = false
+                                }
+                                OverlayIconAction(
+                                    icon = "",
+                                    selected = selectedPlaybackAction.value == ACTION_CHANGE_LINK,
+                                    drawableId = R.drawable.ic_change_link,
+                                    enabled = hasAlternativeLinks,
+                                    badge = if (hasAlternativeLinks) "${activeStreamIndex.value.coerceIn(0, channelLinks.lastIndex) + 1}/${channelLinks.size}" else null
+                                ) {
+                                    openOrCycleChannelLink()
+                                }
+                                OverlayIconAction("▤", selectedPlaybackAction.value == ACTION_EPG) {
+                                    isEpgOverlayVisible.value = !isEpgOverlayVisible.value
+                                    isQualityPickerVisible.value = false
+                                    isLinkPickerVisible.value = false
+                                }
+                                OverlayIconAction("⚙", selectedPlaybackAction.value == ACTION_SETTINGS) { isSettingsOpen.value = true }
+                                OverlayIconAction("⛶", selectedPlaybackAction.value == ACTION_SCALING) { cycleVideoScaling() }
+                                OverlayIconAction(if (playbackControlsLocked.value) "🔒" else "▣", selectedPlaybackAction.value == ACTION_LOCK) { playbackControlsLocked.value = !playbackControlsLocked.value }
+                                OverlayIconAction("▦", selectedPlaybackAction.value == ACTION_MENU) { openChannelMenuFromPlayback() }
                             }
                             if (isQualityPickerVisible.value) {
                                 // Keep the quality choices centred beneath the playback toolbar
@@ -1372,6 +1553,55 @@ class MainActivity : ComponentActivity() {
                                             .focusable()
                                             .padding(horizontal = 13.dp, vertical = 9.dp)) {
                                             Text(quality, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                        }
+                                    }
+                                }
+                            }
+                            if (isLinkPickerVisible.value && hasAlternativeLinks && infoChannel != null) {
+                                Row(
+                                    modifier = Modifier
+                                        .align(Alignment.BottomCenter)
+                                        .padding(bottom = 92.dp, start = 16.dp, end = 16.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(Color.Black.copy(alpha = 0.9f))
+                                        .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
+                                        .horizontalScroll(rememberScrollState())
+                                        .padding(7.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    channelLinks.forEachIndexed { index, _ ->
+                                        val isFocusedOption = linkPickerIndex.value == index
+                                        val isPlayingOption = activeStreamIndex.value == index
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(7.dp))
+                                                .background(
+                                                    when {
+                                                        isFocusedOption -> FocusRed
+                                                        isPlayingOption -> Color.White.copy(alpha = 0.16f)
+                                                        else -> Color.Transparent
+                                                    }
+                                                )
+                                                .border(
+                                                    width = if (isPlayingOption && !isFocusedOption) 1.dp else 0.dp,
+                                                    color = if (isPlayingOption && !isFocusedOption) Color.White.copy(alpha = 0.45f) else Color.Transparent,
+                                                    shape = RoundedCornerShape(7.dp)
+                                                )
+                                                .clickable {
+                                                    linkPickerIndex.value = index
+                                                    selectChannelStream(index, showToast = true)
+                                                    isLinkPickerVisible.value = false
+                                                }
+                                                .focusable()
+                                                .padding(horizontal = 13.dp, vertical = 9.dp)
+                                        ) {
+                                            Text(
+                                                text = infoChannel.labelForStream(index),
+                                                color = Color.White,
+                                                fontSize = 12.sp,
+                                                fontWeight = if (isFocusedOption || isPlayingOption) FontWeight.Bold else FontWeight.SemiBold
+                                            )
                                         }
                                     }
                                 }
@@ -2080,6 +2310,8 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private val attributeRegex = Regex("([A-Za-z0-9_\\-]+)=\"([^\"]*)\"")
+
     private fun parseM3u(content: String): List<Channel> {
         if (content.length > MAX_PLAYLIST_CHARS) return emptyList()
         val list = mutableListOf<Channel>()
@@ -2090,6 +2322,10 @@ class MainActivity : ComponentActivity() {
         var currentLanguage = "Unknown"
         var currentCountry = "Unknown"
         var currentEpgId: String? = null
+        // Alternative links for the current entry: x-backup -> 1, x-backup2 -> 2, ...
+        var currentBackups: List<Pair<Int, String>> = emptyList()
+        // x-link-labels, index 0 = primary URL, index N = x-backup N.
+        var currentLabels: List<String> = emptyList()
         var lineCount = 0
         for (line in content.lineSequence()) {
             if (++lineCount > MAX_PLAYLIST_LINES || list.size >= MAX_PLAYLIST_CHANNELS) break
@@ -2104,6 +2340,20 @@ class MainActivity : ComponentActivity() {
                 currentLogo = logoMatch?.groupValues?.get(1)?.trim()
                 val epgMatch = """tvg-id="([^"]*)"""".toRegex(RegexOption.IGNORE_CASE).find(trimmed)
                 currentEpgId = epgMatch?.groupValues?.get(1)?.trim()?.takeIf { it.isNotBlank() }
+                // Attributes live before the final comma; the channel name follows it.
+                val attributes = attributeRegex.findAll(trimmed.substringBeforeLast(","))
+                    .associate { it.groupValues[1].lowercase(Locale.ROOT) to it.groupValues[2] }
+                currentBackups = attributes.mapNotNull { (key, value) ->
+                    val order = when {
+                        key == "x-backup" -> 1
+                        key.startsWith("x-backup") -> key.removePrefix("x-backup").toIntOrNull()
+                        else -> null
+                    } ?: return@mapNotNull null
+                    val url = value.trim()
+                    if (!url.startsWith("http://", ignoreCase = true) && !url.startsWith("https://", ignoreCase = true)) return@mapNotNull null
+                    order to url
+                }.sortedBy { it.first }
+                currentLabels = attributes["x-link-labels"]?.split(',')?.map { it.trim() }.orEmpty()
                 val countryMatch = """tvg-country="([^"]*)"""" .trim().toRegex(RegexOption.IGNORE_CASE).find(trimmed)
                 currentCountry = countryMatch?.groupValues?.get(1)?.trim()?.takeIf { it.isNotBlank() } ?: "Unknown"
                 val languageMatch = """tvg-language="([^"]*)"""" .trim().toRegex(RegexOption.IGNORE_CASE).find(trimmed)
@@ -2136,9 +2386,14 @@ class MainActivity : ComponentActivity() {
                             region = currentRegion,
                             epgId = currentEpgId,
                             language = currentLanguage,
-                            country = currentCountry
+                            country = currentCountry,
+                            backupUrls = currentBackups.map { it.second },
+                            linkLabels = listOf(currentLabels.getOrNull(0).orEmpty()) +
+                                currentBackups.map { currentLabels.getOrNull(it.first).orEmpty() }
                         )
                     )
+                    currentBackups = emptyList()
+                    currentLabels = emptyList()
                     currentTitle = ""
                     currentGroup = "General"
                     currentLogo = null
@@ -2149,9 +2404,22 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+        // Entries sharing a channel name are alternative links of one channel. Keep the
+        // first URL as primary, then every other URL in order, dropping duplicates.
         return list.groupBy { it.title.trim().lowercase(Locale.ROOT) }.values.map { variants ->
             val primary = variants.first()
-            primary.copy(backupUrls = variants.map { it.url }.filter { it != primary.url }.distinct())
+            val seen = HashSet<String>()
+            val urls = mutableListOf<String>()
+            val labels = mutableListOf<String>()
+            for (variant in variants) {
+                variant.allUrls.forEachIndexed { index, link ->
+                    if (seen.add(link)) {
+                        urls.add(link)
+                        labels.add(variant.linkLabels.getOrNull(index).orEmpty())
+                    }
+                }
+            }
+            primary.copy(backupUrls = urls.drop(1), linkLabels = labels)
         }
     }
 
@@ -2163,7 +2431,8 @@ class MainActivity : ComponentActivity() {
         recordRecentlyWatched(channel)
         retryJob?.cancel()
         retryAttempt = 0
-        backupStreamIndex = 0
+        triedStreamIndices.clear()
+        isLinkPickerVisible.value = false
         playbackRetryMessage.value = null
         channelInfoJob?.cancel()
         // Keep the channel banner visible for five seconds after the menu fades away.
@@ -2173,21 +2442,87 @@ class MainActivity : ComponentActivity() {
             isChannelInfoVisible.value = false
         }
 
-        currentStreamUrl = channel.url
-        val mediaItem = MediaItem.fromUri(currentStreamUrl)
-        player.setMediaItem(mediaItem)
-        player.prepare()
-        // Selecting a channel is an explicit user action; start playback after a foreground pause.
-        playerController.play()
+        // Always start a channel on its primary link.
+        loadLink(channel, 0)
+    }
 
-        if (isWatchdogEnabled.value) {
-            watchdogJob?.cancel()
-            watchdogJob = lifecycleScope.launch {
-                delay(15_000)
-                if (isBuffering.value) {
-                    switchChannel(1)
-                }
+    // Loads one of the channel's links into the player. Does not cancel retry jobs; callers own that.
+    private fun loadLink(channel: Channel, linkIndex: Int) {
+        val url = channel.allUrls.getOrNull(linkIndex) ?: return
+        activeStreamIndex.value = linkIndex
+        triedStreamIndices.add(linkIndex)
+        currentStreamUrl = url
+        retryAttempt = 0
+        player.setMediaItem(MediaItem.fromUri(url))
+        player.prepare()
+        // Selecting a channel or link is an explicit user action; start playback after a foreground pause.
+        playerController.play()
+        armWatchdog()
+    }
+
+    private fun armWatchdog() {
+        watchdogJob?.cancel()
+        if (!isWatchdogEnabled.value) return
+        watchdogJob = lifecycleScope.launch {
+            delay(WATCHDOG_TIMEOUT_MS)
+            if (isBuffering.value) tryNextBackupOrAdvanceChannel("Stream timed out")
+        }
+    }
+
+    // Failover: try the next untried link of the current channel; when every link has failed,
+    // mark the channel offline and move on to the next channel.
+    private fun tryNextBackupOrAdvanceChannel(reasonPrefix: String) {
+        val idx = currentChannelIndex.value
+        val channel = channels.getOrNull(idx) ?: return
+        val total = channel.allUrls.size
+        val current = activeStreamIndex.value.coerceIn(0, total - 1)
+        triedStreamIndices.add(current)
+        val nextIndex = (1 until total).asSequence()
+            .map { (current + it) % total }
+            .firstOrNull { it !in triedStreamIndices }
+
+        retryJob?.cancel()
+        if (nextIndex != null) {
+            playbackRetryMessage.value = "$reasonPrefix — trying ${channel.labelForStream(nextIndex)} (${triedStreamIndices.size + 1}/$total)…"
+            retryJob = lifecycleScope.launch {
+                delay(350)
+                if (currentChannelIndex.value == idx) loadLink(channel, nextIndex)
             }
+        } else {
+            channels[idx] = channel.copy(status = ChannelStatus.OFFLINE)
+            playbackRetryMessage.value = "All links unavailable — switching to next channel…"
+            retryJob = lifecycleScope.launch {
+                delay(1200)
+                if (currentChannelIndex.value == idx) switchChannel(1)
+            }
+        }
+    }
+
+    // Manual link choice from the playback toolbar or picker.
+    private fun selectChannelStream(index: Int, showToast: Boolean = false) {
+        val channel = channels.getOrNull(currentChannelIndex.value) ?: return
+        if (index !in channel.allUrls.indices) return
+        retryJob?.cancel()
+        playbackRetryMessage.value = null
+        isBuffering.value = true
+        loadLink(channel, index)
+        if (showToast) {
+            Toast.makeText(this, "Playing ${channel.labelForStream(index)}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun openOrCycleChannelLink() {
+        val channel = channels.getOrNull(currentChannelIndex.value)
+        if (channel == null || channel.allUrls.size <= 1) {
+            Toast.makeText(this, "No alternative links for this channel", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val opening = !isLinkPickerVisible.value
+        isLinkPickerVisible.value = opening
+        if (opening) {
+            linkPickerIndex.value = activeStreamIndex.value.coerceIn(0, channel.allUrls.lastIndex)
+            isQualityPickerVisible.value = false
+            isEpgOverlayVisible.value = false
         }
     }
 
@@ -2208,21 +2543,24 @@ class MainActivity : ComponentActivity() {
 
     private fun activatePlaybackAction(index: Int) {
         when (index) {
-            0 -> channels.getOrNull(currentChannelIndex.value)?.let { toggleFavorite(it.url) }
-            1 -> isSearchOpen.value = true
-            2 -> {
+            ACTION_FAVOURITE -> channels.getOrNull(currentChannelIndex.value)?.let { toggleFavorite(it.url) }
+            ACTION_SEARCH -> isSearchOpen.value = true
+            ACTION_QUALITY -> {
                 qualityPickerIndex.value = qualityOptions.indexOf(selectedQuality.value).coerceAtLeast(0)
                 isQualityPickerVisible.value = !isQualityPickerVisible.value
+                isLinkPickerVisible.value = false
                 isEpgOverlayVisible.value = false
             }
-            3 -> {
+            ACTION_CHANGE_LINK -> openOrCycleChannelLink()
+            ACTION_EPG -> {
                 isEpgOverlayVisible.value = !isEpgOverlayVisible.value
                 isQualityPickerVisible.value = false
+                isLinkPickerVisible.value = false
             }
-            4 -> isSettingsOpen.value = true
-            5 -> cycleVideoScaling()
-            6 -> playbackControlsLocked.value = !playbackControlsLocked.value
-            7 -> openChannelMenuFromPlayback()
+            ACTION_SETTINGS -> isSettingsOpen.value = true
+            ACTION_SCALING -> cycleVideoScaling()
+            ACTION_LOCK -> playbackControlsLocked.value = !playbackControlsLocked.value
+            ACTION_MENU -> openChannelMenuFromPlayback()
         }
     }
 
@@ -2270,10 +2608,13 @@ class MainActivity : ComponentActivity() {
                         if (playbackControlsLocked.value) {
                             playbackControlsLocked.value = false
                             isPlaybackOverlayVisible.value = true
-                            selectedPlaybackAction.value = 6
+                            selectedPlaybackAction.value = ACTION_LOCK
                         } else if (!isPlaybackOverlayVisible.value) {
                             isPlaybackOverlayVisible.value = true
-                            selectedPlaybackAction.value = 0
+                            selectedPlaybackAction.value = ACTION_FAVOURITE
+                        } else if (isLinkPickerVisible.value) {
+                            selectChannelStream(linkPickerIndex.value, showToast = true)
+                            isLinkPickerVisible.value = false
                         } else if (isQualityPickerVisible.value) {
                             selectedQuality.value = qualityOptions[qualityPickerIndex.value]
                             getSharedPreferences("retro_iptv_prefs", Context.MODE_PRIVATE).edit()
@@ -2343,12 +2684,13 @@ class MainActivity : ComponentActivity() {
                 if (keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
                     playbackControlsLocked.value = false
                     isPlaybackOverlayVisible.value = true
-                    selectedPlaybackAction.value = 6
+                    selectedPlaybackAction.value = ACTION_LOCK
                 }
                 return true
             }
             if (keyCode == KeyEvent.KEYCODE_BACK) {
                 when {
+                    isLinkPickerVisible.value -> isLinkPickerVisible.value = false
                     isQualityPickerVisible.value -> isQualityPickerVisible.value = false
                     isEpgOverlayVisible.value -> isEpgOverlayVisible.value = false
                     isPlaybackOverlayVisible.value -> isPlaybackOverlayVisible.value = false
@@ -2365,12 +2707,15 @@ class MainActivity : ComponentActivity() {
             }
             if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
                 val delta = if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) 1 else -1
+                val linkCount = channels.getOrNull(currentChannelIndex.value)?.allUrls?.size ?: 1
                 when {
+                    isLinkPickerVisible.value ->
+                        linkPickerIndex.value = (linkPickerIndex.value + delta + linkCount) % linkCount
                     isQualityPickerVisible.value ->
                         qualityPickerIndex.value = (qualityPickerIndex.value + delta + qualityOptions.size) % qualityOptions.size
                     isEpgOverlayVisible.value -> Unit // Guide navigation must never zap the playing channel.
                     isPlaybackOverlayVisible.value ->
-                        selectedPlaybackAction.value = (selectedPlaybackAction.value + delta + 8) % 8
+                        selectedPlaybackAction.value = (selectedPlaybackAction.value + delta + PLAYBACK_ACTION_COUNT) % PLAYBACK_ACTION_COUNT
                     else -> switchChannel(delta)
                 }
                 return true
@@ -2378,15 +2723,18 @@ class MainActivity : ComponentActivity() {
             if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
                 if (!isPlaybackOverlayVisible.value) {
                     isPlaybackOverlayVisible.value = true
-                    selectedPlaybackAction.value = 0
-                } else if (!isQualityPickerVisible.value && !isEpgOverlayVisible.value) {
-                    selectedPlaybackAction.value = 7
+                    selectedPlaybackAction.value = ACTION_FAVOURITE
+                } else if (!isQualityPickerVisible.value && !isLinkPickerVisible.value && !isEpgOverlayVisible.value) {
+                    selectedPlaybackAction.value = ACTION_MENU
                 }
                 return true
             }
             if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
                 if (!isPlaybackOverlayVisible.value) {
                     isPlaybackOverlayVisible.value = true
+                } else if (isLinkPickerVisible.value) {
+                    selectChannelStream(linkPickerIndex.value, showToast = true)
+                    isLinkPickerVisible.value = false
                 } else if (isQualityPickerVisible.value) {
                     selectedQuality.value = qualityOptions[qualityPickerIndex.value]
                     getSharedPreferences("retro_iptv_prefs", Context.MODE_PRIVATE).edit()
