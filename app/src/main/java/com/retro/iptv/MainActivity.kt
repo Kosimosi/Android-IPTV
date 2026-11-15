@@ -7,6 +7,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings as AndroidSystemSettings
+import android.speech.RecognizerIntent
 import android.graphics.BitmapFactory
 import android.graphics.Bitmap
 import android.graphics.Color as AndroidColor
@@ -703,93 +704,193 @@ fun ChannelCard(
     }
 }
 
-// --- SEARCH MODAL ---
+// --- LANDSCAPE GLASS CHANNEL SEARCH DRAWER ---
 @Composable
 fun SearchModal(
     channels: List<Channel>,
+    favoriteUrls: List<String>,
+    recentUrls: List<String>,
+    epgPrograms: List<Programme>,
+    voiceQuery: String,
+    onVoiceSearch: () -> Unit,
     onSelectChannel: (Channel) -> Unit,
     onClose: () -> Unit
 ) {
     var query by remember { mutableStateOf("") }
+    var selectedFilter by remember { mutableStateOf("All") }
     val context = LocalContext.current
     val searchFocusRequester = remember { FocusRequester() }
+    val isTv = remember { context.packageManager.hasSystemFeature("android.software.leanback") }
     LaunchedEffect(Unit) {
-        if (context.packageManager.hasSystemFeature("android.software.leanback")) {
-            delay(120)
-            runCatching { searchFocusRequester.requestFocus() }
+        delay(if (isTv) 160L else 80L)
+        runCatching { searchFocusRequester.requestFocus() }
+    }
+    LaunchedEffect(voiceQuery) {
+        if (voiceQuery.isNotBlank()) query = voiceQuery
+    }
+
+    val now = System.currentTimeMillis()
+    val visibleChannels = remember(query, selectedFilter, channels, favoriteUrls, recentUrls, epgPrograms) {
+        val recent = recentUrls.mapNotNull { url -> channels.firstOrNull { it.url == url } }
+        val favorites = channels.filter { it.url in favoriteUrls }
+        val base = when (selectedFilter) {
+            "Favorites" -> favorites
+            "Recent" -> recent
+            "News", "Sports", "Movies" -> channels.filter { it.group.contains(selectedFilter, true) || it.title.contains(selectedFilter, true) }
+            else -> (recent + favorites + channels).distinctBy { it.url }
+        }
+        if (query.isBlank()) base
+        else {
+            val number = query.trim().toIntOrNull()
+            base.filterIndexed { _, channel ->
+                val index = channels.indexOfFirst { it.url == channel.url }
+                val numberMatch = number != null && index + 1 == number
+                numberMatch || channel.title.contains(query.trim(), ignoreCase = true)
+            }
         }
     }
-    val results = remember(query, channels) {
-        if (query.isBlank()) emptyList()
-        else channels.filter { it.title.contains(query, ignoreCase = true) }
-    }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.85f)),
-        contentAlignment = Alignment.Center
-    ) {
-        Box(
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val drawerWidth = (maxWidth * 0.40f).coerceIn(280.dp, 560.dp)
+        // The video remains visible under a light scrim; tapping outside dismisses the drawer.
+        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.40f)).clickable { onClose() })
+        Column(
             modifier = Modifier
-                .fillMaxWidth().padding(horizontal = 16.dp).widthIn(max = 480.dp)
-                .clip(RoundedCornerShape(14.dp))
-                .background(OakSurface)
-                .border(1.5.dp, Color.White.copy(alpha = 0.16f), RoundedCornerShape(14.dp))
-                .padding(24.dp)
+                .fillMaxHeight()
+                .width(drawerWidth)
+                .imePadding()
+                .clip(RoundedCornerShape(topEnd = 16.dp, bottomEnd = 16.dp))
+                .background(Color(0xD112141A))
+                .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(topEnd = 16.dp, bottomEnd = 16.dp))
+                .clickable(enabled = false) { }
+                .padding(start = 16.dp, end = 14.dp, top = 16.dp, bottom = 12.dp),
+            verticalArrangement = Arrangement.Top
         ) {
-            Column {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("SEARCH CHANNELS", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Black)
-                    Text("✕", color = Color.White, fontSize = 16.sp, modifier = Modifier.clip(CircleShape).clickable { onClose() }.padding(8.dp))
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(44.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(OakSurfaceElevated)
-                        .border(1.dp, Color.White.copy(alpha = 0.14f), RoundedCornerShape(8.dp))
-                        .padding(horizontal = 12.dp),
-                    contentAlignment = Alignment.CenterStart
-                ) {
-                    if (query.isEmpty()) {
-                        Text("Type channel name...", color = WarmAshMuted, fontSize = 13.sp)
-                    }
+            Row(
+                Modifier.fillMaxWidth().height(48.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Color(0xFF292D36))
+                    .border(1.dp, Color.White.copy(alpha = 0.16f), RoundedCornerShape(16.dp))
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                ModernSearchIcon(Modifier.size(20.dp))
+                Spacer(Modifier.width(10.dp))
+                Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                    if (query.isEmpty()) Text("Search channel name or number...", color = Color.White.copy(alpha = 0.55f), fontSize = 12.sp, maxLines = 1)
                     BasicTextField(
                         value = query,
                         onValueChange = { query = it },
                         textStyle = TextStyle(color = Color.White, fontSize = 13.sp),
-                        cursorBrush = SolidColor(Color.White),
+                        cursorBrush = SolidColor(FocusRed),
                         modifier = Modifier.fillMaxWidth().focusRequester(searchFocusRequester),
                         singleLine = true
                     )
                 }
+                Spacer(Modifier.width(8.dp))
+                Box(
+                    Modifier.size(34.dp).clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.08f))
+                        .border(1.dp, Color.White.copy(alpha = 0.12f), CircleShape)
+                        .clickable { if (query.isEmpty()) onVoiceSearch() else query = "" }
+                        .focusable(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(if (query.isEmpty()) "🎙" else "×", color = Color.White, fontSize = if (query.isEmpty()) 16.sp else 23.sp, fontWeight = FontWeight.Medium)
+                }
+            }
 
-                Spacer(modifier = Modifier.height(14.dp))
+            Spacer(Modifier.height(12.dp))
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(7.dp),
+                contentPadding = PaddingValues(end = 4.dp)
+            ) {
+                items(listOf("All", "Favorites", "Recent", "News", "Sports", "Movies")) { filter ->
+                    var focused by remember { mutableStateOf(false) }
+                    Box(
+                        Modifier.clip(CircleShape)
+                            .background(if (selectedFilter == filter || focused) FocusRed else Color.White.copy(alpha = 0.07f))
+                            .border(1.dp, if (selectedFilter == filter || focused) FocusRed else Color.White.copy(alpha = 0.14f), CircleShape)
+                            .onFocusChanged { focused = it.isFocused }
+                            .clickable { selectedFilter = filter }
+                            .focusable()
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(filter, color = Color.White, fontSize = 11.sp, fontWeight = if (selectedFilter == filter || focused) FontWeight.Bold else FontWeight.Medium)
+                    }
+                }
+            }
 
-                LazyColumn(modifier = Modifier.heightIn(max = 240.dp)) {
-                    items(results) { ch ->
+            Spacer(Modifier.height(10.dp))
+            Text(
+                if (query.isBlank()) when (selectedFilter) {
+                    "Favorites" -> "YOUR FAVOURITES"
+                    "Recent" -> "RECENTLY WATCHED"
+                    else -> "RECENT & FAVOURITES"
+                } else "${visibleChannels.size} MATCHING CHANNELS",
+                color = Color.White.copy(alpha = 0.56f),
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 0.8.sp,
+                modifier = Modifier.padding(bottom = 7.dp)
+            )
+            if (visibleChannels.isEmpty()) {
+                Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+                    Text(if (query.isBlank()) "No channels in this section yet" else "No matching channels found", color = Color.White.copy(alpha = 0.65f), fontSize = 13.sp)
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
+                    itemsIndexed(visibleChannels, key = { _, channel -> channel.url }) { _, channel ->
+                        val channelIndex = channels.indexOfFirst { it.url == channel.url }
+                        val currentProgram = epgPrograms.firstOrNull {
+                            it.channelId.equals(channel.epgId, ignoreCase = true) &&
+                                it.startTimeMs <= now && it.stopTimeMs > now
+                        }
+                        val upcomingProgram = epgPrograms.firstOrNull {
+                            it.channelId.equals(channel.epgId, ignoreCase = true) && it.startTimeMs > now
+                        }
+                        val streamBadge = channel.linkLabels.firstOrNull { label ->
+                            val upper = label.uppercase()
+                            upper.contains("FHD") || upper.contains("HD") || upper.contains("4K") || upper.contains("1080") || upper.contains("720")
+                        }?.uppercase()
+                        var focused by remember { mutableStateOf(false) }
                         Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    onSelectChannel(ch)
-                                    onClose()
-                                }
-                                .padding(vertical = 8.dp),
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(11.dp))
+                                .background(if (focused) FocusRed.copy(alpha = 0.30f) else Color.White.copy(alpha = 0.045f))
+                                .border(1.dp, if (focused) FocusRed else Color.White.copy(alpha = 0.07f), RoundedCornerShape(11.dp))
+                                .onFocusChanged { focused = it.isFocused }
+                                .clickable { onSelectChannel(channel) }
+                                .focusable()
+                                .padding(horizontal = 9.dp, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            RemoteChannelLogo(url = ch.logo, channelTitle = ch.title, modifier = Modifier.size(24.dp))
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text(text = ch.title, color = Color.White, fontSize = 14.sp)
+                            RemoteChannelLogo(channel.logo, channel.title, Modifier.size(40.dp).clip(RoundedCornerShape(8.dp)))
+                            Spacer(Modifier.width(10.dp))
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                                    Text((channelIndex + 1).toString().padStart(3, '0'), color = FocusRed, fontSize = 11.sp, fontWeight = FontWeight.Black)
+                                    Text(channel.title, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
+                                Text(
+                                    currentProgram?.let { "${it.title} • Live" }
+                                        ?: upcomingProgram?.let { "Next: ${it.title}" }
+                                        ?: "Live television",
+                                    color = Color.White.copy(alpha = 0.58f),
+                                    fontSize = 10.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            if (streamBadge != null) {
+                                Spacer(Modifier.width(6.dp))
+                                Box(Modifier.clip(RoundedCornerShape(5.dp)).background(Color.White.copy(alpha = 0.12f)).padding(horizontal = 6.dp, vertical = 4.dp)) {
+                                    Text(streamBadge, color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
                         }
                     }
                 }
@@ -1065,6 +1166,7 @@ class MainActivity : ComponentActivity() {
     private val triedStreamIndices = mutableSetOf<Int>()
     private val isStartupVisible = mutableStateOf(true)
     private val isSearchOpen = mutableStateOf(false)
+    private val searchVoiceQuery = mutableStateOf("")
     private val isSettingsOpen = mutableStateOf(false)
     private val isCrtExiting = mutableStateOf(false)
     private val updateStatus = mutableStateOf("Check for a newer RETROTV version.")
@@ -1106,6 +1208,7 @@ class MainActivity : ComponentActivity() {
         const val ACTION_NUMBER_PAD = 9
         const val PLAYBACK_ACTION_COUNT = 10
         const val WATCHDOG_TIMEOUT_MS = 15_000L
+        const val REQUEST_VOICE_SEARCH = 7412
     }
 
     private val customM3uUrl = mutableStateOf("")
@@ -1920,6 +2023,21 @@ class MainActivity : ComponentActivity() {
                     if (isSearchOpen.value) {
                         SearchModal(
                             channels = channels,
+                            favoriteUrls = favoriteUrls.toList(),
+                            recentUrls = recentChannelUrls.toList(),
+                            epgPrograms = epgPrograms.toList(),
+                            voiceQuery = searchVoiceQuery.value,
+                            onVoiceSearch = {
+                                try {
+                                    val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                                        putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                                        putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak a channel name or number")
+                                    }
+                                    startActivityForResult(intent, REQUEST_VOICE_SEARCH)
+                                } catch (_: Exception) {
+                                    Toast.makeText(this@MainActivity, "Voice search is not available on this device", Toast.LENGTH_SHORT).show()
+                                }
+                            },
                             onSelectChannel = { ch ->
                                 val idx = channels.indexOf(ch)
                                 if (idx >= 0) {
@@ -3004,6 +3122,15 @@ class MainActivity : ComponentActivity() {
         }
 
         return super.onKeyDown(keyCode, event)
+    }
+
+    @Deprecated("Deprecated in Android API; retained for broad TV device compatibility")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQUEST_VOICE_SEARCH && resultCode == RESULT_OK) {
+            val spoken = data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull().orEmpty()
+            if (spoken.isNotBlank()) searchVoiceQuery.value = spoken
+        }
     }
 
     override fun onStart() {
