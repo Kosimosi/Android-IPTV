@@ -1580,6 +1580,7 @@ class MainActivity : ComponentActivity() {
                                         letterSpacing = 2.sp
                                     )
                                     val previewChannel = channels.getOrNull(channelNumberPreviewIndex.intValue)
+                                        .takeIf { channelNumberPreviewIndex.intValue >= 0 && typedChannelNumber.value.toIntOrNull() == channelNumberPreviewIndex.intValue + 1 }
                                     val hasLongerMatch = typedChannelNumber.value.isNotBlank() &&
                                         !typedChannelNumber.value.startsWith("0") &&
                                         channels.indices.any { index ->
