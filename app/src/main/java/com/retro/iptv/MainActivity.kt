@@ -713,6 +713,8 @@ fun SearchModal(
     epgPrograms: List<Programme>,
     voiceQuery: String,
     onVoiceSearch: () -> Unit,
+    tickerMode: String,
+    tickerHeadlines: List<String>,
     onSelectChannel: (Channel) -> Unit,
     onClose: () -> Unit
 ) {
@@ -824,11 +826,12 @@ fun SearchModal(
 
             Spacer(Modifier.height(10.dp))
             Text(
-                if (query.isBlank()) when (selectedFilter) {
-                    "Favorites" -> "YOUR FAVOURITES"
-                    "Recent" -> "RECENTLY WATCHED"
-                    else -> "RECENT & FAVOURITES"
-                } else "${visibleChannels.size} MATCHING CHANNELS",
+                if (query.isNotBlank()) "SEARCH RESULTS (${visibleChannels.size})" else when (selectedFilter) {
+                    "Favorites" -> "FAVOURITES (${visibleChannels.size})"
+                    "Recent" -> "RECENTLY WATCHED (${visibleChannels.size})"
+                    "News", "Sports", "Movies" -> "${selectedFilter.uppercase()} CHANNELS (${visibleChannels.size})"
+                    else -> "RECENT & FAVOURITES (${visibleChannels.size})"
+                },
                 color = Color.White.copy(alpha = 0.56f),
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
@@ -868,7 +871,12 @@ fun SearchModal(
                                 .padding(horizontal = 9.dp, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            RemoteChannelLogo(channel.logo, channel.title, Modifier.size(40.dp).clip(RoundedCornerShape(8.dp)))
+                            Box(Modifier.size(40.dp)) {
+                                RemoteChannelLogo(channel.logo, channel.title, Modifier.fillMaxSize().clip(RoundedCornerShape(8.dp)))
+                                Box(Modifier.align(Alignment.BottomEnd).size(9.dp).clip(CircleShape)
+                                    .background(when (channel.status) { ChannelStatus.ONLINE -> Color(0xFF20C66B); ChannelStatus.OFFLINE -> Color(0xFFE53935); else -> Color(0xFF8A8A8A) })
+                                    .border(1.dp, Color(0xD112141A), CircleShape))
+                            }
                             Spacer(Modifier.width(10.dp))
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
@@ -878,7 +886,10 @@ fun SearchModal(
                                 Text(
                                     currentProgram?.let { "${it.title} • Live" }
                                         ?: upcomingProgram?.let { "Next: ${it.title}" }
-                                        ?: "Live television",
+                                        ?: listOfNotNull(
+                                            channel.group.takeIf { it.isNotBlank() && !it.equals("General", true) && !it.equals("Unknown", true) },
+                                            channel.country.takeIf { it.isNotBlank() && !it.equals("Unknown", true) }?.let { "Live Stream • $it" }
+                                        ).joinToString(" • ").ifBlank { "Live Stream" },
                                     color = Color.White.copy(alpha = 0.58f),
                                     fontSize = 10.sp,
                                     maxLines = 1,
@@ -913,6 +924,8 @@ fun SettingsModal(
     onLoadCustomM3u: (String) -> Unit,
     onResetM3u: () -> Unit,
     onToggleWatchdog: (Boolean) -> Unit,
+    tickerMode: String,
+    onTickerModeChange: (String) -> Unit,
     onClose: () -> Unit
 ) {
     var urlInput by remember(customM3uUrl) { mutableStateOf(customM3uUrl) }
@@ -1015,6 +1028,19 @@ fun SettingsModal(
                 ) {
                     Text("15s Watchdog Auto-skip", color = Color.White, fontSize = 12.sp)
                     Text(if (isWatchdogEnabled) "ON" else "OFF", color = if (isWatchdogEnabled) Color.White else WarmAshMuted, fontWeight = FontWeight.Bold)
+                }
+
+                Text("LIVE NEWS TICKER", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("OFF", "OVERLAYS ONLY", "ALWAYS ON").forEach { mode ->
+                        val selected = tickerMode == mode
+                        Box(Modifier.weight(1f).clip(RoundedCornerShape(7.dp))
+                            .background(if (selected) FocusRed else OakSurfaceElevated)
+                            .border(1.dp, if (selected) FocusRed else Color.White.copy(alpha = 0.12f), RoundedCornerShape(7.dp))
+                            .clickable { onTickerModeChange(mode) }.padding(vertical = 9.dp), contentAlignment = Alignment.Center) {
+                            Text(mode, color = Color.White, fontSize = 9.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium, textAlign = TextAlign.Center)
+                        }
+                    }
                 }
 
                 Text("STREAM QUALITY", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
@@ -1213,6 +1239,8 @@ class MainActivity : ComponentActivity() {
 
     private val customM3uUrl = mutableStateOf("")
     private val isWatchdogEnabled = mutableStateOf(true)
+    private val liveNewsTickerMode = mutableStateOf("OFF")
+    private val tickerHeadlines = mutableStateListOf<String>()
     private val selectedQuality = mutableStateOf("Auto")
     private var currentStreamUrl = ""
     private val favoriteUrls = mutableStateListOf<String>()
@@ -1361,6 +1389,19 @@ class MainActivity : ComponentActivity() {
         }
         downloadedUpdateApk = null
         isUpdateDownloaded.value = false
+        lifecycleScope.launch(Dispatchers.IO) {
+            val feed = fetchUrl("https://raw.githubusercontent.com/Kosimosi/Android-IPTV/main/highlights.json")
+            val headlines = runCatching {
+                val array = org.json.JSONObject(feed ?: "{}").optJSONArray("headlines")
+                (0 until (array?.length() ?: 0)).mapNotNull { index ->
+                    array?.optString(index)?.trim()?.takeIf { it.isNotBlank() }
+                }.take(20)
+            }.getOrDefault(emptyList())
+            withContext(Dispatchers.Main) {
+                tickerHeadlines.clear()
+                tickerHeadlines.addAll(headlines)
+            }
+        }
 
         // Always query GitHub on startup before downloading or offering an update.
         lifecycleScope.launch {
@@ -1543,7 +1584,7 @@ class MainActivity : ComponentActivity() {
                     )
 
                     AnimatedVisibility(
-                        visible = isPlaybackOverlayVisible.value && !isUiVisible.value,
+                        visible = isPlaybackOverlayVisible.value && !isUiVisible.value && !isSearchOpen.value && !isSettingsOpen.value,
                         modifier = Modifier.fillMaxSize(),
                         enter = fadeIn(tween(180)),
                         exit = fadeOut(tween(220))
@@ -1577,7 +1618,13 @@ class MainActivity : ComponentActivity() {
                                 }
                                 Column(Modifier.weight(1f)) {
                                     Text(infoChannel?.title ?: "Live TV", color = Color.White, fontSize = 21.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    Text(listOfNotNull(infoChannel?.language, infoChannel?.country, currentResolution.value, activeLinkSubtitle).joinToString("  •  ").ifBlank { "Live television" }, color = Color.White.copy(alpha = 0.78f), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    val channelMeta = listOfNotNull(
+                                        infoChannel?.group?.takeIf { it.isNotBlank() && !it.equals("General", true) && !it.equals("Unknown", true) },
+                                        infoChannel?.country?.takeIf { it.isNotBlank() && !it.equals("Unknown", true) },
+                                        currentResolution.value,
+                                        activeLinkSubtitle
+                                    ).distinct().joinToString("  •  ").ifBlank { "Live Stream" }
+                                    Text(channelMeta, color = Color.White.copy(alpha = 0.78f), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 }
                             }
                             val playbackLiveTransition = rememberInfiniteTransition(label = "playbackLivePulse")
@@ -2027,6 +2074,8 @@ class MainActivity : ComponentActivity() {
                             recentUrls = recentChannelUrls.toList(),
                             epgPrograms = epgPrograms.toList(),
                             voiceQuery = searchVoiceQuery.value,
+                            tickerMode = liveNewsTickerMode.value,
+                            tickerHeadlines = tickerHeadlines.toList(),
                             onVoiceSearch = {
                                 try {
                                     val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
@@ -2077,6 +2126,11 @@ class MainActivity : ComponentActivity() {
                                 loadPlaylists()
                             },
                             onToggleWatchdog = { isWatchdogEnabled.value = it },
+                            tickerMode = liveNewsTickerMode.value,
+                            onTickerModeChange = {
+                                liveNewsTickerMode.value = it
+                                getSharedPreferences("retro_iptv_prefs", Context.MODE_PRIVATE).edit().putString("live_news_ticker_mode", it).apply()
+                            },
                             onClose = { isSettingsOpen.value = false }
                         )
                     }
@@ -2323,6 +2377,7 @@ class MainActivity : ComponentActivity() {
         favoriteUrls.addAll(savedFavs)
         customM3uUrl.value = prefs.getString("custom_m3u_url", "") ?: ""
         selectedQuality.value = prefs.getString("stream_quality", "Auto") ?: "Auto"
+        liveNewsTickerMode.value = prefs.getString("live_news_ticker_mode", "OFF") ?: "OFF"
         recentChannelUrls.clear()
         recentChannelUrls.addAll(prefs.getString("recent_channel_urls", "")?.split("\\n")?.filter { it.isNotBlank() }?.take(8) ?: emptyList())
     }
