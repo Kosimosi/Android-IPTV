@@ -1458,7 +1458,20 @@ class MainActivity : ComponentActivity() {
                                 "${infoChannel?.labelForStream(safeIdx)} (${safeIdx + 1}/${channelLinks.size})"
                             } else null
                             Row(Modifier.align(Alignment.TopStart).fillMaxWidth(0.68f).padding(start = 34.dp, top = 24.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                                RemoteChannelLogo(infoChannel?.logo, infoChannel?.title ?: "TV", Modifier.size(54.dp).clip(RoundedCornerShape(8.dp)))
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(5.dp)
+                                ) {
+                                    RemoteChannelLogo(infoChannel?.logo, infoChannel?.title ?: "TV", Modifier.size(54.dp).clip(RoundedCornerShape(8.dp)))
+                                    Text(
+                                        text = (currentChannelIndex.value + 1).toString().padStart(3, '0'),
+                                        color = FocusRed,
+                                        fontSize = 25.sp,
+                                        fontWeight = FontWeight.Black,
+                                        letterSpacing = 1.2.sp,
+                                        maxLines = 1
+                                    )
+                                }
                                 Column(Modifier.weight(1f)) {
                                     Text(infoChannel?.title ?: "Live TV", color = Color.White, fontSize = 21.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     Text(listOfNotNull(infoChannel?.language, infoChannel?.country, currentResolution.value, activeLinkSubtitle).joinToString("  •  ").ifBlank { "Live television" }, color = Color.White.copy(alpha = 0.78f), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
