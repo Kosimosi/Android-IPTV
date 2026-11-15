@@ -579,6 +579,7 @@ fun HeroSection(
 fun ChannelCard(
     channel: Channel,
     isSelected: Boolean,
+    channelNumber: Int? = null,
     onSelect: () -> Unit,
     onUserInteract: () -> Unit,
     modifier: Modifier = Modifier.width(88.dp)
@@ -682,6 +683,22 @@ fun ChannelCard(
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 modifier = Modifier.fillMaxWidth().heightIn(min = 28.dp)
             )
+        }
+        if (channelNumber != null && channelNumber > 0) {
+            Box(
+                modifier = Modifier.align(Alignment.TopStart).padding(5.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(Color.Black.copy(alpha = 0.78f))
+                    .padding(horizontal = 5.dp, vertical = 2.dp)
+            ) {
+                Text(
+                    text = channelNumber.toString().padStart(3, '0'),
+                    color = Color.White,
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 0.4.sp
+                )
+            }
         }
     }
 }
@@ -1100,6 +1117,8 @@ class MainActivity : ComponentActivity() {
     private var autoHideJob: Job? = null
     private var watchdogJob: Job? = null
     private var channelInfoJob: Job? = null
+    private val typedChannelNumber = mutableStateOf("")
+    private var channelNumberJob: Job? = null
 
     // Local fallback (first 10 channels from playlist.m3u), used only until the live playlist loads
     private val fallbackChannels = listOf(
@@ -1627,6 +1646,24 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
+                    if (typedChannelNumber.value.isNotEmpty() && !isUiVisible.value) {
+                        Box(
+                            modifier = Modifier.align(Alignment.TopCenter).padding(top = 72.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(Color.Black.copy(alpha = 0.82f))
+                                .border(1.dp, FocusRed.copy(alpha = 0.85f), RoundedCornerShape(10.dp))
+                                .padding(horizontal = 18.dp, vertical = 9.dp)
+                        ) {
+                            Text(
+                                "CH  ${typedChannelNumber.value}",
+                                color = Color.White,
+                                fontSize = 22.sp,
+                                fontWeight = FontWeight.Black,
+                                letterSpacing = 1.5.sp
+                            )
+                        }
+                    }
+
                     // Foreground OTT Interface
                     AnimatedVisibility(
                         visible = isUiVisible.value,
@@ -1723,6 +1760,7 @@ class MainActivity : ComponentActivity() {
                                                 LazyRow(modifier = Modifier.focusGroup(), horizontalArrangement = Arrangement.spacedBy(6.dp), contentPadding = PaddingValues(horizontal = 24.dp)) {
                                                     items(recentlyWatched, key = { it.url }) { ch ->
                                                         ChannelCard(channel = ch, isSelected = ch.url == activeChannel?.url,
+                                                            channelNumber = channels.indexOfFirst { it.url == ch.url }.takeIf { it >= 0 }?.plus(1),
                                                             onSelect = { val idx = channels.indexOfFirst { it.url == ch.url }; if (idx >= 0) { currentChannelIndex.value = idx; playChannel(idx); isUiVisible.value = false; isSearchOpen.value = false; isSettingsOpen.value = false } },
                                                             onUserInteract = { resetIdleTimer() })
                                                     }
@@ -1761,6 +1799,7 @@ class MainActivity : ComponentActivity() {
                                                                 ChannelCard(
                                                                     channel = ch,
                                                                     isSelected = ch.url == activeChannel?.url,
+                                                                    channelNumber = channels.indexOfFirst { it.url == ch.url }.takeIf { it >= 0 }?.plus(1),
                                                                     modifier = Modifier.width(tileWidth),
                                                                     onSelect = {
                                                                         val idx = channels.indexOf(ch)
@@ -2666,6 +2705,39 @@ class MainActivity : ComponentActivity() {
                 }
             }
             return true
+        }
+
+        // Numeric channel entry is available during playback. A short pause commits
+        // shorter numbers; reaching the playlist's maximum digit count commits immediately.
+        if (!isUiVisible.value && !isSearchOpen.value && !isSettingsOpen.value) {
+            val digit = when {
+                keyCode in KeyEvent.KEYCODE_0..KeyEvent.KEYCODE_9 -> keyCode - KeyEvent.KEYCODE_0
+                keyCode in KeyEvent.KEYCODE_NUMPAD_0..KeyEvent.KEYCODE_NUMPAD_9 -> keyCode - KeyEvent.KEYCODE_NUMPAD_0
+                else -> -1
+            }
+            if (digit >= 0) {
+                if (channels.isEmpty()) return true
+                val maxDigits = channels.size.toString().length.coerceAtLeast(1)
+                val prefix = if (typedChannelNumber.value.length >= maxDigits) "" else typedChannelNumber.value
+                typedChannelNumber.value = (prefix + digit.toString()).take(maxDigits)
+                channelNumberJob?.cancel()
+                channelNumberJob = lifecycleScope.launch {
+                    val complete = typedChannelNumber.value.length >= maxDigits
+                    delay(if (complete) 120L else 1100L)
+                    val requestedNumber = typedChannelNumber.value.toIntOrNull()
+                    typedChannelNumber.value = ""
+                    if (requestedNumber != null) {
+                        val targetIndex = requestedNumber - 1
+                        if (targetIndex in channels.indices) {
+                            currentChannelIndex.value = targetIndex
+                            playChannel(targetIndex)
+                        } else {
+                            Toast.makeText(this@MainActivity, "Channel $requestedNumber not found", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+                return true
+            }
         }
 
         // Modal overlays take Back priority even when the main browser is hidden
