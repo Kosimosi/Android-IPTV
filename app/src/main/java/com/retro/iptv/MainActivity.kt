@@ -1103,7 +1103,8 @@ class MainActivity : ComponentActivity() {
         const val ACTION_SCALING = 6
         const val ACTION_LOCK = 7
         const val ACTION_MENU = 8
-        const val PLAYBACK_ACTION_COUNT = 9
+        const val ACTION_NUMBER_PAD = 9
+        const val PLAYBACK_ACTION_COUNT = 10
         const val WATCHDOG_TIMEOUT_MS = 15_000L
     }
 
@@ -1119,6 +1120,10 @@ class MainActivity : ComponentActivity() {
     private var channelInfoJob: Job? = null
     private val typedChannelNumber = mutableStateOf("")
     private var channelNumberJob: Job? = null
+    private val isChannelNumberPadVisible = mutableStateOf(false)
+    private val channelNumberPadFocus = mutableIntStateOf(0)
+    private val channelNumberOriginalIndex = mutableIntStateOf(0)
+    private val channelNumberPreviewIndex = mutableIntStateOf(-1)
 
     // Local fallback (first 10 channels from playlist.m3u), used only until the live playlist loads
     private val fallbackChannels = listOf(
@@ -1554,6 +1559,72 @@ class MainActivity : ComponentActivity() {
                                 OverlayIconAction("⛶", selectedPlaybackAction.value == ACTION_SCALING) { cycleVideoScaling() }
                                 OverlayIconAction(if (playbackControlsLocked.value) "🔒" else "▣", selectedPlaybackAction.value == ACTION_LOCK) { playbackControlsLocked.value = !playbackControlsLocked.value }
                                 OverlayIconAction("▦", selectedPlaybackAction.value == ACTION_MENU) { openChannelMenuFromPlayback() }
+                                OverlayIconAction("123", selectedPlaybackAction.value == ACTION_NUMBER_PAD) { openChannelNumberPad() }
+                            }
+                            if (isChannelNumberPadVisible.value) {
+                                Column(
+                                    modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 92.dp)
+                                        .clip(RoundedCornerShape(16.dp))
+                                        .background(Color.Black.copy(alpha = 0.94f))
+                                        .border(1.dp, FocusRed.copy(alpha = 0.8f), RoundedCornerShape(16.dp))
+                                        .padding(14.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(9.dp)
+                                ) {
+                                    Text("TUNE CHANNEL", color = FocusRed, fontSize = 11.sp, fontWeight = FontWeight.Black, letterSpacing = 1.2.sp)
+                                    Text(
+                                        typedChannelNumber.value.ifBlank { "— — —" },
+                                        color = Color.White,
+                                        fontSize = 25.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        letterSpacing = 2.sp
+                                    )
+                                    val previewNumber = typedChannelNumber.value.toIntOrNull()
+                                    val previewChannel = previewNumber?.let { channels.getOrNull(it - 1) }
+                                    Text(
+                                        previewChannel?.title ?: "Enter a channel number",
+                                        color = Color.White.copy(alpha = 0.72f),
+                                        fontSize = 12.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    val keypadRows = listOf(
+                                        listOf("1", "2", "3"),
+                                        listOf("4", "5", "6"),
+                                        listOf("7", "8", "9"),
+                                        listOf("CLEAR", "0", "OK")
+                                    )
+                                    keypadRows.forEachIndexed { rowIndex, row ->
+                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            row.forEachIndexed { colIndex, keyLabel ->
+                                                val focusIndex = rowIndex * 3 + colIndex
+                                                val focused = channelNumberPadFocus.intValue == focusIndex
+                                                Box(
+                                                    modifier = Modifier
+                                                        .width(if (keyLabel == "CLEAR") 82.dp else 58.dp)
+                                                        .height(42.dp)
+                                                        .clip(RoundedCornerShape(9.dp))
+                                                        .background(if (focused) FocusRed else Color.White.copy(alpha = 0.10f))
+                                                        .border(if (focused) 1.dp else 0.dp, if (focused) Color.White.copy(alpha = 0.8f) else Color.Transparent, RoundedCornerShape(9.dp))
+                                                        .clickable {
+                                                            channelNumberPadFocus.intValue = focusIndex
+                                                            when (focusIndex) {
+                                                                9 -> clearChannelNumberEntry()
+                                                                11 -> confirmChannelNumberEntry()
+                                                                10 -> appendChannelNumberDigit(0)
+                                                                else -> appendChannelNumberDigit(focusIndex + 1)
+                                                            }
+                                                        }
+                                                        .focusable(),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Text(keyLabel, color = Color.White, fontSize = if (keyLabel.length > 1) 10.sp else 17.sp, fontWeight = FontWeight.Bold)
+                                                }
+                                            }
+                                        }
+                                    }
+                                    Text("Preview updates after a short pause • OK confirms • Back cancels", color = Color.White.copy(alpha = 0.58f), fontSize = 10.sp)
+                                }
                             }
                             if (isQualityPickerVisible.value) {
                                 // Keep the quality choices centred beneath the playback toolbar
@@ -2580,6 +2651,77 @@ class MainActivity : ComponentActivity() {
         resetIdleTimer()
     }
 
+    private fun openChannelNumberPad() {
+        channelNumberJob?.cancel()
+        typedChannelNumber.value = ""
+        channelNumberOriginalIndex.intValue = currentChannelIndex.value
+        channelNumberPreviewIndex.intValue = -1
+        channelNumberPadFocus.intValue = 0
+        isQualityPickerVisible.value = false
+        isLinkPickerVisible.value = false
+        isEpgOverlayVisible.value = false
+        isChannelNumberPadVisible.value = true
+    }
+
+    private fun appendChannelNumberDigit(digit: Int) {
+        if (digit !in 0..9 || channels.isEmpty()) return
+        val maxDigits = channels.size.toString().length.coerceAtLeast(1)
+        if (typedChannelNumber.value.length >= maxDigits) return
+        typedChannelNumber.value += digit.toString()
+        channelNumberJob?.cancel()
+        channelNumberJob = lifecycleScope.launch {
+            delay(900L)
+            if (!isChannelNumberPadVisible.value) return@launch
+            val requestedNumber = typedChannelNumber.value.toIntOrNull() ?: return@launch
+            val targetIndex = requestedNumber - 1
+            if (targetIndex in channels.indices) {
+                channelNumberPreviewIndex.intValue = targetIndex
+                currentChannelIndex.value = targetIndex
+                playChannel(targetIndex)
+            }
+        }
+    }
+
+    private fun clearChannelNumberEntry() {
+        channelNumberJob?.cancel()
+        typedChannelNumber.value = ""
+        channelNumberPreviewIndex.intValue = -1
+        val original = channelNumberOriginalIndex.intValue
+        if (currentChannelIndex.value != original) {
+            currentChannelIndex.value = original
+            playChannel(original)
+        }
+    }
+
+    private fun confirmChannelNumberEntry() {
+        channelNumberJob?.cancel()
+        val requestedNumber = typedChannelNumber.value.toIntOrNull()
+        val targetIndex = (requestedNumber ?: 0) - 1
+        if (targetIndex in channels.indices) {
+            if (currentChannelIndex.value != targetIndex) {
+                currentChannelIndex.value = targetIndex
+                playChannel(targetIndex)
+            }
+            isChannelNumberPadVisible.value = false
+            typedChannelNumber.value = ""
+            channelNumberPreviewIndex.intValue = -1
+        } else {
+            Toast.makeText(this, if (typedChannelNumber.value.isBlank()) "Enter a channel number" else "Channel $requestedNumber not found", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun cancelChannelNumberEntry() {
+        channelNumberJob?.cancel()
+        val original = channelNumberOriginalIndex.intValue
+        if (channelNumberPreviewIndex.intValue >= 0 && original in channels.indices && currentChannelIndex.value != original) {
+            currentChannelIndex.value = original
+            playChannel(original)
+        }
+        isChannelNumberPadVisible.value = false
+        typedChannelNumber.value = ""
+        channelNumberPreviewIndex.intValue = -1
+    }
+
     private fun activatePlaybackAction(index: Int) {
         when (index) {
             ACTION_FAVOURITE -> channels.getOrNull(currentChannelIndex.value)?.let { toggleFavorite(it.url) }
@@ -2600,6 +2742,7 @@ class MainActivity : ComponentActivity() {
             ACTION_SCALING -> cycleVideoScaling()
             ACTION_LOCK -> playbackControlsLocked.value = !playbackControlsLocked.value
             ACTION_MENU -> openChannelMenuFromPlayback()
+            ACTION_NUMBER_PAD -> openChannelNumberPad()
         }
     }
 
@@ -2660,6 +2803,14 @@ class MainActivity : ComponentActivity() {
                                 .putString("stream_quality", selectedQuality.value).apply()
                             applyStreamQuality()
                             isQualityPickerVisible.value = false
+                        } else if (isChannelNumberPadVisible.value) {
+                            val focus = channelNumberPadFocus.intValue
+                            when (focus) {
+                                9 -> clearChannelNumberEntry()
+                                11 -> confirmChannelNumberEntry()
+                                10 -> appendChannelNumberDigit(0)
+                                else -> appendChannelNumberDigit(focus + 1)
+                            }
                         } else if (isEpgOverlayVisible.value) {
                             isEpgOverlayVisible.value = false
                         } else {
@@ -2707,8 +2858,7 @@ class MainActivity : ComponentActivity() {
             return true
         }
 
-        // Numeric channel entry is available during playback. A short pause commits
-        // shorter numbers; reaching the playlist's maximum digit count commits immediately.
+        // The on-screen keypad is a modal D-pad surface. Preview never confirms; OK does.
         if (!isUiVisible.value && !isSearchOpen.value && !isSettingsOpen.value) {
             val digit = when {
                 keyCode in KeyEvent.KEYCODE_0..KeyEvent.KEYCODE_9 -> keyCode - KeyEvent.KEYCODE_0
@@ -2739,6 +2889,18 @@ class MainActivity : ComponentActivity() {
                 }
                 return true
             }
+        }
+
+        if (isChannelNumberPadVisible.value) {
+            when (keyCode) {
+                KeyEvent.KEYCODE_BACK -> cancelChannelNumberEntry()
+                KeyEvent.KEYCODE_DPAD_LEFT -> channelNumberPadFocus.intValue = if (channelNumberPadFocus.intValue % 3 == 0) channelNumberPadFocus.intValue else channelNumberPadFocus.intValue - 1
+                KeyEvent.KEYCODE_DPAD_RIGHT -> channelNumberPadFocus.intValue = if (channelNumberPadFocus.intValue % 3 == 2) channelNumberPadFocus.intValue else channelNumberPadFocus.intValue + 1
+                KeyEvent.KEYCODE_DPAD_UP -> channelNumberPadFocus.intValue = (channelNumberPadFocus.intValue - 3).coerceAtLeast(0)
+                KeyEvent.KEYCODE_DPAD_DOWN -> channelNumberPadFocus.intValue = (channelNumberPadFocus.intValue + 3).coerceAtMost(11)
+                else -> return true
+            }
+            return true
         }
 
         // Modal overlays take Back priority even when the main browser is hidden
