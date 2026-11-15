@@ -1717,7 +1717,7 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
-                    if (typedChannelNumber.value.isNotEmpty() && !isUiVisible.value) {
+                    if (typedChannelNumber.value.isNotEmpty() && !isUiVisible.value && !isChannelNumberPadVisible.value) {
                         Box(
                             modifier = Modifier.align(Alignment.TopCenter).padding(top = 72.dp)
                                 .clip(RoundedCornerShape(10.dp))
@@ -2858,7 +2858,7 @@ class MainActivity : ComponentActivity() {
             return true
         }
 
-        // The on-screen keypad is a modal D-pad surface. Preview never confirms; OK does.
+        // Physical digit keys use the same preview/confirm flow as the on-screen keypad.
         if (!isUiVisible.value && !isSearchOpen.value && !isSettingsOpen.value) {
             val digit = when {
                 keyCode in KeyEvent.KEYCODE_0..KeyEvent.KEYCODE_9 -> keyCode - KeyEvent.KEYCODE_0
@@ -2867,26 +2867,8 @@ class MainActivity : ComponentActivity() {
             }
             if (digit >= 0) {
                 if ((event?.repeatCount ?: 0) > 0) return true
-                if (channels.isEmpty()) return true
-                val maxDigits = channels.size.toString().length.coerceAtLeast(1)
-                val prefix = if (typedChannelNumber.value.length >= maxDigits) "" else typedChannelNumber.value
-                typedChannelNumber.value = (prefix + digit.toString()).take(maxDigits)
-                channelNumberJob?.cancel()
-                channelNumberJob = lifecycleScope.launch {
-                    val complete = typedChannelNumber.value.length >= maxDigits
-                    delay(if (complete) 120L else 1100L)
-                    val requestedNumber = typedChannelNumber.value.toIntOrNull()
-                    typedChannelNumber.value = ""
-                    if (requestedNumber != null) {
-                        val targetIndex = requestedNumber - 1
-                        if (targetIndex in channels.indices) {
-                            currentChannelIndex.value = targetIndex
-                            playChannel(targetIndex)
-                        } else {
-                            Toast.makeText(this@MainActivity, "Channel $requestedNumber not found", Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                }
+                if (!isChannelNumberPadVisible.value) openChannelNumberPad()
+                appendChannelNumberDigit(digit)
                 return true
             }
         }
