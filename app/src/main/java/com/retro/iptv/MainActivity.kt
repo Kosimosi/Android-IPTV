@@ -2716,6 +2716,7 @@ class MainActivity : ComponentActivity() {
                 else -> -1
             }
             if (digit >= 0) {
+                if ((event?.repeatCount ?: 0) > 0) return true
                 if (channels.isEmpty()) return true
                 val maxDigits = channels.size.toString().length.coerceAtLeast(1)
                 val prefix = if (typedChannelNumber.value.length >= maxDigits) "" else typedChannelNumber.value
