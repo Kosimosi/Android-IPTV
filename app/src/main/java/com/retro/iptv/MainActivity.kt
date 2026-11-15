@@ -75,6 +75,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -738,7 +739,7 @@ private fun NewsTickerBar(headlines: List<String>, modifier: Modifier = Modifier
             .clip(RoundedCornerShape(6.dp))
             .background(Color(0xE6101116))
             .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(6.dp))
-            .onFocusChanged { focused = it.isFocused },
+            .onFocusChanged { focused = it.isFocused }.focusable(),
         factory = { context ->
             android.widget.TextView(context).apply {
                 text = tickerText
