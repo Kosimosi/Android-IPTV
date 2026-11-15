@@ -704,6 +704,61 @@ fun ChannelCard(
     }
 }
 
+@Composable
+private fun LiveNowEventCard(title: String, channel: Channel, onClick: () -> Unit) {
+    var focused by remember { mutableStateOf(false) }
+    Row(
+        Modifier.width(230.dp).clip(RoundedCornerShape(10.dp))
+            .background(if (focused) FocusRed.copy(alpha = 0.22f) else Color.White.copy(alpha = 0.06f))
+            .border(1.dp, if (focused) FocusRed else Color.White.copy(alpha = 0.12f), RoundedCornerShape(10.dp))
+            .onFocusChanged { focused = it.isFocused }
+            .clickable { onClick() }.focusable()
+            .padding(10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                Box(Modifier.size(6.dp).clip(CircleShape).background(FocusRed))
+                Text("LIVE NOW", color = FocusRed, fontSize = 9.sp, fontWeight = FontWeight.Black)
+            }
+            Text(title, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(channel.title, color = WarmAshMuted, fontSize = 9.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        RemoteChannelLogo(channel.logo, channel.title, Modifier.size(34.dp).clip(RoundedCornerShape(6.dp)))
+    }
+}
+
+@Composable
+private fun NewsTickerBar(headlines: List<String>, modifier: Modifier = Modifier) {
+    if (headlines.isEmpty()) return
+    var focused by remember { mutableStateOf(false) }
+    val tickerText = remember(headlines) { headlines.joinToString("     •     ") }
+    AndroidView(
+        modifier = modifier.fillMaxWidth().height(30.dp)
+            .clip(RoundedCornerShape(6.dp))
+            .background(Color(0xE6101116))
+            .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(6.dp))
+            .onFocusChanged { focused = it.isFocused },
+        factory = { context ->
+            android.widget.TextView(context).apply {
+                text = tickerText
+                setTextColor(android.graphics.Color.WHITE)
+                textSize = 11f
+                setSingleLine(true)
+                ellipsize = android.text.TextUtils.TruncateAt.MARQUEE
+                marqueeRepeatLimit = -1
+                isSelected = true
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                setPadding(12, 0, 12, 0)
+            }
+        },
+        update = { view ->
+            if (view.text.toString() != tickerText) view.text = tickerText
+            view.isSelected = !focused
+        }
+    )
+}
+
 // --- LANDSCAPE GLASS CHANNEL SEARCH DRAWER ---
 @Composable
 fun SearchModal(
@@ -732,6 +787,21 @@ fun SearchModal(
     }
 
     val now = System.currentTimeMillis()
+    val liveNowItems = remember(epgPrograms, channels, now) {
+        epgPrograms.asSequence()
+            .filter { it.startTimeMs <= now && it.stopTimeMs > now }
+            .filter { programme ->
+                listOf("live", "cricket", "football", "final", "breaking", "match", "bulletin")
+                    .any { keyword -> programme.title.contains(keyword, true) }
+            }
+            .mapNotNull { programme ->
+                channels.firstOrNull { !it.epgId.isNullOrBlank() && it.epgId.equals(programme.channelId, true) }
+                    ?.let { channel -> channel to programme }
+            }
+            .distinctBy { it.first.url }
+            .take(3)
+            .toList()
+    }
     val visibleChannels = remember(query, selectedFilter, channels, favoriteUrls, recentUrls, epgPrograms) {
         val recent = recentUrls.mapNotNull { url -> channels.firstOrNull { it.url == url } }
         val favorites = channels.filter { it.url in favoriteUrls }
@@ -824,6 +894,19 @@ fun SearchModal(
                 }
             }
 
+            if (query.isBlank() && liveNowItems.isNotEmpty()) {
+                Text("LIVE NOW • SPORTS & EVENTS", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Black, letterSpacing = 0.8.sp)
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                    items(liveNowItems, key = { it.first.url }) { (channel, programme) ->
+                        LiveNowEventCard(programme.title, channel) { onSelectChannel(channel) }
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+            }
+            if (query.isBlank() && tickerMode != "OFF" && tickerHeadlines.isNotEmpty()) {
+                NewsTickerBar(tickerHeadlines)
+                Spacer(Modifier.height(8.dp))
+            }
             Spacer(Modifier.height(10.dp))
             Text(
                 if (query.isNotBlank()) "SEARCH RESULTS (${visibleChannels.size})" else when (selectedFilter) {
@@ -1991,6 +2074,33 @@ class MainActivity : ComponentActivity() {
                                             modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp))
                                     }
 
+                                    val liveNowHome = epgPrograms.asSequence()
+                                        .filter { it.startTimeMs <= epgClockMs && it.stopTimeMs > epgClockMs }
+                                        .filter { programme -> listOf("live", "cricket", "football", "final", "breaking", "match", "bulletin").any { programme.title.contains(it, true) } }
+                                        .mapNotNull { programme ->
+                                            channels.firstOrNull { !it.epgId.isNullOrBlank() && it.epgId.equals(programme.channelId, true) }
+                                                ?.let { channel -> channel to programme }
+                                        }.distinctBy { it.first.url }.take(3).toList()
+                                    if (liveNowHome.isNotEmpty()) {
+                                        item {
+                                            Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                                                Text("LIVE NOW • SPORTS & EVENTS", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Black,
+                                                    letterSpacing = 1.sp, modifier = Modifier.padding(horizontal = 24.dp))
+                                                LazyRow(modifier = Modifier.focusGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(horizontal = 24.dp)) {
+                                                    items(liveNowHome, key = { it.first.url }) { (channel, programme) ->
+                                                        LiveNowEventCard(programme.title, channel) {
+                                                            val idx = channels.indexOfFirst { it.url == channel.url }
+                                                            if (idx >= 0) { currentChannelIndex.value = idx; playChannel(idx); isUiVisible.value = false }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    if (liveNewsTickerMode.value != "OFF" && tickerHeadlines.isNotEmpty()) {
+                                        item { NewsTickerBar(tickerHeadlines, Modifier.padding(horizontal = 24.dp)) }
+                                    }
+
                                     val recentlyWatched = recentChannelUrls.mapNotNull { url -> channels.firstOrNull { it.url == url } }
                                     if (recentlyWatched.isNotEmpty()) {
                                         item {
@@ -2066,6 +2176,14 @@ class MainActivity : ComponentActivity() {
                     }
 
 
+
+                    if (liveNewsTickerMode.value == "ALWAYS ON" && !isUiVisible.value &&
+                        !isSearchOpen.value && !isSettingsOpen.value && tickerHeadlines.isNotEmpty()
+                    ) {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+                            NewsTickerBar(tickerHeadlines, Modifier.padding(horizontal = 20.dp, vertical = 10.dp))
+                        }
+                    }
 
                     if (isSearchOpen.value) {
                         SearchModal(
