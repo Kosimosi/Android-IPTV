@@ -1579,10 +1579,15 @@ class MainActivity : ComponentActivity() {
                                         fontWeight = FontWeight.Bold,
                                         letterSpacing = 2.sp
                                     )
-                                    val previewNumber = typedChannelNumber.value.toIntOrNull()
-                                    val previewChannel = previewNumber?.let { channels.getOrNull(it - 1) }
+                                    val previewChannel = channels.getOrNull(channelNumberPreviewIndex.intValue)
+                                    val hasLongerMatch = typedChannelNumber.value.isNotBlank() &&
+                                        !typedChannelNumber.value.startsWith("0") &&
+                                        channels.indices.any { index ->
+                                            val candidate = (index + 1).toString()
+                                            candidate.length > typedChannelNumber.value.length && candidate.startsWith(typedChannelNumber.value)
+                                        }
                                     Text(
-                                        previewChannel?.title ?: "Enter a channel number",
+                                        previewChannel?.title ?: if (hasLongerMatch) "Keep typing to choose a longer number" else "Enter a channel number",
                                         color = Color.White.copy(alpha = 0.72f),
                                         fontSize = 12.sp,
                                         maxLines = 1,
@@ -2674,7 +2679,14 @@ class MainActivity : ComponentActivity() {
             if (!isChannelNumberPadVisible.value) return@launch
             val requestedNumber = typedChannelNumber.value.toIntOrNull() ?: return@launch
             val targetIndex = requestedNumber - 1
-            if (targetIndex in channels.indices) {
+            val hasLongerMatch = !typedChannelNumber.value.startsWith("0") &&
+                channels.indices.any { index ->
+                    val candidate = (index + 1).toString()
+                    candidate.length > typedChannelNumber.value.length && candidate.startsWith(typedChannelNumber.value)
+                }
+            // Do not preview "1" while it could still become 10, 15, etc.
+            // The user can always press OK to explicitly choose the exact number.
+            if (targetIndex in channels.indices && !hasLongerMatch) {
                 channelNumberPreviewIndex.intValue = targetIndex
                 currentChannelIndex.value = targetIndex
                 playChannel(targetIndex)
