@@ -72,6 +72,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
@@ -712,13 +713,13 @@ fun SearchModal(
     recentUrls: List<String>,
     epgPrograms: List<Programme>,
     voiceQuery: String,
-    onVoiceSearch: () -> Unit,
     onSelectChannel: (Channel) -> Unit,
     onClose: () -> Unit
 ) {
     var query by remember { mutableStateOf("") }
     var selectedFilter by remember { mutableStateOf("All") }
     val context = LocalContext.current
+    val keyboardController = LocalSoftwareKeyboardController.current
     val searchFocusRequester = remember { FocusRequester() }
     val isTv = remember { context.packageManager.hasSystemFeature("android.software.leanback") }
     LaunchedEffect(Unit) {
@@ -792,7 +793,12 @@ fun SearchModal(
                     Modifier.size(34.dp).clip(CircleShape)
                         .background(Color.White.copy(alpha = 0.08f))
                         .border(1.dp, Color.White.copy(alpha = 0.12f), CircleShape)
-                        .clickable { if (query.isEmpty()) onVoiceSearch() else query = "" }
+                        .clickable {
+                            if (query.isEmpty()) {
+                                searchFocusRequester.requestFocus()
+                                keyboardController?.show()
+                            } else query = ""
+                        }
                         .focusable(),
                     contentAlignment = Alignment.Center
                 ) {
@@ -2027,17 +2033,6 @@ class MainActivity : ComponentActivity() {
                             recentUrls = recentChannelUrls.toList(),
                             epgPrograms = epgPrograms.toList(),
                             voiceQuery = searchVoiceQuery.value,
-                            onVoiceSearch = {
-                                try {
-                                    val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                                        putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                                        putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak a channel name or number")
-                                    }
-                                    startActivityForResult(intent, REQUEST_VOICE_SEARCH)
-                                } catch (_: Exception) {
-                                    Toast.makeText(this@MainActivity, "Voice search is not available on this device", Toast.LENGTH_SHORT).show()
-                                }
-                            },
                             onSelectChannel = { ch ->
                                 val idx = channels.indexOf(ch)
                                 if (idx >= 0) {
@@ -3031,6 +3026,15 @@ class MainActivity : ComponentActivity() {
 
         // Modal overlays take Back priority even when the main browser is hidden
         // (for example, Search opened from the playback toolbar).
+        // Search is modal: route D-pad input to Compose, never to playback controls.
+        if (isSearchOpen.value && keyCode in setOf(
+                KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN,
+                KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT,
+                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER,
+                KeyEvent.KEYCODE_NUMPAD_ENTER
+            )
+        ) return super.onKeyDown(keyCode, event)
+
         if (keyCode == KeyEvent.KEYCODE_BACK && isSearchOpen.value) {
             isSearchOpen.value = false
             return true
