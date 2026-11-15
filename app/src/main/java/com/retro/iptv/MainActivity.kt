@@ -751,7 +751,7 @@ fun SearchModal(
     }
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
-        val drawerWidth = (maxWidth * 0.42f).coerceIn(280.dp, 560.dp)
+        val drawerWidth = (maxWidth * 0.40f).coerceIn(280.dp, 560.dp)
         // The video remains visible under a light scrim; tapping outside dismisses the drawer.
         Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.40f)).clickable { onClose() })
         Column(
