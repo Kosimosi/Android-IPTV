@@ -2035,7 +2035,7 @@ class MainActivity : ComponentActivity() {
                                     }
                                     startActivityForResult(intent, REQUEST_VOICE_SEARCH)
                                 } catch (_: Exception) {
-                                    Toast.makeText(this, "Voice search is not available on this device", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(this@MainActivity, "Voice search is not available on this device", Toast.LENGTH_SHORT).show()
                                 }
                             },
                             onSelectChannel = { ch ->
