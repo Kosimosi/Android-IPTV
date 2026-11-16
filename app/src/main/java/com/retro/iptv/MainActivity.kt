@@ -707,12 +707,18 @@ fun ChannelCard(
 }
 
 @Composable
-private fun LiveNowEventCard(title: String, channel: Channel, badge: String = "LIVE NOW", onClick: () -> Unit) {
+private fun LiveNowEventCard(
+    title: String,
+    channel: Channel,
+    badge: String = "LIVE NOW",
+    channelNumber: Int? = null,
+    onClick: () -> Unit
+) {
     var focused by remember { mutableStateOf(false) }
     Row(
-        Modifier.width(230.dp).clip(RoundedCornerShape(10.dp))
-            .background(if (focused) FocusRed.copy(alpha = 0.22f) else Color.White.copy(alpha = 0.06f))
-            .border(1.dp, if (focused) FocusRed else Color.White.copy(alpha = 0.12f), RoundedCornerShape(10.dp))
+        Modifier.widthIn(min = 270.dp).width(270.dp).clip(RoundedCornerShape(10.dp))
+            .background(if (focused) Color(0xE51A1115) else Color(0xD914161D))
+            .border(1.dp, if (focused) FocusRed.copy(alpha = 0.85f) else Color(0x5555E50914), RoundedCornerShape(10.dp))
             .onFocusChanged { focused = it.isFocused }
             .clickable { onClick() }.focusable()
             .padding(10.dp),
@@ -721,11 +727,25 @@ private fun LiveNowEventCard(title: String, channel: Channel, badge: String = "L
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                 Box(Modifier.size(6.dp).clip(CircleShape).background(FocusRed))
-                Text(badge, color = FocusRed, fontSize = 9.sp, fontWeight = FontWeight.Black, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(badge, color = FocusRed, fontSize = 9.sp, fontWeight = FontWeight.Black, maxLines = 1, softWrap = false, overflow = TextOverflow.Clip)
             }
-            Text(title, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            Text(channel.title, color = WarmAshMuted, fontSize = 9.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(title, color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(channel.title, color = WarmAshMuted, fontSize = 9.sp, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                if (channelNumber != null && channelNumber > 0) {
+                    Text(
+                        text = "${channelNumber.toString().padStart(3, '0')} • HD",
+                        color = Color.White,
+                        fontSize = 8.sp,
+                        fontWeight = FontWeight.Black,
+                        maxLines = 1,
+                        modifier = Modifier.clip(RoundedCornerShape(4.dp)).background(FocusRed.copy(alpha = 0.88f))
+                            .padding(horizontal = 5.dp, vertical = 3.dp)
+                    )
+                }
+            }
         }
+        Spacer(Modifier.width(7.dp))
         RemoteChannelLogo(channel.logo, channel.title, Modifier.size(34.dp).clip(RoundedCornerShape(6.dp)))
     }
 }
@@ -735,31 +755,46 @@ private fun NewsTickerBar(headlines: List<String>, modifier: Modifier = Modifier
     if (headlines.isEmpty()) return
     var focused by remember { mutableStateOf(false) }
     val tickerText = remember(headlines) { headlines.joinToString("     •     ") }
-    AndroidView(
+    Row(
         modifier = modifier.fillMaxWidth().height(30.dp)
             .clip(RoundedCornerShape(6.dp))
             .background(Color(0xE6101116))
             .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(6.dp))
             .clickable(enabled = onClick != null) { onClick?.invoke() }
             .onFocusChanged { focused = it.isFocused }.focusable(),
-        factory = { context ->
-            android.widget.TextView(context).apply {
-                text = tickerText
-                setTextColor(android.graphics.Color.WHITE)
-                textSize = 11f
-                setSingleLine(true)
-                ellipsize = android.text.TextUtils.TruncateAt.MARQUEE
-                marqueeRepeatLimit = -1
-                isSelected = true
-                gravity = android.view.Gravity.CENTER_VERTICAL
-                setPadding(12, 0, 12, 0)
-            }
-        },
-        update = { view ->
-            if (view.text.toString() != tickerText) view.text = tickerText
-            view.isSelected = !focused
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            Modifier.fillMaxHeight().background(Color(0xFFB5121B)).padding(horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(5.dp)
+        ) {
+            Box(Modifier.size(6.dp).clip(CircleShape).background(Color.White))
+            Text("LIVE", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Black, maxLines = 1)
         }
-    )
+        AndroidView(
+            modifier = Modifier.weight(1f).fillMaxHeight(),
+            factory = { context ->
+                android.widget.TextView(context).apply {
+                    text = tickerText
+                    setTextColor(android.graphics.Color.WHITE)
+                    textSize = 11f
+                    setSingleLine(true)
+                    ellipsize = android.text.TextUtils.TruncateAt.MARQUEE
+                    marqueeRepeatLimit = -1
+                    isSelected = true
+                    gravity = android.view.Gravity.CENTER_VERTICAL
+                    setPadding((8 * resources.displayMetrics.density).toInt(), 0, (10 * resources.displayMetrics.density).toInt(), 0)
+                    setHorizontalFadingEdgeEnabled(true)
+                    setFadingEdgeLength((20 * resources.displayMetrics.density).toInt())
+                }
+            },
+            update = { view ->
+                if (view.text.toString() != tickerText) view.text = tickerText
+                view.isSelected = !focused
+            }
+        )
+    }
 }
 
 // --- LANDSCAPE GLASS CHANNEL SEARCH DRAWER ---
@@ -906,7 +941,7 @@ fun SearchModal(
                 Text("LIVE NOW • SPORTS & EVENTS", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Black, letterSpacing = 0.8.sp)
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                     items(liveNowItems, key = { it.id }) { item ->
-                        LiveNowEventCard(item.title, item.channel, item.badge) { onSelectChannel(item.channel) }
+                        LiveNowEventCard(item.title, item.channel, item.badge, channels.indexOfFirst { it.url == item.channel.url }.takeIf { it >= 0 }?.plus(1)) { onSelectChannel(item.channel) }
                     }
                 }
                 Spacer(Modifier.height(8.dp))
@@ -1599,17 +1634,6 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            val scrollOffset by remember {
-                derivedStateOf {
-                    listState.firstVisibleItemScrollOffset + (listState.firstVisibleItemIndex * 350)
-                }
-            }
-            val dynamicDarkAlpha by remember {
-                derivedStateOf {
-                    (0.12f + (scrollOffset / 900f).coerceIn(0f, 0.20f))
-                }
-            }
-
             BackHandler(enabled = true) {
                 when {
                     isLinkPickerVisible.value -> isLinkPickerVisible.value = false
@@ -1680,6 +1704,7 @@ class MainActivity : ComponentActivity() {
                                 val safeIdx = activeStreamIndex.value.coerceIn(0, channelLinks.lastIndex)
                                 "${infoChannel?.labelForStream(safeIdx)} (${safeIdx + 1}/${channelLinks.size})"
                             } else null
+                            if (!isUiVisible.value && !isSearchOpen.value && !isSettingsOpen.value) {
                             Row(Modifier.align(Alignment.TopStart).fillMaxWidth(0.68f).padding(start = 34.dp, top = 24.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                                 Column(
                                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -1705,6 +1730,7 @@ class MainActivity : ComponentActivity() {
                                     ).distinct().joinToString("  •  ").ifBlank { "Live Stream" }
                                     Text(channelMeta, color = Color.White.copy(alpha = 0.78f), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 }
+                            }
                             }
                             val playbackLiveTransition = rememberInfiniteTransition(label = "playbackLivePulse")
                             val playbackLiveAlpha by playbackLiveTransition.animateFloat(
@@ -1992,7 +2018,7 @@ class MainActivity : ComponentActivity() {
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .background(Color.Black.copy(alpha = dynamicDarkAlpha))
+                                .background(Color(0xB30A0B0E))
                         ) {
                             val activeChannel = channels.getOrNull(currentChannelIndex.value)
                             val isFav = favoriteUrls.contains(activeChannel?.url.orEmpty())
@@ -2085,7 +2111,7 @@ class MainActivity : ComponentActivity() {
                                                     letterSpacing = 1.sp, modifier = Modifier.padding(horizontal = 24.dp))
                                                 LazyRow(modifier = Modifier.focusGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(horizontal = 24.dp)) {
                                                     items(liveNowHome, key = { it.id }) { item ->
-                                                        LiveNowEventCard(item.title, item.channel, item.badge) {
+                                                        LiveNowEventCard(item.title, item.channel, item.badge, channels.indexOfFirst { it.url == item.channel.url }.takeIf { it >= 0 }?.plus(1)) {
                                                             val idx = channels.indexOfFirst { it.url == item.channel.url }
                                                             if (idx >= 0) { currentChannelIndex.value = idx; playChannel(idx); isUiVisible.value = false }
                                                         }
