@@ -1751,10 +1751,12 @@ class MainActivity : ComponentActivity() {
                                 }
                                 Column(Modifier.weight(1f)) {
                                     Text(infoChannel?.title ?: "Live TV", color = Color.White, fontSize = 21.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    val fallbackQuality = infoChannel?.linkLabels?.firstOrNull {
+                                        it.contains("4K", true) || it.contains("FHD", true) || it.contains("HD", true)
+                                    } ?: "HD"
                                     val channelMeta = listOfNotNull(
                                         infoChannel?.group?.takeIf { it.isNotBlank() && !it.equals("General", true) && !it.equals("Unknown", true) },
-                                        infoChannel?.country?.takeIf { it.isNotBlank() && !it.equals("Unknown", true) },
-                                        currentResolution.value,
+                                        currentResolution.value ?: fallbackQuality,
                                         activeLinkSubtitle
                                     ).distinct().joinToString("  •  ").ifBlank { "Live Stream" }
                                     Text(channelMeta, color = Color.White.copy(alpha = 0.78f), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
