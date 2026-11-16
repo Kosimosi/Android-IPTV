@@ -707,7 +707,7 @@ fun ChannelCard(
 }
 
 @Composable
-private fun LiveNowEventCard(title: String, channel: Channel, onClick: () -> Unit) {
+private fun LiveNowEventCard(title: String, channel: Channel, badge: String = "LIVE NOW", onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
     Row(
         Modifier.width(230.dp).clip(RoundedCornerShape(10.dp))
@@ -721,7 +721,7 @@ private fun LiveNowEventCard(title: String, channel: Channel, onClick: () -> Uni
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                 Box(Modifier.size(6.dp).clip(CircleShape).background(FocusRed))
-                Text("LIVE NOW", color = FocusRed, fontSize = 9.sp, fontWeight = FontWeight.Black)
+                Text(badge, color = FocusRed, fontSize = 9.sp, fontWeight = FontWeight.Black, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             Text(title, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text(channel.title, color = WarmAshMuted, fontSize = 9.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -731,7 +731,7 @@ private fun LiveNowEventCard(title: String, channel: Channel, onClick: () -> Uni
 }
 
 @Composable
-private fun NewsTickerBar(headlines: List<String>, modifier: Modifier = Modifier) {
+private fun NewsTickerBar(headlines: List<String>, modifier: Modifier = Modifier, onClick: (() -> Unit)? = null) {
     if (headlines.isEmpty()) return
     var focused by remember { mutableStateOf(false) }
     val tickerText = remember(headlines) { headlines.joinToString("     •     ") }
@@ -740,6 +740,7 @@ private fun NewsTickerBar(headlines: List<String>, modifier: Modifier = Modifier
             .clip(RoundedCornerShape(6.dp))
             .background(Color(0xE6101116))
             .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(6.dp))
+            .clickable(enabled = onClick != null) { onClick?.invoke() }
             .onFocusChanged { focused = it.isFocused }.focusable(),
         factory = { context ->
             android.widget.TextView(context).apply {
@@ -771,6 +772,8 @@ fun SearchModal(
     voiceQuery: String,
     tickerMode: String,
     tickerHeadlines: List<String>,
+    remoteLiveItems: List<LiveContentCard>,
+    onTickerTap: () -> Unit,
     onSelectChannel: (Channel) -> Unit,
     onClose: () -> Unit
 ) {
@@ -789,8 +792,8 @@ fun SearchModal(
     }
 
     val now = System.currentTimeMillis()
-    val liveNowItems = remember(epgPrograms, channels, now) {
-        epgPrograms.asSequence()
+    val liveNowItems = remember(epgPrograms, channels, now, remoteLiveItems) {
+        val epgItems = epgPrograms.asSequence()
             .filter { it.startTimeMs <= now && it.stopTimeMs > now }
             .filter { programme ->
                 listOf("live", "cricket", "football", "final", "breaking", "match", "bulletin")
@@ -798,11 +801,9 @@ fun SearchModal(
             }
             .mapNotNull { programme ->
                 channels.firstOrNull { !it.epgId.isNullOrBlank() && it.epgId.equals(programme.channelId, true) }
-                    ?.let { channel -> channel to programme }
-            }
-            .distinctBy { it.first.url }
-            .take(3)
-            .toList()
+                    ?.let { channel -> LiveContentCard("epg-" + channel.url, "LIVE NOW", programme.title, channel) }
+            }.toList()
+        (epgItems + remoteLiveItems).distinctBy { it.channel.url }.take(5)
     }
     val visibleChannels = remember(query, selectedFilter, channels, favoriteUrls, recentUrls, epgPrograms) {
         val recent = recentUrls.mapNotNull { url -> channels.firstOrNull { it.url == url } }
@@ -904,14 +905,14 @@ fun SearchModal(
             if (query.isBlank() && liveNowItems.isNotEmpty()) {
                 Text("LIVE NOW • SPORTS & EVENTS", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Black, letterSpacing = 0.8.sp)
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                    items(liveNowItems, key = { it.first.url }) { (channel, programme) ->
-                        LiveNowEventCard(programme.title, channel) { onSelectChannel(channel) }
+                    items(liveNowItems, key = { it.id }) { item ->
+                        LiveNowEventCard(item.title, item.channel, item.badge) { onSelectChannel(item.channel) }
                     }
                 }
                 Spacer(Modifier.height(8.dp))
             }
             if (query.isBlank() && tickerMode != "OFF" && tickerHeadlines.isNotEmpty()) {
-                NewsTickerBar(tickerHeadlines)
+                NewsTickerBar(tickerHeadlines, onClick = onTickerTap)
                 Spacer(Modifier.height(8.dp))
             }
             Spacer(Modifier.height(10.dp))
@@ -1331,6 +1332,8 @@ class MainActivity : ComponentActivity() {
     private val isWatchdogEnabled = mutableStateOf(true)
     private val liveNewsTickerMode = mutableStateOf("OFF")
     private val tickerHeadlines = mutableStateListOf<String>()
+    private val liveContentCards = mutableStateListOf<LiveContentCard>()
+    private var liveContentJob: Job? = null
     private val selectedQuality = mutableStateOf("Auto")
     private var currentStreamUrl = ""
     private val favoriteUrls = mutableStateListOf<String>()
@@ -1479,20 +1482,6 @@ class MainActivity : ComponentActivity() {
         }
         downloadedUpdateApk = null
         isUpdateDownloaded.value = false
-        lifecycleScope.launch(Dispatchers.IO) {
-            val feed = fetchUrl("https://raw.githubusercontent.com/Kosimosi/Android-IPTV/main/highlights.json")
-            val headlines = runCatching {
-                val array = org.json.JSONObject(feed ?: "{}").optJSONArray("headlines")
-                (0 until (array?.length() ?: 0)).mapNotNull { index ->
-                    array?.optString(index)?.trim()?.takeIf { it.isNotBlank() }
-                }.take(20)
-            }.getOrDefault(emptyList())
-            withContext(Dispatchers.Main) {
-                tickerHeadlines.clear()
-                tickerHeadlines.addAll(headlines)
-            }
-        }
-
         // Always query GitHub on startup before downloading or offering an update.
         lifecycleScope.launch {
             delay(5000)
@@ -2081,22 +2070,23 @@ class MainActivity : ComponentActivity() {
                                             modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp))
                                     }
 
-                                    val liveNowHome = epgPrograms.asSequence()
+                                    val epgLiveHome = epgPrograms.asSequence()
                                         .filter { it.startTimeMs <= epgClockMs && it.stopTimeMs > epgClockMs }
                                         .filter { programme -> listOf("live", "cricket", "football", "final", "breaking", "match", "bulletin").any { programme.title.contains(it, true) } }
                                         .mapNotNull { programme ->
                                             channels.firstOrNull { !it.epgId.isNullOrBlank() && it.epgId.equals(programme.channelId, true) }
-                                                ?.let { channel -> channel to programme }
-                                        }.distinctBy { it.first.url }.take(3).toList()
+                                                ?.let { channel -> LiveContentCard("epg-" + channel.url, "LIVE NOW", programme.title, channel) }
+                                        }.toList()
+                                    val liveNowHome = (epgLiveHome + liveContentCards.toList()).distinctBy { it.channel.url }.take(5)
                                     if (liveNowHome.isNotEmpty()) {
                                         item {
                                             Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
                                                 Text("LIVE NOW • SPORTS & EVENTS", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Black,
                                                     letterSpacing = 1.sp, modifier = Modifier.padding(horizontal = 24.dp))
                                                 LazyRow(modifier = Modifier.focusGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(horizontal = 24.dp)) {
-                                                    items(liveNowHome, key = { it.first.url }) { (channel, programme) ->
-                                                        LiveNowEventCard(programme.title, channel) {
-                                                            val idx = channels.indexOfFirst { it.url == channel.url }
+                                                    items(liveNowHome, key = { it.id }) { item ->
+                                                        LiveNowEventCard(item.title, item.channel, item.badge) {
+                                                            val idx = channels.indexOfFirst { it.url == item.channel.url }
                                                             if (idx >= 0) { currentChannelIndex.value = idx; playChannel(idx); isUiVisible.value = false }
                                                         }
                                                     }
@@ -2105,7 +2095,7 @@ class MainActivity : ComponentActivity() {
                                         }
                                     }
                                     if (liveNewsTickerMode.value != "OFF" && tickerHeadlines.isNotEmpty()) {
-                                        item { NewsTickerBar(tickerHeadlines, Modifier.padding(horizontal = 24.dp)) }
+                                        item { NewsTickerBar(tickerHeadlines, Modifier.padding(horizontal = 24.dp), onClick = { playNewsChannelFromTicker() }) }
                                     }
 
                                     val recentlyWatched = recentChannelUrls.mapNotNull { url -> channels.firstOrNull { it.url == url } }
@@ -2188,7 +2178,7 @@ class MainActivity : ComponentActivity() {
                         !isSearchOpen.value && !isSettingsOpen.value && tickerHeadlines.isNotEmpty()
                     ) {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
-                            NewsTickerBar(tickerHeadlines, Modifier.padding(horizontal = 20.dp, vertical = 10.dp))
+                            NewsTickerBar(tickerHeadlines, Modifier.padding(horizontal = 20.dp, vertical = 10.dp), onClick = { playNewsChannelFromTicker() })
                         }
                     }
 
@@ -2201,6 +2191,8 @@ class MainActivity : ComponentActivity() {
                             voiceQuery = searchVoiceQuery.value,
                             tickerMode = liveNewsTickerMode.value,
                             tickerHeadlines = tickerHeadlines.toList(),
+                            remoteLiveItems = liveContentCards.toList(),
+                            onTickerTap = { playNewsChannelFromTicker() },
                             onSelectChannel = { ch ->
                                 val idx = channels.indexOf(ch)
                                 if (idx >= 0) {
@@ -2486,6 +2478,12 @@ class MainActivity : ComponentActivity() {
 
     private fun loadSettingsFromStorage() {
         val prefs = getSharedPreferences("retro_iptv_prefs", Context.MODE_PRIVATE)
+        val cachedHeadlines = runCatching {
+            val array = org.json.JSONArray(prefs.getString("live_content_headlines", "[]") ?: "[]")
+            (0 until array.length()).mapNotNull { array.optString(it).takeIf(String::isNotBlank) }
+        }.getOrDefault(emptyList())
+        tickerHeadlines.clear()
+        tickerHeadlines.addAll(cachedHeadlines)
         val savedFavs = prefs.getStringSet("fav_urls", emptySet()) ?: emptySet()
         favoriteUrls.clear()
         favoriteUrls.addAll(savedFavs)
@@ -2494,6 +2492,42 @@ class MainActivity : ComponentActivity() {
         liveNewsTickerMode.value = prefs.getString("live_news_ticker_mode", "OFF") ?: "OFF"
         recentChannelUrls.clear()
         recentChannelUrls.addAll(prefs.getString("recent_channel_urls", "")?.split("\\n")?.filter { it.isNotBlank() }?.take(8) ?: emptyList())
+    }
+
+    private suspend fun refreshLiveContent() {
+        val channelSnapshot = channels.toList()
+        val snapshot = runCatching {
+            withContext(Dispatchers.IO) { LiveContentRepository.load(channelSnapshot) }
+        }.getOrNull() ?: return
+        if (snapshot.headlines.isNotEmpty()) {
+            tickerHeadlines.clear()
+            tickerHeadlines.addAll(snapshot.headlines)
+            val cached = org.json.JSONArray()
+            snapshot.headlines.forEach(cached::put)
+            getSharedPreferences("retro_iptv_prefs", Context.MODE_PRIVATE).edit()
+                .putString("live_content_headlines", cached.toString()).apply()
+        }
+        liveContentCards.clear()
+        liveContentCards.addAll(snapshot.cards)
+    }
+
+    private fun playNewsChannelFromTicker() {
+        val aliases = listOf("Somoy", "Jamuna", "Channel 24", "Ekattor", "Independent", "DBC", "ATN News", "News 24")
+        val sourceText = tickerHeadlines.joinToString(" ")
+        val alias = aliases.firstOrNull { sourceText.contains(it, ignoreCase = true) }
+        val channel = if (alias != null) {
+            channels.firstOrNull { it.title.contains(alias, ignoreCase = true) && it.status != ChannelStatus.OFFLINE }
+        } else null
+        val target = channel ?: channels.firstOrNull {
+            it.group.contains("news", ignoreCase = true) && it.status != ChannelStatus.OFFLINE
+        } ?: return
+        val index = channels.indexOfFirst { it.url == target.url }
+        if (index >= 0) {
+            currentChannelIndex.value = index
+            playChannel(index)
+            isUiVisible.value = false
+            isSearchOpen.value = false
+        }
     }
 
     private fun saveSettingsToStorage() {
@@ -2620,6 +2654,7 @@ class MainActivity : ComponentActivity() {
                 }
                 val offlineCount = results.values.count { it == ChannelStatus.OFFLINE }
                 playlistStatus.value += " • health checked (${results.size - offlineCount} online, $offlineCount unavailable)"
+                refreshLiveContent()
             }
         }
     }
@@ -3314,11 +3349,21 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         isHostForeground = true
+        if (liveContentJob?.isActive != true) {
+            liveContentJob = lifecycleScope.launch {
+                while (isHostForeground) {
+                    refreshLiveContent()
+                    delay(150_000L)
+                }
+            }
+        }
     }
 
     override fun onStop() {
         // Home, app switching, and screen-off must never leave a live stream playing.
         isHostForeground = false
+        liveContentJob?.cancel()
+        liveContentJob = null
         retryJob?.cancel()
         watchdogJob?.cancel()
         playerController.pauseForBackground()
@@ -3331,6 +3376,7 @@ class MainActivity : ComponentActivity() {
         watchdogJob?.cancel()
         channelInfoJob?.cancel()
         retryJob?.cancel()
+        liveContentJob?.cancel()
         playerController.release()
     }
 }
