@@ -375,6 +375,23 @@ fun RetroTvMark(modifier: Modifier = Modifier) {
 }
 
 @Composable
+private fun M3uFilterChip(label: String, selected: Boolean, onSelect: () -> Unit) {
+    var focused by remember { mutableStateOf(false) }
+    Box(
+        modifier = Modifier.clip(CircleShape)
+            .background(when { selected -> FocusRed; focused -> FocusRed.copy(alpha = 0.32f); else -> Color(0xCC17191F) })
+            .border(1.dp, if (focused || selected) FocusRed else Color.White.copy(alpha = 0.14f), CircleShape)
+            .onFocusChanged { focused = it.isFocused }
+            .clickable(onClick = onSelect)
+            .focusable()
+            .padding(horizontal = 13.dp, vertical = 7.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(label, color = Color.White, fontSize = 10.sp, fontWeight = if (selected || focused) FontWeight.Bold else FontWeight.Medium, maxLines = 1)
+    }
+}
+
+@Composable
 private fun RetroTopTab(
     label: String,
     selected: Boolean,
@@ -460,7 +477,7 @@ fun OttTopHeader(
                 horizontalArrangement = Arrangement.spacedBy(7.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                listOf("HOME" to "Home", "FAVOURITES" to "Favourites", "REGION" to "Region", "TOPIC" to "Topic").forEach { (tab, label) ->
+                listOf("HOME" to "Home", "FAVOURITES" to "Favourites", "ALL_CHANNELS" to "All Channels").forEach { (tab, label) ->
                     val selected = currentTab == tab
                     RetroTopTab(
                         label = label,
@@ -667,12 +684,16 @@ fun ChannelCard(
                     modifier = Modifier.fillMaxWidth(0.76f).fillMaxHeight(0.76f)
                         .clip(RoundedCornerShape(6.dp))
                 )
-                if (channel.status == ChannelStatus.ONLINE) {
-                    Box(
-                        Modifier.align(Alignment.TopEnd).padding(top = 2.dp, end = 2.dp)
-                            .size(7.dp).clip(CircleShape).background(Color(0xFF4CAF50))
-                    )
-                }
+                Box(
+                    Modifier.align(Alignment.TopEnd).padding(top = 2.dp, end = 2.dp)
+                        .size(7.dp).clip(CircleShape).background(
+                            when (channel.status) {
+                                ChannelStatus.ONLINE -> Color(0xFF4CAF50)
+                                ChannelStatus.OFFLINE -> Color(0xFFE53935)
+                                ChannelStatus.UNKNOWN -> Color(0xFF9E9E9E)
+                            }
+                        )
+                )
             }
             Spacer(Modifier.height(7.dp))
             Text(
@@ -686,6 +707,13 @@ fun ChannelCard(
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 modifier = Modifier.fillMaxWidth().heightIn(min = 28.dp)
             )
+            val quality = channel.linkLabels.firstOrNull { it.contains("4K", true) || it.contains("FHD", true) || it.contains("HD", true) }
+                ?: when {
+                    channel.url.contains("2160", true) -> "4K"
+                    channel.url.contains("1080", true) -> "FHD"
+                    else -> "HD"
+                }
+            Text(quality.uppercase(Locale.ROOT), color = Color.White.copy(alpha = 0.68f), fontSize = 8.sp, fontWeight = FontWeight.Bold, maxLines = 1)
         }
         if (channelNumber != null && channelNumber > 0) {
             Box(
@@ -1329,6 +1357,7 @@ class MainActivity : ComponentActivity() {
     private var downloadedUpdateApk: File? = null
 
     private val currentTab = mutableStateOf("HOME")
+    private val selectedGroupChip = mutableStateOf("All")
     private val currentResolution = mutableStateOf<String?>(null)
     private val currentChannelIndex = mutableStateOf(0)
     private val isBuffering = mutableStateOf(true)
@@ -2023,18 +2052,30 @@ class MainActivity : ComponentActivity() {
                             val activeChannel = channels.getOrNull(currentChannelIndex.value)
                             val isFav = favoriteUrls.contains(activeChannel?.url.orEmpty())
 
-                            val filteredGroups = remember(currentTab.value, channels.toList(), favoriteUrls.toList()) {
+                            val priorityGroups = listOf("Bangla", "Sports", "News", "Movies", "Kids", "Music")
+                            val groupNames = remember(channels.toList()) {
+                                channels.map { it.group.trim().ifBlank { "General" } }
+                                    .filter { it.isNotBlank() && !it.equals("Undefined", true) }
+                                    .distinct()
+                                    .sortedWith(compareBy<String>(
+                                        { group -> priorityGroups.indexOfFirst { priority -> group.contains(priority, true) }.let { if (it < 0) Int.MAX_VALUE else it } },
+                                        { it.lowercase(Locale.ROOT) }
+                                    ))
+                            }
+                            val filteredGroups = remember(currentTab.value, selectedGroupChip.value, channels.toList(), favoriteUrls.toList()) {
                                 when (currentTab.value) {
                                     "FAVOURITES" -> mapOf("Favourites" to channels.filter { favoriteUrls.contains(it.url) })
-                                    "REGION" -> channels.groupBy {
-                                        when {
-                                            it.language.equals("Urdu", true) || it.country.equals("Pakistan", true) -> "Urdu / Pakistan"
-                                            it.language.equals("Hindi", true) -> "Hindi"
-                                            it.language.equals("Bangla", true) || it.country.equals("Bangladesh", true) -> "Bangla"
-                                            else -> "Other / Unknown"
+                                    "ALL_CHANNELS" -> {
+                                        val matching = if (selectedGroupChip.value == "All") channels else channels.filter {
+                                            it.group.trim().equals(selectedGroupChip.value, true)
                                         }
-                                    }.toSortedMap(compareBy { when (it) { "Bangla" -> 0; "Hindi" -> 1; "Urdu / Pakistan" -> 2; else -> 3 } })
-                                    else -> channels.groupBy { it.group.ifBlank { "General" } }.toSortedMap()
+                                        mapOf(selectedGroupChip.value.uppercase(Locale.ROOT) to matching)
+                                    }
+                                    else -> channels.groupBy { it.group.trim().ifBlank { "General" } }
+                                        .toSortedMap(compareBy<String>(
+                                            { group -> priorityGroups.indexOfFirst { priority -> group.contains(priority, true) }.let { if (it < 0) Int.MAX_VALUE else it } },
+                                            { it.lowercase(Locale.ROOT) }
+                                        ))
                                 }
                             }
 
@@ -2056,6 +2097,7 @@ class MainActivity : ComponentActivity() {
                                     initialFocusRequester = initialMenuFocusRequester,
                                     onSelectTab = {
                                         currentTab.value = it
+                                        if (it == "ALL_CHANNELS") selectedGroupChip.value = "All"
                                         resetIdleTimer()
                                     },
                                     onOpenSearch = {
@@ -2067,6 +2109,23 @@ class MainActivity : ComponentActivity() {
                                         resetIdleTimer()
                                     }
                                 )
+
+                                if (currentTab.value == "ALL_CHANNELS") {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+                                            .padding(horizontal = 24.dp, vertical = 4.dp).focusGroup(),
+                                        horizontalArrangement = Arrangement.spacedBy(7.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        (listOf("All") + groupNames).forEach { group ->
+                                            M3uFilterChip(
+                                                label = group,
+                                                selected = selectedGroupChip.value.equals(group, true),
+                                                onSelect = { selectedGroupChip.value = group; resetIdleTimer() }
+                                            )
+                                        }
+                                    }
+                                }
 
                                 LazyColumn(
                                     state = listState,
@@ -2096,14 +2155,7 @@ class MainActivity : ComponentActivity() {
                                             modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp))
                                     }
 
-                                    val epgLiveHome = epgPrograms.asSequence()
-                                        .filter { it.startTimeMs <= epgClockMs && it.stopTimeMs > epgClockMs }
-                                        .filter { programme -> listOf("live", "cricket", "football", "final", "breaking", "match", "bulletin").any { programme.title.contains(it, true) } }
-                                        .mapNotNull { programme ->
-                                            channels.firstOrNull { !it.epgId.isNullOrBlank() && it.epgId.equals(programme.channelId, true) }
-                                                ?.let { channel -> LiveContentCard("epg-" + channel.url, "LIVE NOW", programme.title, channel) }
-                                        }.toList()
-                                    val liveNowHome = (epgLiveHome + liveContentCards.toList()).distinctBy { it.channel.url }.take(5)
+                                    val liveNowHome = liveContentCards.toList().distinctBy { it.channel.url }.take(5)
                                     if (liveNowHome.isNotEmpty()) {
                                         item {
                                             Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
@@ -2142,23 +2194,38 @@ class MainActivity : ComponentActivity() {
                                         }
                                     }
 
-                                    val nowMs = epgClockMs
-                                    val schedule = epgPrograms.filter { it.channelId == activeChannel?.epgId }.sortedBy { it.startTimeMs }
-                                    val currentProgramme = schedule.firstOrNull { it.startTimeMs <= nowMs && it.stopTimeMs > nowMs }
-                                    val nextProgramme = schedule.firstOrNull { it.startTimeMs > nowMs }
-                                    if (currentProgramme != null || nextProgramme != null) item { ProgrammeInfoCard(currentProgramme, nextProgramme) }
-
                                     filteredGroups.forEach { (groupName, groupChannels) ->
                                         if (groupChannels.isNotEmpty()) {
                                             item {
-                                                Text(
-                                                    text = groupName.uppercase(),
-                                                    color = Color.White,
-                                                    fontSize = 14.sp,
-                                                    fontWeight = FontWeight.Black,
-                                                    letterSpacing = 1.sp,
-                                                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 3.dp)
-                                                )
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 3.dp),
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Text(
+                                                        text = groupName.uppercase(),
+                                                        color = Color.White,
+                                                        fontSize = 14.sp,
+                                                        fontWeight = FontWeight.Black,
+                                                        letterSpacing = 1.sp
+                                                    )
+                                                    if (currentTab.value == "HOME") {
+                                                        Row(
+                                                            modifier = Modifier.clip(CircleShape)
+                                                                .background(Color.White.copy(alpha = 0.07f))
+                                                                .clickable {
+                                                                    selectedGroupChip.value = groupName
+                                                                    currentTab.value = "ALL_CHANNELS"
+                                                                    resetIdleTimer()
+                                                                }
+                                                                .focusable()
+                                                                .padding(horizontal = 10.dp, vertical = 5.dp),
+                                                            verticalAlignment = Alignment.CenterVertically
+                                                        ) {
+                                                            Text("See All  ›", color = FocusRed, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                                        }
+                                                    }
+                                                }
                                             }
                                             // Each visible row is composed lazily by the parent LazyColumn.
                                             groupChannels.sortedBy { it.status == ChannelStatus.OFFLINE }
