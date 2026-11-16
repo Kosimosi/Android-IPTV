@@ -718,7 +718,7 @@ private fun LiveNowEventCard(
     Row(
         Modifier.widthIn(min = 270.dp).width(270.dp).clip(RoundedCornerShape(10.dp))
             .background(if (focused) Color(0xE51A1115) else Color(0xD914161D))
-            .border(1.dp, if (focused) FocusRed.copy(alpha = 0.85f) else Color(0x5555E50914), RoundedCornerShape(10.dp))
+            .border(1.dp, if (focused) FocusRed.copy(alpha = 0.85f) else Color(0x55E50914), RoundedCornerShape(10.dp))
             .onFocusChanged { focused = it.isFocused }
             .clickable { onClick() }.focusable()
             .padding(10.dp),
