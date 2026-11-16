@@ -76,6 +76,7 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -705,6 +706,61 @@ fun ChannelCard(
     }
 }
 
+@Composable
+private fun LiveNowEventCard(title: String, channel: Channel, onClick: () -> Unit) {
+    var focused by remember { mutableStateOf(false) }
+    Row(
+        Modifier.width(230.dp).clip(RoundedCornerShape(10.dp))
+            .background(if (focused) FocusRed.copy(alpha = 0.22f) else Color.White.copy(alpha = 0.06f))
+            .border(1.dp, if (focused) FocusRed else Color.White.copy(alpha = 0.12f), RoundedCornerShape(10.dp))
+            .onFocusChanged { focused = it.isFocused }
+            .clickable { onClick() }.focusable()
+            .padding(10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                Box(Modifier.size(6.dp).clip(CircleShape).background(FocusRed))
+                Text("LIVE NOW", color = FocusRed, fontSize = 9.sp, fontWeight = FontWeight.Black)
+            }
+            Text(title, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(channel.title, color = WarmAshMuted, fontSize = 9.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        RemoteChannelLogo(channel.logo, channel.title, Modifier.size(34.dp).clip(RoundedCornerShape(6.dp)))
+    }
+}
+
+@Composable
+private fun NewsTickerBar(headlines: List<String>, modifier: Modifier = Modifier) {
+    if (headlines.isEmpty()) return
+    var focused by remember { mutableStateOf(false) }
+    val tickerText = remember(headlines) { headlines.joinToString("     •     ") }
+    AndroidView(
+        modifier = modifier.fillMaxWidth().height(30.dp)
+            .clip(RoundedCornerShape(6.dp))
+            .background(Color(0xE6101116))
+            .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(6.dp))
+            .onFocusChanged { focused = it.isFocused }.focusable(),
+        factory = { context ->
+            android.widget.TextView(context).apply {
+                text = tickerText
+                setTextColor(android.graphics.Color.WHITE)
+                textSize = 11f
+                setSingleLine(true)
+                ellipsize = android.text.TextUtils.TruncateAt.MARQUEE
+                marqueeRepeatLimit = -1
+                isSelected = true
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                setPadding(12, 0, 12, 0)
+            }
+        },
+        update = { view ->
+            if (view.text.toString() != tickerText) view.text = tickerText
+            view.isSelected = !focused
+        }
+    )
+}
+
 // --- LANDSCAPE GLASS CHANNEL SEARCH DRAWER ---
 @Composable
 fun SearchModal(
@@ -713,6 +769,8 @@ fun SearchModal(
     recentUrls: List<String>,
     epgPrograms: List<Programme>,
     voiceQuery: String,
+    tickerMode: String,
+    tickerHeadlines: List<String>,
     onSelectChannel: (Channel) -> Unit,
     onClose: () -> Unit
 ) {
@@ -731,6 +789,21 @@ fun SearchModal(
     }
 
     val now = System.currentTimeMillis()
+    val liveNowItems = remember(epgPrograms, channels, now) {
+        epgPrograms.asSequence()
+            .filter { it.startTimeMs <= now && it.stopTimeMs > now }
+            .filter { programme ->
+                listOf("live", "cricket", "football", "final", "breaking", "match", "bulletin")
+                    .any { keyword -> programme.title.contains(keyword, true) }
+            }
+            .mapNotNull { programme ->
+                channels.firstOrNull { !it.epgId.isNullOrBlank() && it.epgId.equals(programme.channelId, true) }
+                    ?.let { channel -> channel to programme }
+            }
+            .distinctBy { it.first.url }
+            .take(3)
+            .toList()
+    }
     val visibleChannels = remember(query, selectedFilter, channels, favoriteUrls, recentUrls, epgPrograms) {
         val recent = recentUrls.mapNotNull { url -> channels.firstOrNull { it.url == url } }
         val favorites = channels.filter { it.url in favoriteUrls }
@@ -828,13 +901,27 @@ fun SearchModal(
                 }
             }
 
+            if (query.isBlank() && liveNowItems.isNotEmpty()) {
+                Text("LIVE NOW • SPORTS & EVENTS", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Black, letterSpacing = 0.8.sp)
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                    items(liveNowItems, key = { it.first.url }) { (channel, programme) ->
+                        LiveNowEventCard(programme.title, channel) { onSelectChannel(channel) }
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+            }
+            if (query.isBlank() && tickerMode != "OFF" && tickerHeadlines.isNotEmpty()) {
+                NewsTickerBar(tickerHeadlines)
+                Spacer(Modifier.height(8.dp))
+            }
             Spacer(Modifier.height(10.dp))
             Text(
-                if (query.isBlank()) when (selectedFilter) {
-                    "Favorites" -> "YOUR FAVOURITES"
-                    "Recent" -> "RECENTLY WATCHED"
-                    else -> "RECENT & FAVOURITES"
-                } else "${visibleChannels.size} MATCHING CHANNELS",
+                if (query.isNotBlank()) "SEARCH RESULTS (${visibleChannels.size})" else when (selectedFilter) {
+                    "Favorites" -> "FAVOURITES (${visibleChannels.size})"
+                    "Recent" -> "RECENTLY WATCHED (${visibleChannels.size})"
+                    "News", "Sports", "Movies" -> "${selectedFilter.uppercase()} CHANNELS (${visibleChannels.size})"
+                    else -> "RECENT & FAVOURITES (${visibleChannels.size})"
+                },
                 color = Color.White.copy(alpha = 0.56f),
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
@@ -874,7 +961,12 @@ fun SearchModal(
                                 .padding(horizontal = 9.dp, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            RemoteChannelLogo(channel.logo, channel.title, Modifier.size(40.dp).clip(RoundedCornerShape(8.dp)))
+                            Box(Modifier.size(40.dp)) {
+                                RemoteChannelLogo(channel.logo, channel.title, Modifier.fillMaxSize().clip(RoundedCornerShape(8.dp)))
+                                Box(Modifier.align(Alignment.BottomEnd).size(9.dp).clip(CircleShape)
+                                    .background(when (channel.status) { ChannelStatus.ONLINE -> Color(0xFF20C66B); ChannelStatus.OFFLINE -> Color(0xFFE53935); else -> Color(0xFF8A8A8A) })
+                                    .border(1.dp, Color(0xD112141A), CircleShape))
+                            }
                             Spacer(Modifier.width(10.dp))
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
@@ -884,7 +976,10 @@ fun SearchModal(
                                 Text(
                                     currentProgram?.let { "${it.title} • Live" }
                                         ?: upcomingProgram?.let { "Next: ${it.title}" }
-                                        ?: "Live television",
+                                        ?: listOfNotNull(
+                                            channel.group.takeIf { it.isNotBlank() && !it.equals("General", true) && !it.equals("Unknown", true) },
+                                            channel.country.takeIf { it.isNotBlank() && !it.equals("Unknown", true) }?.let { "Live Stream • $it" }
+                                        ).joinToString(" • ").ifBlank { "Live Stream" },
                                     color = Color.White.copy(alpha = 0.58f),
                                     fontSize = 10.sp,
                                     maxLines = 1,
@@ -919,6 +1014,8 @@ fun SettingsModal(
     onLoadCustomM3u: (String) -> Unit,
     onResetM3u: () -> Unit,
     onToggleWatchdog: (Boolean) -> Unit,
+    tickerMode: String,
+    onTickerModeChange: (String) -> Unit,
     onClose: () -> Unit
 ) {
     var urlInput by remember(customM3uUrl) { mutableStateOf(customM3uUrl) }
@@ -1021,6 +1118,19 @@ fun SettingsModal(
                 ) {
                     Text("15s Watchdog Auto-skip", color = Color.White, fontSize = 12.sp)
                     Text(if (isWatchdogEnabled) "ON" else "OFF", color = if (isWatchdogEnabled) Color.White else WarmAshMuted, fontWeight = FontWeight.Bold)
+                }
+
+                Text("LIVE NEWS TICKER", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("OFF", "OVERLAYS ONLY", "ALWAYS ON").forEach { mode ->
+                        val selected = tickerMode == mode
+                        Box(Modifier.weight(1f).clip(RoundedCornerShape(7.dp))
+                            .background(if (selected) FocusRed else OakSurfaceElevated)
+                            .border(1.dp, if (selected) FocusRed else Color.White.copy(alpha = 0.12f), RoundedCornerShape(7.dp))
+                            .clickable { onTickerModeChange(mode) }.padding(vertical = 9.dp), contentAlignment = Alignment.Center) {
+                            Text(mode, color = Color.White, fontSize = 9.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium, textAlign = TextAlign.Center)
+                        }
+                    }
                 }
 
                 Text("STREAM QUALITY", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
@@ -1219,6 +1329,8 @@ class MainActivity : ComponentActivity() {
 
     private val customM3uUrl = mutableStateOf("")
     private val isWatchdogEnabled = mutableStateOf(true)
+    private val liveNewsTickerMode = mutableStateOf("OFF")
+    private val tickerHeadlines = mutableStateListOf<String>()
     private val selectedQuality = mutableStateOf("Auto")
     private var currentStreamUrl = ""
     private val favoriteUrls = mutableStateListOf<String>()
@@ -1367,6 +1479,19 @@ class MainActivity : ComponentActivity() {
         }
         downloadedUpdateApk = null
         isUpdateDownloaded.value = false
+        lifecycleScope.launch(Dispatchers.IO) {
+            val feed = fetchUrl("https://raw.githubusercontent.com/Kosimosi/Android-IPTV/main/highlights.json")
+            val headlines = runCatching {
+                val array = org.json.JSONObject(feed ?: "{}").optJSONArray("headlines")
+                (0 until (array?.length() ?: 0)).mapNotNull { index ->
+                    array?.optString(index)?.trim()?.takeIf { it.isNotBlank() }
+                }.take(20)
+            }.getOrDefault(emptyList())
+            withContext(Dispatchers.Main) {
+                tickerHeadlines.clear()
+                tickerHeadlines.addAll(headlines)
+            }
+        }
 
         // Always query GitHub on startup before downloading or offering an update.
         lifecycleScope.launch {
@@ -1549,7 +1674,7 @@ class MainActivity : ComponentActivity() {
                     )
 
                     AnimatedVisibility(
-                        visible = isPlaybackOverlayVisible.value && !isUiVisible.value,
+                        visible = isPlaybackOverlayVisible.value && !isUiVisible.value && !isSearchOpen.value && !isSettingsOpen.value,
                         modifier = Modifier.fillMaxSize(),
                         enter = fadeIn(tween(180)),
                         exit = fadeOut(tween(220))
@@ -1583,7 +1708,13 @@ class MainActivity : ComponentActivity() {
                                 }
                                 Column(Modifier.weight(1f)) {
                                     Text(infoChannel?.title ?: "Live TV", color = Color.White, fontSize = 21.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    Text(listOfNotNull(infoChannel?.language, infoChannel?.country, currentResolution.value, activeLinkSubtitle).joinToString("  •  ").ifBlank { "Live television" }, color = Color.White.copy(alpha = 0.78f), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    val channelMeta = listOfNotNull(
+                                        infoChannel?.group?.takeIf { it.isNotBlank() && !it.equals("General", true) && !it.equals("Unknown", true) },
+                                        infoChannel?.country?.takeIf { it.isNotBlank() && !it.equals("Unknown", true) },
+                                        currentResolution.value,
+                                        activeLinkSubtitle
+                                    ).distinct().joinToString("  •  ").ifBlank { "Live Stream" }
+                                    Text(channelMeta, color = Color.White.copy(alpha = 0.78f), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 }
                             }
                             val playbackLiveTransition = rememberInfiniteTransition(label = "playbackLivePulse")
@@ -1950,6 +2081,33 @@ class MainActivity : ComponentActivity() {
                                             modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp))
                                     }
 
+                                    val liveNowHome = epgPrograms.asSequence()
+                                        .filter { it.startTimeMs <= epgClockMs && it.stopTimeMs > epgClockMs }
+                                        .filter { programme -> listOf("live", "cricket", "football", "final", "breaking", "match", "bulletin").any { programme.title.contains(it, true) } }
+                                        .mapNotNull { programme ->
+                                            channels.firstOrNull { !it.epgId.isNullOrBlank() && it.epgId.equals(programme.channelId, true) }
+                                                ?.let { channel -> channel to programme }
+                                        }.distinctBy { it.first.url }.take(3).toList()
+                                    if (liveNowHome.isNotEmpty()) {
+                                        item {
+                                            Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                                                Text("LIVE NOW • SPORTS & EVENTS", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Black,
+                                                    letterSpacing = 1.sp, modifier = Modifier.padding(horizontal = 24.dp))
+                                                LazyRow(modifier = Modifier.focusGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(horizontal = 24.dp)) {
+                                                    items(liveNowHome, key = { it.first.url }) { (channel, programme) ->
+                                                        LiveNowEventCard(programme.title, channel) {
+                                                            val idx = channels.indexOfFirst { it.url == channel.url }
+                                                            if (idx >= 0) { currentChannelIndex.value = idx; playChannel(idx); isUiVisible.value = false }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    if (liveNewsTickerMode.value != "OFF" && tickerHeadlines.isNotEmpty()) {
+                                        item { NewsTickerBar(tickerHeadlines, Modifier.padding(horizontal = 24.dp)) }
+                                    }
+
                                     val recentlyWatched = recentChannelUrls.mapNotNull { url -> channels.firstOrNull { it.url == url } }
                                     if (recentlyWatched.isNotEmpty()) {
                                         item {
@@ -2026,6 +2184,14 @@ class MainActivity : ComponentActivity() {
 
 
 
+                    if (liveNewsTickerMode.value == "ALWAYS ON" && !isUiVisible.value &&
+                        !isSearchOpen.value && !isSettingsOpen.value && tickerHeadlines.isNotEmpty()
+                    ) {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+                            NewsTickerBar(tickerHeadlines, Modifier.padding(horizontal = 20.dp, vertical = 10.dp))
+                        }
+                    }
+
                     if (isSearchOpen.value) {
                         SearchModal(
                             channels = channels,
@@ -2033,6 +2199,8 @@ class MainActivity : ComponentActivity() {
                             recentUrls = recentChannelUrls.toList(),
                             epgPrograms = epgPrograms.toList(),
                             voiceQuery = searchVoiceQuery.value,
+                            tickerMode = liveNewsTickerMode.value,
+                            tickerHeadlines = tickerHeadlines.toList(),
                             onSelectChannel = { ch ->
                                 val idx = channels.indexOf(ch)
                                 if (idx >= 0) {
@@ -2072,6 +2240,11 @@ class MainActivity : ComponentActivity() {
                                 loadPlaylists()
                             },
                             onToggleWatchdog = { isWatchdogEnabled.value = it },
+                            tickerMode = liveNewsTickerMode.value,
+                            onTickerModeChange = {
+                                liveNewsTickerMode.value = it
+                                getSharedPreferences("retro_iptv_prefs", Context.MODE_PRIVATE).edit().putString("live_news_ticker_mode", it).apply()
+                            },
                             onClose = { isSettingsOpen.value = false }
                         )
                     }
@@ -2318,6 +2491,7 @@ class MainActivity : ComponentActivity() {
         favoriteUrls.addAll(savedFavs)
         customM3uUrl.value = prefs.getString("custom_m3u_url", "") ?: ""
         selectedQuality.value = prefs.getString("stream_quality", "Auto") ?: "Auto"
+        liveNewsTickerMode.value = prefs.getString("live_news_ticker_mode", "OFF") ?: "OFF"
         recentChannelUrls.clear()
         recentChannelUrls.addAll(prefs.getString("recent_channel_urls", "")?.split("\\n")?.filter { it.isNotBlank() }?.take(8) ?: emptyList())
     }
