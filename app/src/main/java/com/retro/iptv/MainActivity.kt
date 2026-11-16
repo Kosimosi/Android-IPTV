@@ -2636,7 +2636,17 @@ class MainActivity : ComponentActivity() {
 
     private fun checkPlaylistHealth() {
         lifecycleScope.launch(Dispatchers.IO) {
-            val sample = withContext(Dispatchers.Main) { channels.toList().take(48) }
+            val sample = withContext(Dispatchers.Main) {
+                val allChannels = channels.toList()
+                val priorityNames = listOf(
+                    "Somoy", "Jamuna", "Channel 24", "Ekattor", "Independent", "DBC", "ATN News",
+                    "T Sports", "GTV", "Gazi TV", "Nagorik TV", "Star Sports", "Sony Sports Ten",
+                    "BTV", "Channel i"
+                )
+                (allChannels.take(48) + allChannels.filter { channel ->
+                    priorityNames.any { channel.title.contains(it, ignoreCase = true) }
+                }).distinctBy { it.url }.take(128)
+            }
             val healthSemaphore = Semaphore(4)
             val results = sample.map { channel ->
                 async {
