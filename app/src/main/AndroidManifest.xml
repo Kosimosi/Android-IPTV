@@ -20,7 +20,6 @@
         android:label="RETROTV"
         android:supportsRtl="true"
         android:hardwareAccelerated="true"
-        android:supportsPictureInPicture="true"
         android:usesCleartextTraffic="true"
         android:theme="@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen">
 
@@ -37,6 +36,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:supportsPictureInPicture="true"
             android:banner="@drawable/banner"
             android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenLayout|screenSize|smallestScreenSize">
             <intent-filter>
