@@ -122,7 +122,9 @@ const val IPTV_INDIA_EPG_URL = "https://iptv-epg.org/files/epg-in.xml"
 val OakDarkBackground = Color(0xFF080808)
 val OakSurface = Color(0xFF151515)
 val OakSurfaceElevated = Color(0xFF222222)
-val FocusRed = Color(0xFFE62117)
+val FocusRed = Color(0xFFE50914)
+val RetroGlass = Color(0xD912141A)
+val RetroGlassBorder = Color.White.copy(alpha = 0.12f)
 val ParchmentWhite = Color.White
 val WarmAshMuted = Color(0xFFA3A3A3)
 
@@ -1095,15 +1097,15 @@ fun SettingsModal(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.85f)),
+            .background(Color.Black.copy(alpha = 0.58f)),
         contentAlignment = Alignment.Center
     ) {
         Box(
             modifier = Modifier
                 .width(480.dp)
                 .clip(RoundedCornerShape(14.dp))
-                .background(OakSurface)
-                .border(1.5.dp, Color.White.copy(alpha = 0.16f), RoundedCornerShape(14.dp))
+                .background(RetroGlass)
+                .border(1.dp, RetroGlassBorder, RoundedCornerShape(14.dp))
                 .padding(24.dp)
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -1122,8 +1124,8 @@ fun SettingsModal(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(8.dp))
-                        .background(OakSurfaceElevated)
-                        .border(1.dp, Color.White.copy(alpha = 0.14f), RoundedCornerShape(8.dp))
+                        .background(RetroGlass)
+                        .border(1.dp, RetroGlassBorder, RoundedCornerShape(8.dp))
                         .padding(12.dp)
                 ) {
                     if (urlInput.isEmpty()) {
@@ -1174,7 +1176,8 @@ fun SettingsModal(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(8.dp))
-                        .background(OakSurfaceElevated)
+                        .background(RetroGlass)
+                        .border(1.dp, RetroGlassBorder, RoundedCornerShape(8.dp))
                         .clickable { onToggleWatchdog(!isWatchdogEnabled) }
                         .padding(12.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -1186,7 +1189,7 @@ fun SettingsModal(
 
                 Text("LIVE NEWS TICKER", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf("OFF", "OVERLAYS ONLY", "ALWAYS ON").forEach { mode ->
+                    listOf("OFF", "HOME ONLY", "ALWAYS ON").forEach { mode ->
                         val selected = tickerMode == mode
                         Box(Modifier.weight(1f).clip(RoundedCornerShape(7.dp))
                             .background(if (selected) FocusRed else OakSurfaceElevated)
@@ -2066,18 +2069,15 @@ class MainActivity : ComponentActivity() {
                             }
                             val filteredGroups = remember(currentTab.value, selectedGroupChip.value, channels.toList(), favoriteUrls.toList()) {
                                 when (currentTab.value) {
+                                    "HOME" -> emptyMap()
                                     "FAVOURITES" -> mapOf("Favourites" to channels.filter { favoriteUrls.contains(it.url) })
                                     "ALL_CHANNELS" -> {
                                         val matching = if (selectedGroupChip.value == "All") channels else channels.filter {
-                                            it.group.trim().equals(selectedGroupChip.value, true)
+                                            it.group.contains(selectedGroupChip.value, true)
                                         }
                                         mapOf(selectedGroupChip.value.uppercase(Locale.ROOT) to matching)
                                     }
-                                    else -> channels.groupBy { it.group.trim().ifBlank { "General" } }
-                                        .toSortedMap(compareBy<String>(
-                                            { group -> priorityGroups.indexOfFirst { priority -> group.contains(priority, true) }.let { if (it < 0) Int.MAX_VALUE else it } },
-                                            { it.lowercase(Locale.ROOT) }
-                                        ))
+                                    else -> emptyMap()
                                 }
                             }
 
@@ -2119,7 +2119,7 @@ class MainActivity : ComponentActivity() {
                                         horizontalArrangement = Arrangement.spacedBy(7.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        (listOf("All") + groupNames).forEach { group ->
+                                        listOf("All", "Bangla", "Sports", "News", "Movies", "Kids").forEach { group ->
                                             M3uFilterChip(
                                                 label = group,
                                                 selected = selectedGroupChip.value.equals(group, true),
@@ -2135,33 +2135,12 @@ class MainActivity : ComponentActivity() {
                                     verticalArrangement = Arrangement.spacedBy(16.dp),
                                     contentPadding = PaddingValues(bottom = 32.dp)
                                 ) {
-                                    item {
-                                        HeroSection(
-                                            channel = activeChannel,
-                                            resolution = currentResolution.value,
-                                            isFavorite = isFav,
-                                            onToggleFavorite = {
-                                                activeChannel?.url?.let { toggleFavorite(it) }
-                                                resetIdleTimer()
-                                            },
-                                            onFullscreen = {
-                                                isUiVisible.value = false
-                                                isSearchOpen.value = false
-                                                isSettingsOpen.value = false
-                                            }
-                                        )
-                                    }
-
-                                    item {
-                                        Text(playlistStatus.value, color = WarmAshMuted, fontSize = 10.sp,
-                                            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp))
-                                    }
-
-                                    val liveNowHome = liveContentCards.toList().distinctBy { it.channel.url }.take(5)
+                                    if (currentTab.value == "HOME") {
+                                    val liveNowHome = liveContentCards.toList().distinctBy { it.id }.take(8)
                                     if (liveNowHome.isNotEmpty()) {
                                         item {
                                             Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                                                Text("LIVE NOW • SPORTS & EVENTS", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Black,
+                                                Text("LIVE NOW", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Black,
                                                     letterSpacing = 1.sp, modifier = Modifier.padding(horizontal = 24.dp))
                                                 LazyRow(modifier = Modifier.focusGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(horizontal = 24.dp)) {
                                                     items(liveNowHome, key = { it.id }) { item ->
@@ -2174,13 +2153,13 @@ class MainActivity : ComponentActivity() {
                                             }
                                         }
                                     }
-                                    if (liveNewsTickerMode.value != "OFF" && tickerHeadlines.isNotEmpty()) {
+                                    if (liveNewsTickerMode.value in listOf("HOME ONLY", "OVERLAYS ONLY", "ALWAYS ON") && tickerHeadlines.isNotEmpty()) {
                                         item { NewsTickerBar(tickerHeadlines, Modifier.padding(horizontal = 24.dp), onClick = { playNewsChannelFromTicker() }) }
                                     }
 
                                     val recentlyWatched = recentChannelUrls.mapNotNull { url -> channels.firstOrNull { it.url == url } }
-                                    if (recentlyWatched.isNotEmpty()) {
-                                        item {
+                                    item {
+                                        if (recentlyWatched.isNotEmpty()) {
                                             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                                 Text("RECENTLY WATCHED", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Black,
                                                     letterSpacing = 1.sp, modifier = Modifier.padding(horizontal = 24.dp))
@@ -2193,7 +2172,13 @@ class MainActivity : ComponentActivity() {
                                                     }
                                                 }
                                             }
+                                        } else {
+                                            Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                                Text("RECENTLY WATCHED", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
+                                                Text("Your recently watched channels will appear here.", color = WarmAshMuted, fontSize = 11.sp)
+                                            }
                                         }
+                                    }
                                     }
 
                                     filteredGroups.forEach { (groupName, groupChannels) ->
