@@ -2363,7 +2363,7 @@ class MainActivity : ComponentActivity() {
                                 recentChannelUrls.clear()
                                 getSharedPreferences("retro_iptv_prefs", Context.MODE_PRIVATE).edit().remove("recent_channel_urls").apply()
                                 File(cacheDir, "channel_logos").deleteRecursively()
-                                Toast.makeText(this, "Watch history and logo cache cleared", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(applicationContext, "Watch history and logo cache cleared", Toast.LENGTH_SHORT).show()
                             },
                             tickerMode = liveNewsTickerMode.value,
                             onTickerModeChange = {
