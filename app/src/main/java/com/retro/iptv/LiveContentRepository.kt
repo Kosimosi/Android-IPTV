@@ -36,6 +36,10 @@ object LiveContentRepository {
     private const val EVENTS_URL =
         "https://raw.githubusercontent.com/Kosimosi/Android-IPTV/main/live_events.json"
     private const val CRICKET_URL = "https://www.espncricinfo.com/rss/livescores.xml"
+    private val footballFeeds = listOf(
+        "https://feeds.bbci.co.uk/sport/football/rss.xml",
+        "https://site.api.espn.com/apis/site/v2/sports/soccer/eng.1/news"
+    )
 
     private val newsFeeds = listOf(
         "https://news.google.com/rss?hl=bn&gl=BD&ceid=BD:bn",
@@ -53,6 +57,10 @@ object LiveContentRepository {
             val highlightsJob = async { parseManualHeadlines(fetchText(HIGHLIGHTS_URL, 250_000)) }
             val eventsJob = async { parseOverrideEvents(fetchText(EVENTS_URL, 250_000), channels, System.currentTimeMillis()) }
             val cricketJob = async { parseCricketEvents(fetchText(CRICKET_URL, 500_000), channels) }
+            val footballJobs = footballFeeds.map { feed -> async {
+                val body = fetchText(feed, 500_000)
+                if (feed.contains("espn.com")) parseEspnFootball(body, channels) else parseFootballEvents(body, channels)
+            } }
 
             val rssHeadlines = headlineJobs.awaitAll().flatten()
             val headlines = (highlightsJob.await() + rssHeadlines)
@@ -61,7 +69,7 @@ object LiveContentRepository {
                 .distinctBy { it.lowercase(Locale.ROOT) }
                 .take(30)
 
-            val cards = (eventsJob.await() + cricketJob.await())
+            val cards = (eventsJob.await() + cricketJob.await() + footballJobs.awaitAll().flatten())
                 .distinctBy { it.id }
                 .take(8)
             LiveContentSnapshot(headlines, cards)
@@ -90,11 +98,22 @@ object LiveContentRepository {
                     val keywords = event.optJSONArray("channelKeywords") ?: JSONArray()
                     val names = (0 until keywords.length())
                         .mapNotNull { keywords.optString(it).trim().takeIf(String::isNotBlank) }
-                    val channel = findOnlineChannel(channels, names) ?: continue
                     val title = event.optString("title").trim().takeIf(String::isNotBlank) ?: continue
+                    val rawBadge = event.optString("badge").trim().ifBlank { "LIVE EVENT" }
+                    val badge = when {
+                        rawBadge.contains("drama", true) || rawBadge.contains("pak", true) -> "PAK DRAMA"
+                        rawBadge.contains("football", true) -> "LIVE FOOTBALL"
+                        rawBadge.contains("cricket", true) -> "LIVE CRICKET"
+                        else -> rawBadge.uppercase(Locale.ROOT)
+                    }
+                    val channelNames = when (badge) {
+                        "PAK DRAMA" -> listOf("HUM TV", "ARY Digital", "Geo Entertainment", "Geo TV", "Green TV")
+                        "LIVE FOOTBALL" -> listOf("Sony Sports Ten 1", "Sony Sports Ten 2", "T Sports")
+                        else -> names
+                    }
+                    val channel = findOnlineChannel(channels, channelNames.ifEmpty { names }) ?: continue
                     val id = event.optString("id").trim().ifBlank { "event-" + index }
-                    val badge = event.optString("badge").trim().ifBlank { "LIVE EVENT" }
-                    add(LiveContentCard(id, badge.uppercase(Locale.ROOT), title, channel))
+                    add(LiveContentCard(id, badge, title, channel))
                 }
             }
         }.getOrDefault(emptyList())
@@ -121,6 +140,31 @@ object LiveContentRepository {
                 channel = channel
             )
         }
+    }
+
+    private fun parseFootballEvents(text: String?, channels: List<Channel>): List<LiveContentCard> {
+        if (text.isNullOrBlank()) return emptyList()
+        return parseRssTitles(text, 35).mapIndexedNotNull { index, raw ->
+            val title = cleanHeadline(raw)
+            if (title.isBlank()) return@mapIndexedNotNull null
+            if (listOf("football", "premier league", "champions league", "fa cup", "la liga", "world cup", "match").none { title.contains(it, true) }) return@mapIndexedNotNull null
+            val channel = findOnlineChannel(channels, listOf("Sony Sports Ten 1", "Sony Sports Ten 2", "T Sports")) ?: return@mapIndexedNotNull null
+            LiveContentCard("bbc-football-" + title.hashCode() + "-" + index, "LIVE FOOTBALL", title, channel)
+        }
+    }
+
+    private fun parseEspnFootball(text: String?, channels: List<Channel>): List<LiveContentCard> {
+        if (text.isNullOrBlank()) return emptyList()
+        return runCatching {
+            val root = JSONObject(text)
+            val articles = root.optJSONArray("articles") ?: JSONArray()
+            (0 until articles.length()).mapNotNull { index ->
+                val title = cleanHeadline(articles.optJSONObject(index)?.optString("headline").orEmpty())
+                if (title.isBlank()) return@mapNotNull null
+                val channel = findOnlineChannel(channels, listOf("Sony Sports Ten 1", "Sony Sports Ten 2", "T Sports")) ?: return@mapNotNull null
+                LiveContentCard("espn-football-" + title.hashCode(), "LIVE FOOTBALL", title, channel)
+            }
+        }.getOrDefault(emptyList())
     }
 
     private fun findOnlineChannel(channels: List<Channel>, keywords: List<String>): Channel? {
