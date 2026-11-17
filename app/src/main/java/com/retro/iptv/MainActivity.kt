@@ -14,6 +14,8 @@ import android.graphics.Color as AndroidColor
 import android.media.AudioManager
 import android.os.Bundle
 import android.os.SystemClock
+import android.app.PictureInPictureParams
+import android.util.Rational
 import android.view.KeyEvent
 import android.util.Xml
 import android.widget.Toast
@@ -746,7 +748,7 @@ private fun LiveNowEventCard(
 ) {
     var focused by remember { mutableStateOf(false) }
     Row(
-        Modifier.widthIn(min = 270.dp).width(270.dp).clip(RoundedCornerShape(10.dp))
+        Modifier.widthIn(min = 260.dp).width(260.dp).clip(RoundedCornerShape(10.dp))
             .background(if (focused) Color(0xE51A1115) else Color(0xD914161D))
             .border(1.dp, if (focused) FocusRed.copy(alpha = 0.85f) else Color(0x55E50914), RoundedCornerShape(10.dp))
             .onFocusChanged { focused = it.isFocused }
@@ -757,7 +759,7 @@ private fun LiveNowEventCard(
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                 Box(Modifier.size(6.dp).clip(CircleShape).background(FocusRed))
-                Text(badge, color = FocusRed, fontSize = 9.sp, fontWeight = FontWeight.Black, maxLines = 1, softWrap = false, overflow = TextOverflow.Clip)
+                Text(badge, color = FocusRed, fontSize = 9.sp, fontWeight = FontWeight.Black, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
             }
             Text(title, color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -3486,6 +3488,19 @@ class MainActivity : ComponentActivity() {
         if (requestCode == REQUEST_VOICE_SEARCH && resultCode == RESULT_OK) {
             val spoken = data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull().orEmpty()
             if (spoken.isNotBlank()) searchVoiceQuery.value = spoken
+        }
+    }
+
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (isPipEnabled.value && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !isUiVisible.value &&
+            !isSearchOpen.value && !isSettingsOpen.value && packageManager.hasSystemFeature("android.software.picture_in_picture")
+        ) {
+            runCatching {
+                enterPictureInPictureMode(
+                    PictureInPictureParams.Builder().setAspectRatio(Rational(16, 9)).build()
+                )
+            }
         }
     }
 
