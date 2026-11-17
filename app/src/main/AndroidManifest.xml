@@ -20,6 +20,7 @@
         android:label="RETROTV"
         android:supportsRtl="true"
         android:hardwareAccelerated="true"
+        android:supportsPictureInPicture="true"
         android:usesCleartextTraffic="true"
         android:theme="@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen">
 
