@@ -1796,11 +1796,11 @@ class MainActivity : ComponentActivity() {
                                     val fallbackQuality = infoChannel?.linkLabels?.firstOrNull {
                                         it.contains("4K", true) || it.contains("FHD", true) || it.contains("HD", true)
                                     } ?: "HD"
-                                    val channelMeta = listOfNotNull(
-                                        infoChannel?.group?.takeIf { it.isNotBlank() && !it.equals("General", true) && !it.equals("Unknown", true) },
-                                        currentResolution.value ?: fallbackQuality,
-                                        activeLinkSubtitle
-                                    ).distinct().joinToString("  •  ").ifBlank { "Live Stream" }
+                                    val groupTitle = infoChannel?.group?.trim()?.takeIf {
+                                        it.isNotBlank() && !it.equals("General", true) && !it.equals("Unknown", true) && !it.equals("Undefined", true)
+                                    } ?: "Live"
+                                    val channelMeta = listOf(groupTitle, currentResolution.value ?: fallbackQuality, activeLinkSubtitle)
+                                        .filterNotNull().distinct().joinToString("  •  ")
                                     Text(channelMeta, color = Color.White.copy(alpha = 0.78f), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 }
                             }
