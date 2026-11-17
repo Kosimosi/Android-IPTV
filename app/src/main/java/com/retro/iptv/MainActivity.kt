@@ -1137,6 +1137,7 @@ fun SettingsModal(
     onClose: () -> Unit
 ) {
     var urlInput by remember(customM3uUrl) { mutableStateOf(customM3uUrl) }
+    var urlFocused by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val settingsFocusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) {
@@ -1168,7 +1169,7 @@ fun SettingsModal(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text("SETTINGS", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Black)
-                    Text("✕", color = Color.White, fontSize = 16.sp, modifier = Modifier.clip(CircleShape).clickable { onClose() }.padding(8.dp))
+                    SettingsOption("✕", onClick = onClose, fontSize = 14.sp)
                 }
 
                 Text("PLAYLIST SOURCE", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
@@ -1178,7 +1179,7 @@ fun SettingsModal(
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(8.dp))
                         .background(RetroGlass)
-                        .border(1.dp, RetroGlassBorder, RoundedCornerShape(8.dp))
+                        .border(1.dp, if (urlFocused) FocusRed else RetroGlassBorder, RoundedCornerShape(8.dp))
                         .padding(12.dp)
                 ) {
                     if (urlInput.isEmpty()) {
@@ -1189,7 +1190,7 @@ fun SettingsModal(
                         onValueChange = { urlInput = it },
                         textStyle = TextStyle(color = Color.White, fontSize = 12.sp),
                         cursorBrush = SolidColor(Color.White),
-                        modifier = Modifier.fillMaxWidth().focusRequester(settingsFocusRequester)
+                        modifier = Modifier.fillMaxWidth().focusRequester(settingsFocusRequester).onFocusChanged { urlFocused = it.isFocused }
                     )
                 }
 
