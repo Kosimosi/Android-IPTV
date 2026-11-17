@@ -2742,19 +2742,26 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun checkPlaylistHealth() {
-        healthCheckPending = true
-        scheduleBackgroundNetworkWorkAfterReady()
+        // This callback can be reached after playlist work running on Dispatchers.IO.
+        // Keep health scheduling state and all ExoPlayer reads on the player application thread.
+        lifecycleScope.launch(Dispatchers.Main.immediate) {
+            healthCheckPending = true
+            scheduleBackgroundNetworkWorkAfterReady()
+        }
     }
 
     /** Defer all non-playback network work until the current stream has been stable for 3 seconds. */
     private fun scheduleBackgroundNetworkWorkAfterReady() {
-        if (!isHostForeground || player.playbackState != Player.STATE_READY) return
-        backgroundNetworkResumeJob?.cancel()
-        backgroundNetworkResumeJob = lifecycleScope.launch {
-            delay(3_000L)
+        // ExoPlayer is created on main; even playbackState reads must stay on that thread.
+        lifecycleScope.launch(Dispatchers.Main.immediate) {
             if (!isHostForeground || player.playbackState != Player.STATE_READY) return@launch
-            if (healthCheckPending && healthCheckJob?.isActive != true) runPlaylistHealthCheck()
-            if (liveContentRefreshPending && liveContentJob?.isActive != true) startLiveContentPolling()
+            backgroundNetworkResumeJob?.cancel()
+            backgroundNetworkResumeJob = lifecycleScope.launch {
+                delay(3_000L)
+                if (!isHostForeground || player.playbackState != Player.STATE_READY) return@launch
+                if (healthCheckPending && healthCheckJob?.isActive != true) runPlaylistHealthCheck()
+                if (liveContentRefreshPending && liveContentJob?.isActive != true) startLiveContentPolling()
+            }
         }
     }
 
