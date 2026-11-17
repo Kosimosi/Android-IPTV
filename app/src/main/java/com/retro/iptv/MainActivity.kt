@@ -1374,6 +1374,10 @@ class MainActivity : ComponentActivity() {
     private var retryJob: Job? = null
     private var retryAttempt = 0
     private var isHostForeground = false
+    private var healthCheckJob: Job? = null
+    private var backgroundNetworkResumeJob: Job? = null
+    private var healthCheckPending = false
+    private var liveContentRefreshPending = false
 
     private companion object {
         const val MAX_PLAYLIST_BYTES = 12L * 1024L * 1024L
@@ -1582,6 +1586,7 @@ class MainActivity : ComponentActivity() {
                             if (idx in channels.indices) {
                                 channels[idx] = channels[idx].copy(status = ChannelStatus.ONLINE)
                             }
+                            scheduleBackgroundNetworkWorkAfterReady()
                         }
                     }
 
@@ -1609,7 +1614,7 @@ class MainActivity : ComponentActivity() {
                             retryJob = lifecycleScope.launch {
                                 delay(attempt * 1_000L)
                                 if (currentChannelIndex.value in channels.indices) {
-                                    player.setMediaItem(MediaItem.fromUri(currentStreamUrl))
+                                    playerController.setStream(currentStreamUrl)
                                     player.prepare()
                                 }
                             }
@@ -2737,38 +2742,84 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun checkPlaylistHealth() {
-        lifecycleScope.launch(Dispatchers.IO) {
-            val sample = withContext(Dispatchers.Main) {
-                val allChannels = channels.toList()
-                val priorityNames = listOf(
-                    "Somoy", "Jamuna", "Channel 24", "Ekattor", "Independent", "DBC", "ATN News",
-                    "T Sports", "GTV", "Gazi TV", "Nagorik TV", "Star Sports", "Sony Sports Ten",
-                    "BTV", "Channel i"
-                )
-                (allChannels.take(48) + allChannels.filter { channel ->
-                    priorityNames.any { channel.title.contains(it, ignoreCase = true) }
-                }).distinctBy { it.url }.take(128)
-            }
-            val healthSemaphore = Semaphore(4)
-            val results = sample.map { channel ->
-                async {
-                    val online = healthSemaphore.withPermit {
-                        (listOf(channel.url) + channel.backupUrls).take(2).any { testStream(it) }
-                    }
-                    channel.url to if (online) ChannelStatus.ONLINE else ChannelStatus.OFFLINE
+        healthCheckPending = true
+        scheduleBackgroundNetworkWorkAfterReady()
+    }
+
+    /** Defer all non-playback network work until the current stream has been stable for 3 seconds. */
+    private fun scheduleBackgroundNetworkWorkAfterReady() {
+        if (!isHostForeground || player.playbackState != Player.STATE_READY) return
+        backgroundNetworkResumeJob?.cancel()
+        backgroundNetworkResumeJob = lifecycleScope.launch {
+            delay(3_000L)
+            if (!isHostForeground || player.playbackState != Player.STATE_READY) return@launch
+            if (healthCheckPending && healthCheckJob?.isActive != true) runPlaylistHealthCheck()
+            if (liveContentRefreshPending && liveContentJob?.isActive != true) startLiveContentPolling()
+        }
+    }
+
+    private fun runPlaylistHealthCheck() {
+        healthCheckPending = false
+        healthCheckJob?.cancel()
+        healthCheckJob = lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val sample = withContext(Dispatchers.Main) {
+                    val allChannels = channels.toList()
+                    val priorityNames = listOf(
+                        "Somoy", "Jamuna", "Channel 24", "Ekattor", "Independent", "DBC", "ATN News",
+                        "T Sports", "GTV", "Gazi TV", "Nagorik TV", "Star Sports", "Sony Sports Ten",
+                        "BTV", "Channel i"
+                    )
+                    (allChannels.take(48) + allChannels.filter { channel ->
+                        priorityNames.any { channel.title.contains(it, ignoreCase = true) }
+                    }).distinctBy { it.url }.take(128)
                 }
-            }.awaitAll().toMap()
-            withContext(Dispatchers.Main) {
-                channels.indices.forEach { index ->
-                    results[channels[index].url]?.let { status ->
-                        channels[index] = channels[index].copy(status = status)
+                val healthSemaphore = Semaphore(2)
+                val results = sample.map { channel ->
+                    async {
+                        val online = healthSemaphore.withPermit {
+                            (listOf(channel.url) + channel.backupUrls).take(2).any { testStream(it) }
+                        }
+                        channel.url to if (online) ChannelStatus.ONLINE else ChannelStatus.OFFLINE
                     }
+                }.awaitAll().toMap()
+                withContext(Dispatchers.Main) {
+                    channels.indices.forEach { index ->
+                        results[channels[index].url]?.let { status ->
+                            channels[index] = channels[index].copy(status = status)
+                        }
+                    }
+                    val offlineCount = results.values.count { it == ChannelStatus.OFFLINE }
+                    playlistStatus.value += " • health checked (${results.size - offlineCount} online, $offlineCount unavailable)"
                 }
-                val offlineCount = results.values.count { it == ChannelStatus.OFFLINE }
-                playlistStatus.value += " • health checked (${results.size - offlineCount} online, $offlineCount unavailable)"
-                refreshLiveContent()
+            } finally {
+                healthCheckJob = null
             }
         }
+    }
+
+    private fun startLiveContentPolling() {
+        if (!isHostForeground || liveContentJob?.isActive == true) return
+        liveContentRefreshPending = false
+        liveContentJob = lifecycleScope.launch {
+            refreshLiveContent()
+            while (isHostForeground) {
+                delay(150_000L)
+                if (isHostForeground) refreshLiveContent()
+            }
+        }
+    }
+
+    /** Stop health/RSS requests as soon as a zap begins; they resume only after STATE_READY + 3s. */
+    private fun pauseBackgroundNetworkForPlaybackStart() {
+        backgroundNetworkResumeJob?.cancel()
+        backgroundNetworkResumeJob = null
+        if (healthCheckJob?.isActive == true) healthCheckPending = true
+        healthCheckJob?.cancel()
+        healthCheckJob = null
+        if (liveContentJob?.isActive == true) liveContentRefreshPending = true
+        liveContentJob?.cancel()
+        liveContentJob = null
     }
 
     private fun testStream(streamUrl: String): Boolean {
@@ -2988,6 +3039,7 @@ class MainActivity : ComponentActivity() {
 
     private fun playChannel(index: Int) {
         val channel = channels.getOrNull(index) ?: return
+        pauseBackgroundNetworkForPlaybackStart()
         isBuffering.value = true
         currentResolution.value = null
         isChannelInfoVisible.value = true
@@ -3016,7 +3068,7 @@ class MainActivity : ComponentActivity() {
         triedStreamIndices.add(linkIndex)
         currentStreamUrl = url
         retryAttempt = 0
-        player.setMediaItem(MediaItem.fromUri(url))
+        playerController.setStream(url)
         player.prepare()
         // Selecting a channel or link is an explicit user action; start playback after a foreground pause.
         playerController.play()
@@ -3474,19 +3526,19 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         isHostForeground = true
-        if (liveContentJob?.isActive != true) {
-            liveContentJob = lifecycleScope.launch {
-                while (isHostForeground) {
-                    refreshLiveContent()
-                    delay(150_000L)
-                }
-            }
-        }
+        liveContentRefreshPending = true
+        if (player.playbackState == Player.STATE_READY) scheduleBackgroundNetworkWorkAfterReady()
     }
 
     override fun onStop() {
         // Home, app switching, and screen-off must never leave a live stream playing.
         isHostForeground = false
+        backgroundNetworkResumeJob?.cancel()
+        backgroundNetworkResumeJob = null
+        if (healthCheckJob?.isActive == true) healthCheckPending = true
+        healthCheckJob?.cancel()
+        healthCheckJob = null
+        if (liveContentJob?.isActive == true) liveContentRefreshPending = true
         liveContentJob?.cancel()
         liveContentJob = null
         retryJob?.cancel()
@@ -3502,6 +3554,8 @@ class MainActivity : ComponentActivity() {
         channelInfoJob?.cancel()
         retryJob?.cancel()
         liveContentJob?.cancel()
+        healthCheckJob?.cancel()
+        backgroundNetworkResumeJob?.cancel()
         playerController.release()
     }
 }
