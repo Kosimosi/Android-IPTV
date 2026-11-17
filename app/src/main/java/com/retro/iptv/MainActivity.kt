@@ -1066,11 +1066,30 @@ fun SearchModal(
     }
 }
 
+@Composable
+private fun SettingToggleRow(label: String, checked: Boolean, onToggle: (Boolean) -> Unit) {
+    var focused by remember { mutableStateOf(false) }
+    Row(
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
+            .background(if (focused) FocusRed.copy(alpha = 0.15f) else RetroGlass)
+            .border(1.dp, if (focused) FocusRed else RetroGlassBorder, RoundedCornerShape(8.dp))
+            .onFocusChanged { focused = it.isFocused }
+            .clickable { onToggle(!checked) }.focusable().padding(12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(label, color = Color.White, fontSize = 12.sp)
+        Text(if (checked) "ON" else "OFF", color = if (checked) FocusRed else WarmAshMuted, fontWeight = FontWeight.Bold)
+    }
+}
+
 // --- SETTINGS MODAL ---
 @Composable
 fun SettingsModal(
     customM3uUrl: String,
     isWatchdogEnabled: Boolean,
+    autoFailoverBackupLinks: Boolean,
+    hideUnavailableChannels: Boolean,
+    isPipEnabled: Boolean,
     selectedQuality: String,
     onSelectQuality: (String) -> Unit,
     updateStatus: String,
@@ -1080,6 +1099,10 @@ fun SettingsModal(
     onLoadCustomM3u: (String) -> Unit,
     onResetM3u: () -> Unit,
     onToggleWatchdog: (Boolean) -> Unit,
+    onToggleAutoFailover: (Boolean) -> Unit,
+    onToggleHideUnavailable: (Boolean) -> Unit,
+    onTogglePip: (Boolean) -> Unit,
+    onClearHistoryAndCache: () -> Unit,
     tickerMode: String,
     onTickerModeChange: (String) -> Unit,
     onClose: () -> Unit
@@ -1187,6 +1210,10 @@ fun SettingsModal(
                     Text(if (isWatchdogEnabled) "ON" else "OFF", color = if (isWatchdogEnabled) Color.White else WarmAshMuted, fontWeight = FontWeight.Bold)
                 }
 
+                SettingToggleRow("Auto-Failover Backup Links", autoFailoverBackupLinks, onToggleAutoFailover)
+                SettingToggleRow("Hide Unavailable Channels", hideUnavailableChannels, onToggleHideUnavailable)
+                SettingToggleRow("Picture-in-Picture (PiP)", isPipEnabled, onTogglePip)
+
                 Text("LIVE NEWS TICKER", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     listOf("OFF", "HOME ONLY", "ALWAYS ON").forEach { mode ->
@@ -1211,6 +1238,12 @@ fun SettingsModal(
                             Text(quality, color = Color.White, fontSize = 11.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium)
                         }
                     }
+                }
+
+                Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(RetroGlass)
+                    .border(1.dp, RetroGlassBorder, RoundedCornerShape(8.dp)).clickable { onClearHistoryAndCache() }
+                    .padding(12.dp), contentAlignment = Alignment.Center) {
+                    Text("Clear Watch History & Cache", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 }
 
                 Text("APP UPDATE", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
@@ -1397,7 +1430,10 @@ class MainActivity : ComponentActivity() {
 
     private val customM3uUrl = mutableStateOf("")
     private val isWatchdogEnabled = mutableStateOf(true)
-    private val liveNewsTickerMode = mutableStateOf("OFF")
+    private val autoFailoverBackupLinks = mutableStateOf(true)
+    private val hideUnavailableChannels = mutableStateOf(false)
+    private val isPipEnabled = mutableStateOf(false)
+    private val liveNewsTickerMode = mutableStateOf("HOME ONLY")
     private val tickerHeadlines = mutableStateListOf<String>()
     private val liveContentCards = mutableStateListOf<LiveContentCard>()
     private var liveContentJob: Job? = null
@@ -2072,7 +2108,8 @@ class MainActivity : ComponentActivity() {
                                     "HOME" -> emptyMap()
                                     "FAVOURITES" -> mapOf("Favourites" to channels.filter { favoriteUrls.contains(it.url) })
                                     "ALL_CHANNELS" -> {
-                                        val matching = if (selectedGroupChip.value == "All") channels else channels.filter {
+                                        val channelSource = if (hideUnavailableChannels.value) channels.filter { it.status != ChannelStatus.OFFLINE } else channels.toList()
+                                        val matching = if (selectedGroupChip.value == "All") channelSource else channelSource.filter {
                                             it.group.contains(selectedGroupChip.value, true)
                                         }
                                         mapOf(selectedGroupChip.value.uppercase(Locale.ROOT) to matching)
@@ -2291,6 +2328,9 @@ class MainActivity : ComponentActivity() {
                         SettingsModal(
                             customM3uUrl = customM3uUrl.value,
                             isWatchdogEnabled = isWatchdogEnabled.value,
+                            autoFailoverBackupLinks = autoFailoverBackupLinks.value,
+                            hideUnavailableChannels = hideUnavailableChannels.value,
+                            isPipEnabled = isPipEnabled.value,
                             selectedQuality = selectedQuality.value,
                             onSelectQuality = { quality ->
                                 selectedQuality.value = quality
@@ -2311,7 +2351,16 @@ class MainActivity : ComponentActivity() {
                                 saveSettingsToStorage()
                                 loadPlaylists()
                             },
-                            onToggleWatchdog = { isWatchdogEnabled.value = it },
+                            onToggleWatchdog = { isWatchdogEnabled.value = it; getSharedPreferences("retro_iptv_prefs", Context.MODE_PRIVATE).edit().putBoolean("watchdog_enabled", it).apply() },
+                            onToggleAutoFailover = { autoFailoverBackupLinks.value = it; getSharedPreferences("retro_iptv_prefs", Context.MODE_PRIVATE).edit().putBoolean("auto_failover_backup_links", it).apply() },
+                            onToggleHideUnavailable = { hideUnavailableChannels.value = it; getSharedPreferences("retro_iptv_prefs", Context.MODE_PRIVATE).edit().putBoolean("hide_unavailable_channels", it).apply() },
+                            onTogglePip = { isPipEnabled.value = it; getSharedPreferences("retro_iptv_prefs", Context.MODE_PRIVATE).edit().putBoolean("pip_enabled", it).apply() },
+                            onClearHistoryAndCache = {
+                                recentChannelUrls.clear()
+                                getSharedPreferences("retro_iptv_prefs", Context.MODE_PRIVATE).edit().remove("recent_channel_urls").apply()
+                                File(cacheDir, "channel_logos").deleteRecursively()
+                                Toast.makeText(this, "Watch history and logo cache cleared", Toast.LENGTH_SHORT).show()
+                            },
                             tickerMode = liveNewsTickerMode.value,
                             onTickerModeChange = {
                                 liveNewsTickerMode.value = it
@@ -2569,7 +2618,11 @@ class MainActivity : ComponentActivity() {
         favoriteUrls.addAll(savedFavs)
         customM3uUrl.value = prefs.getString("custom_m3u_url", "") ?: ""
         selectedQuality.value = prefs.getString("stream_quality", "Auto") ?: "Auto"
-        liveNewsTickerMode.value = prefs.getString("live_news_ticker_mode", "OFF") ?: "OFF"
+        liveNewsTickerMode.value = prefs.getString("live_news_ticker_mode", "HOME ONLY") ?: "HOME ONLY"
+        isWatchdogEnabled.value = prefs.getBoolean("watchdog_enabled", true)
+        autoFailoverBackupLinks.value = prefs.getBoolean("auto_failover_backup_links", true)
+        hideUnavailableChannels.value = prefs.getBoolean("hide_unavailable_channels", false)
+        isPipEnabled.value = prefs.getBoolean("pip_enabled", false)
         recentChannelUrls.clear()
         recentChannelUrls.addAll(prefs.getString("recent_channel_urls", "")?.split("\\n")?.filter { it.isNotBlank() }?.take(8) ?: emptyList())
     }
@@ -3018,9 +3071,9 @@ class MainActivity : ComponentActivity() {
         val total = channel.allUrls.size
         val current = activeStreamIndex.value.coerceIn(0, total - 1)
         triedStreamIndices.add(current)
-        val nextIndex = (1 until total).asSequence()
+        val nextIndex = if (autoFailoverBackupLinks.value) (1 until total).asSequence()
             .map { (current + it) % total }
-            .firstOrNull { it !in triedStreamIndices }
+            .firstOrNull { it !in triedStreamIndices } else null
 
         retryJob?.cancel()
         if (nextIndex != null) {
