@@ -1128,7 +1128,8 @@ fun SettingsModal(
     ) {
         Box(
             modifier = Modifier
-                .width(480.dp)
+                .fillMaxWidth(0.92f)
+                .widthIn(max = 480.dp)
                 .clip(RoundedCornerShape(14.dp))
                 .background(RetroGlass)
                 .border(1.dp, RetroGlassBorder, RoundedCornerShape(14.dp))
@@ -2109,7 +2110,7 @@ class MainActivity : ComponentActivity() {
                             val filteredGroups = remember(currentTab.value, selectedGroupChip.value, channels.toList(), favoriteUrls.toList()) {
                                 when (currentTab.value) {
                                     "HOME" -> emptyMap()
-                                    "FAVOURITES" -> mapOf("Favourites" to channels.filter { favoriteUrls.contains(it.url) })
+                                    "FAVOURITES" -> mapOf("Favourites" to channels.filter { favoriteUrls.contains(it.url) && (!hideUnavailableChannels.value || it.status != ChannelStatus.OFFLINE) })
                                     "ALL_CHANNELS" -> {
                                         val channelSource = if (hideUnavailableChannels.value) channels.filter { it.status != ChannelStatus.OFFLINE } else channels.toList()
                                         val matching = if (selectedGroupChip.value == "All") channelSource else channelSource.filter {
