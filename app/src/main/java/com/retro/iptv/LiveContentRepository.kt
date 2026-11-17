@@ -69,7 +69,7 @@ object LiveContentRepository {
                 .distinctBy { it.lowercase(Locale.ROOT) }
                 .take(30)
 
-            val cards = (eventsJob.await() + cricketJob.await() + footballJobs.awaitAll().flatten())
+            val cards = (eventsJob.await() + cricketJob.await() + footballJobs.awaitAll().flatten() + parsePrimeTimeDrama(channels))
                 .distinctBy { it.id }
                 .take(8)
             LiveContentSnapshot(headlines, cards)
@@ -142,6 +142,36 @@ object LiveContentRepository {
         }
     }
 
+    private data class DramaSlot(val title: String, val channelNames: List<String>, val days: Set<java.time.DayOfWeek>, val startHour: Int, val endHour: Int)
+
+    /** Current prime-time Pakistani serial fallback, evaluated in Pakistan Standard Time. */
+    private fun parsePrimeTimeDrama(channels: List<Channel>): List<LiveContentCard> {
+        val now = java.time.ZonedDateTime.now(java.time.ZoneId.of("Asia/Karachi"))
+        val everyDay = java.time.DayOfWeek.values().toSet()
+        val weekdays = setOf(java.time.DayOfWeek.MONDAY, java.time.DayOfWeek.TUESDAY, java.time.DayOfWeek.WEDNESDAY, java.time.DayOfWeek.THURSDAY, java.time.DayOfWeek.FRIDAY)
+        val slots = listOf(
+            DramaSlot("Mera Ghar", listOf("ARY Digital"), everyDay, 19, 20),
+            DramaSlot("Khushi", listOf("HUM TV"), everyDay, 19, 20),
+            DramaSlot("Uswa", listOf("Geo Entertainment", "Geo TV"), everyDay, 19, 20),
+            DramaSlot("Dastoor", listOf("Green TV", "Green Entertainment"), everyDay, 19, 20),
+            DramaSlot("Rutba", listOf("ARY Digital"), setOf(java.time.DayOfWeek.MONDAY, java.time.DayOfWeek.TUESDAY), 20, 21),
+            DramaSlot("Hey Fam", listOf("ARY Digital"), setOf(java.time.DayOfWeek.WEDNESDAY, java.time.DayOfWeek.THURSDAY), 20, 21),
+            DramaSlot("Dar-e-Nijaat", listOf("ARY Digital"), setOf(java.time.DayOfWeek.FRIDAY, java.time.DayOfWeek.SATURDAY), 20, 21),
+            DramaSlot("Hurmat", listOf("HUM TV"), setOf(java.time.DayOfWeek.MONDAY, java.time.DayOfWeek.TUESDAY), 20, 21),
+            DramaSlot("Gulbahar", listOf("HUM TV"), setOf(java.time.DayOfWeek.WEDNESDAY, java.time.DayOfWeek.THURSDAY), 20, 21),
+            DramaSlot("Aangan", listOf("HUM TV"), setOf(java.time.DayOfWeek.FRIDAY, java.time.DayOfWeek.SATURDAY), 20, 21),
+            DramaSlot("Mohabbat", listOf("Geo Entertainment", "Geo TV"), setOf(java.time.DayOfWeek.MONDAY, java.time.DayOfWeek.TUESDAY), 20, 21),
+            DramaSlot("Khafa", listOf("Geo Entertainment", "Geo TV"), setOf(java.time.DayOfWeek.WEDNESDAY, java.time.DayOfWeek.THURSDAY), 20, 21),
+            DramaSlot("Nizaam", listOf("Green TV", "Green Entertainment"), setOf(java.time.DayOfWeek.SATURDAY, java.time.DayOfWeek.SUNDAY), 20, 21),
+            DramaSlot("Lagan Lagi", listOf("ARY Digital"), weekdays, 21, 22),
+            DramaSlot("Tark-e-Tamanna", listOf("HUM TV"), weekdays, 21, 22),
+            DramaSlot("Bano", listOf("Geo Entertainment", "Geo TV"), everyDay, 21, 22),
+            DramaSlot("Madaar", listOf("Green TV", "Green Entertainment"), weekdays, 21, 22)
+        )
+        val slot = slots.firstOrNull { now.dayOfWeek in it.days && now.hour >= it.startHour && now.hour < it.endHour } ?: return emptyList()
+        val channel = findOnlineChannel(channels, slot.channelNames) ?: return emptyList()
+        return listOf(LiveContentCard("pak-drama-" + now.toLocalDate() + "-" + slot.title.lowercase(Locale.ROOT).replace(" ", "-"), "PAK DRAMA", slot.title, channel))
+    }
     private fun parseFootballEvents(text: String?, channels: List<Channel>): List<LiveContentCard> {
         if (text.isNullOrBlank()) return emptyList()
         return parseRssTitles(text, 35).mapIndexedNotNull { index, raw ->
