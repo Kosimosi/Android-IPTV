@@ -1070,6 +1070,32 @@ fun SearchModal(
 }
 
 @Composable
+private fun SettingsOption(
+    label: String,
+    selected: Boolean = false,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    fontSize: androidx.compose.ui.unit.TextUnit = 11.sp
+) {
+    var focused by remember(label) { mutableStateOf(false) }
+    Box(
+        modifier.then(
+            Modifier.clip(RoundedCornerShape(8.dp))
+                .background(when { selected -> FocusRed.copy(alpha = 0.30f); focused -> FocusRed.copy(alpha = 0.16f); else -> RetroGlass })
+                .border(1.dp, if (focused || selected) FocusRed else RetroGlassBorder, RoundedCornerShape(8.dp))
+                .onFocusChanged { focused = it.isFocused }
+                .clickable(enabled = enabled, onClick = onClick)
+                .focusable(enabled = enabled)
+                .padding(horizontal = 10.dp, vertical = 10.dp)
+        ),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(label, color = Color.White, fontSize = fontSize, fontWeight = if (selected || focused) FontWeight.Bold else FontWeight.Medium, textAlign = TextAlign.Center, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+@Composable
 private fun SettingToggleRow(label: String, checked: Boolean, onToggle: (Boolean) -> Unit) {
     var focused by remember { mutableStateOf(false) }
     Row(
@@ -1168,51 +1194,11 @@ fun SettingsModal(
                 }
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(Color.White)
-                            .clickable {
-                                onLoadCustomM3u(urlInput)
-                                onClose()
-                            }
-                            .padding(vertical = 10.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("Apply", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(OakSurfaceElevated)
-                            .clickable {
-                                onResetM3u()
-                                onClose()
-                            }
-                            .padding(vertical = 10.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("Reset Default", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                    }
+                    SettingsOption("Apply", selected = true, onClick = { onLoadCustomM3u(urlInput); onClose() }, modifier = Modifier.weight(1f), fontSize = 12.sp)
+                    SettingsOption("Reset Default", onClick = { onResetM3u(); onClose() }, modifier = Modifier.weight(1f), fontSize = 12.sp)
                 }
 
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(RetroGlass)
-                        .border(1.dp, RetroGlassBorder, RoundedCornerShape(8.dp))
-                        .clickable { onToggleWatchdog(!isWatchdogEnabled) }
-                        .padding(12.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("15s Watchdog Auto-skip", color = Color.White, fontSize = 12.sp)
-                    Text(if (isWatchdogEnabled) "ON" else "OFF", color = if (isWatchdogEnabled) Color.White else WarmAshMuted, fontWeight = FontWeight.Bold)
-                }
+                SettingToggleRow("15s Watchdog Auto-skip", isWatchdogEnabled, onToggleWatchdog)
 
                 SettingToggleRow("Auto-Failover Backup Links", autoFailoverBackupLinks, onToggleAutoFailover)
                 SettingToggleRow("Hide Unavailable Channels", hideUnavailableChannels, onToggleHideUnavailable)
@@ -1221,54 +1207,32 @@ fun SettingsModal(
                 Text("LIVE NEWS TICKER", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     listOf("OFF", "HOME ONLY", "ALWAYS ON").forEach { mode ->
-                        val selected = tickerMode == mode
-                        Box(Modifier.weight(1f).clip(RoundedCornerShape(7.dp))
-                            .background(if (selected) FocusRed else OakSurfaceElevated)
-                            .border(1.dp, if (selected) FocusRed else Color.White.copy(alpha = 0.12f), RoundedCornerShape(7.dp))
-                            .clickable { onTickerModeChange(mode) }.padding(vertical = 9.dp), contentAlignment = Alignment.Center) {
-                            Text(mode, color = Color.White, fontSize = 9.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium, textAlign = TextAlign.Center)
-                        }
+                        SettingsOption(mode, selected = tickerMode == mode, onClick = { onTickerModeChange(mode) }, modifier = Modifier.weight(1f), fontSize = 9.sp)
                     }
                 }
 
                 Text("STREAM QUALITY", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     listOf("Auto", "1080p", "720p", "480p").forEach { quality ->
-                        val selected = selectedQuality == quality
-                        Box(Modifier.weight(1f).clip(RoundedCornerShape(7.dp))
-                            .background(if (selected) FocusRed else OakSurfaceElevated)
-                            .border(1.dp, if (selected) FocusRed else Color.White.copy(alpha = 0.12f), RoundedCornerShape(7.dp))
-                            .clickable { onSelectQuality(quality) }.padding(vertical = 9.dp), contentAlignment = Alignment.Center) {
-                            Text(quality, color = Color.White, fontSize = 11.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium)
-                        }
+                        SettingsOption(quality, selected = selectedQuality == quality, onClick = { onSelectQuality(quality) }, modifier = Modifier.weight(1f), fontSize = 11.sp)
                     }
                 }
 
-                Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(RetroGlass)
-                    .border(1.dp, RetroGlassBorder, RoundedCornerShape(8.dp)).clickable { onClearHistoryAndCache() }
-                    .padding(12.dp), contentAlignment = Alignment.Center) {
-                    Text("Clear Watch History & Cache", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                }
+                SettingsOption("Clear Watch History & Cache", onClick = onClearHistoryAndCache, modifier = Modifier.fillMaxWidth(), fontSize = 12.sp)
 
                 Text("APP UPDATE", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                Box(
-                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
-                        .background(Color.White)
-                        .clickable(enabled = !isCheckingForUpdates) { onCheckForUpdates() }
-                        .padding(vertical = 12.dp, horizontal = 14.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = when {
-                            isCheckingForUpdates -> "Checking / downloading…"
-                            isUpdateDownloaded -> "Install downloaded update"
-                            else -> "Check for updates"
-                        },
-                        color = Color.Black,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 12.sp
-                    )
-                }
+                SettingsOption(
+                    when {
+                        isCheckingForUpdates -> "Checking / downloading…"
+                        isUpdateDownloaded -> "Install downloaded update"
+                        else -> "Check for updates"
+                    },
+                    selected = true,
+                    enabled = !isCheckingForUpdates,
+                    onClick = onCheckForUpdates,
+                    modifier = Modifier.fillMaxWidth(),
+                    fontSize = 12.sp
+                )
                 Text(updateStatus, color = WarmAshMuted, fontSize = 11.sp, lineHeight = 15.sp)
             }
         }
