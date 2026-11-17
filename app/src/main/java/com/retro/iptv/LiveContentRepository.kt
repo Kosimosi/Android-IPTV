@@ -69,7 +69,7 @@ object LiveContentRepository {
                 .distinctBy { it.lowercase(Locale.ROOT) }
                 .take(30)
 
-            val cards = (eventsJob.await() + cricketJob.await() + footballJobs.awaitAll().flatten() + parsePrimeTimeDrama(channels))
+            val cards = (eventsJob.await() + parsePrimeTimeDrama(channels) + cricketJob.await() + footballJobs.awaitAll().flatten())
                 .distinctBy { it.id }
                 .take(8)
             LiveContentSnapshot(headlines, cards)
