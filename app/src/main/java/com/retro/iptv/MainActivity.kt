@@ -14,6 +14,8 @@ import android.graphics.Color as AndroidColor
 import android.media.AudioManager
 import android.os.Bundle
 import android.os.SystemClock
+import android.app.PictureInPictureParams
+import android.util.Rational
 import android.view.KeyEvent
 import android.util.Xml
 import android.widget.Toast
@@ -31,6 +33,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
@@ -122,7 +125,9 @@ const val IPTV_INDIA_EPG_URL = "https://iptv-epg.org/files/epg-in.xml"
 val OakDarkBackground = Color(0xFF080808)
 val OakSurface = Color(0xFF151515)
 val OakSurfaceElevated = Color(0xFF222222)
-val FocusRed = Color(0xFFE62117)
+val FocusRed = Color(0xFFE50914)
+val RetroGlass = Color(0xD912141A)
+val RetroGlassBorder = Color.White.copy(alpha = 0.12f)
 val ParchmentWhite = Color.White
 val WarmAshMuted = Color(0xFFA3A3A3)
 
@@ -744,7 +749,7 @@ private fun LiveNowEventCard(
 ) {
     var focused by remember { mutableStateOf(false) }
     Row(
-        Modifier.widthIn(min = 270.dp).width(270.dp).clip(RoundedCornerShape(10.dp))
+        Modifier.widthIn(min = 260.dp).width(260.dp).clip(RoundedCornerShape(10.dp))
             .background(if (focused) Color(0xE51A1115) else Color(0xD914161D))
             .border(1.dp, if (focused) FocusRed.copy(alpha = 0.85f) else Color(0x55E50914), RoundedCornerShape(10.dp))
             .onFocusChanged { focused = it.isFocused }
@@ -755,7 +760,7 @@ private fun LiveNowEventCard(
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                 Box(Modifier.size(6.dp).clip(CircleShape).background(FocusRed))
-                Text(badge, color = FocusRed, fontSize = 9.sp, fontWeight = FontWeight.Black, maxLines = 1, softWrap = false, overflow = TextOverflow.Clip)
+                Text(badge, color = FocusRed, fontSize = 9.sp, fontWeight = FontWeight.Black, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
             }
             Text(title, color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -974,7 +979,7 @@ fun SearchModal(
                 }
                 Spacer(Modifier.height(8.dp))
             }
-            if (query.isBlank() && tickerMode != "OFF" && tickerHeadlines.isNotEmpty()) {
+            if (query.isBlank() && tickerMode == "ALWAYS ON" && tickerHeadlines.isNotEmpty()) {
                 NewsTickerBar(tickerHeadlines, onClick = onTickerTap)
                 Spacer(Modifier.height(8.dp))
             }
@@ -1064,11 +1069,56 @@ fun SearchModal(
     }
 }
 
+@Composable
+private fun SettingsOption(
+    label: String,
+    selected: Boolean = false,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    fontSize: androidx.compose.ui.unit.TextUnit = 11.sp
+) {
+    var focused by remember(label) { mutableStateOf(false) }
+    Box(
+        modifier.then(
+            Modifier.clip(RoundedCornerShape(8.dp))
+                .background(when { selected -> FocusRed.copy(alpha = 0.30f); focused -> FocusRed.copy(alpha = 0.16f); else -> RetroGlass })
+                .border(1.dp, if (focused || selected) FocusRed else RetroGlassBorder, RoundedCornerShape(8.dp))
+                .onFocusChanged { focused = it.isFocused }
+                .clickable(enabled = enabled, onClick = onClick)
+                .focusable(enabled = enabled)
+                .padding(horizontal = 10.dp, vertical = 10.dp)
+        ),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(label, color = Color.White, fontSize = fontSize, fontWeight = if (selected || focused) FontWeight.Bold else FontWeight.Medium, textAlign = TextAlign.Center, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+@Composable
+private fun SettingToggleRow(label: String, checked: Boolean, onToggle: (Boolean) -> Unit) {
+    var focused by remember { mutableStateOf(false) }
+    Row(
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
+            .background(if (focused) FocusRed.copy(alpha = 0.15f) else RetroGlass)
+            .border(1.dp, if (focused) FocusRed else RetroGlassBorder, RoundedCornerShape(8.dp))
+            .onFocusChanged { focused = it.isFocused }
+            .clickable { onToggle(!checked) }.focusable().padding(12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(label, color = Color.White, fontSize = 12.sp)
+        Text(if (checked) "ON" else "OFF", color = if (checked) FocusRed else WarmAshMuted, fontWeight = FontWeight.Bold)
+    }
+}
+
 // --- SETTINGS MODAL ---
 @Composable
 fun SettingsModal(
     customM3uUrl: String,
     isWatchdogEnabled: Boolean,
+    autoFailoverBackupLinks: Boolean,
+    hideUnavailableChannels: Boolean,
+    isPipEnabled: Boolean,
     selectedQuality: String,
     onSelectQuality: (String) -> Unit,
     updateStatus: String,
@@ -1078,11 +1128,16 @@ fun SettingsModal(
     onLoadCustomM3u: (String) -> Unit,
     onResetM3u: () -> Unit,
     onToggleWatchdog: (Boolean) -> Unit,
+    onToggleAutoFailover: (Boolean) -> Unit,
+    onToggleHideUnavailable: (Boolean) -> Unit,
+    onTogglePip: (Boolean) -> Unit,
+    onClearHistoryAndCache: () -> Unit,
     tickerMode: String,
     onTickerModeChange: (String) -> Unit,
     onClose: () -> Unit
 ) {
     var urlInput by remember(customM3uUrl) { mutableStateOf(customM3uUrl) }
+    var urlFocused by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val settingsFocusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) {
@@ -1095,25 +1150,26 @@ fun SettingsModal(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.85f)),
+            .background(Color.Black.copy(alpha = 0.58f)),
         contentAlignment = Alignment.Center
     ) {
         Box(
             modifier = Modifier
-                .width(480.dp)
+                .fillMaxWidth(0.92f)
+                .widthIn(max = 480.dp)
                 .clip(RoundedCornerShape(14.dp))
-                .background(OakSurface)
-                .border(1.5.dp, Color.White.copy(alpha = 0.16f), RoundedCornerShape(14.dp))
+                .background(RetroGlass)
+                .border(1.dp, RetroGlassBorder, RoundedCornerShape(14.dp))
                 .padding(24.dp)
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text("SETTINGS", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Black)
-                    Text("✕", color = Color.White, fontSize = 16.sp, modifier = Modifier.clip(CircleShape).clickable { onClose() }.padding(8.dp))
+                    SettingsOption("✕", onClick = onClose, fontSize = 14.sp)
                 }
 
                 Text("PLAYLIST SOURCE", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
@@ -1122,8 +1178,8 @@ fun SettingsModal(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(8.dp))
-                        .background(OakSurfaceElevated)
-                        .border(1.dp, Color.White.copy(alpha = 0.14f), RoundedCornerShape(8.dp))
+                        .background(RetroGlass)
+                        .border(1.dp, if (urlFocused) FocusRed else RetroGlassBorder, RoundedCornerShape(8.dp))
                         .padding(12.dp)
                 ) {
                     if (urlInput.isEmpty()) {
@@ -1134,101 +1190,50 @@ fun SettingsModal(
                         onValueChange = { urlInput = it },
                         textStyle = TextStyle(color = Color.White, fontSize = 12.sp),
                         cursorBrush = SolidColor(Color.White),
-                        modifier = Modifier.fillMaxWidth().focusRequester(settingsFocusRequester)
+                        modifier = Modifier.fillMaxWidth().focusRequester(settingsFocusRequester).onFocusChanged { urlFocused = it.isFocused }
                     )
                 }
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(Color.White)
-                            .clickable {
-                                onLoadCustomM3u(urlInput)
-                                onClose()
-                            }
-                            .padding(vertical = 10.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("Apply", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(OakSurfaceElevated)
-                            .clickable {
-                                onResetM3u()
-                                onClose()
-                            }
-                            .padding(vertical = 10.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("Reset Default", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                    }
+                    SettingsOption("Apply", selected = true, onClick = { onLoadCustomM3u(urlInput); onClose() }, modifier = Modifier.weight(1f), fontSize = 12.sp)
+                    SettingsOption("Reset Default", onClick = { onResetM3u(); onClose() }, modifier = Modifier.weight(1f), fontSize = 12.sp)
                 }
 
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(OakSurfaceElevated)
-                        .clickable { onToggleWatchdog(!isWatchdogEnabled) }
-                        .padding(12.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("15s Watchdog Auto-skip", color = Color.White, fontSize = 12.sp)
-                    Text(if (isWatchdogEnabled) "ON" else "OFF", color = if (isWatchdogEnabled) Color.White else WarmAshMuted, fontWeight = FontWeight.Bold)
-                }
+                SettingToggleRow("15s Watchdog Auto-skip", isWatchdogEnabled, onToggleWatchdog)
+
+                SettingToggleRow("Auto-Failover Backup Links", autoFailoverBackupLinks, onToggleAutoFailover)
+                SettingToggleRow("Hide Unavailable Channels", hideUnavailableChannels, onToggleHideUnavailable)
+                SettingToggleRow("Picture-in-Picture (PiP)", isPipEnabled, onTogglePip)
 
                 Text("LIVE NEWS TICKER", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf("OFF", "OVERLAYS ONLY", "ALWAYS ON").forEach { mode ->
-                        val selected = tickerMode == mode
-                        Box(Modifier.weight(1f).clip(RoundedCornerShape(7.dp))
-                            .background(if (selected) FocusRed else OakSurfaceElevated)
-                            .border(1.dp, if (selected) FocusRed else Color.White.copy(alpha = 0.12f), RoundedCornerShape(7.dp))
-                            .clickable { onTickerModeChange(mode) }.padding(vertical = 9.dp), contentAlignment = Alignment.Center) {
-                            Text(mode, color = Color.White, fontSize = 9.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium, textAlign = TextAlign.Center)
-                        }
+                    listOf("OFF", "HOME ONLY", "ALWAYS ON").forEach { mode ->
+                        SettingsOption(mode, selected = tickerMode == mode, onClick = { onTickerModeChange(mode) }, modifier = Modifier.weight(1f), fontSize = 9.sp)
                     }
                 }
 
                 Text("STREAM QUALITY", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     listOf("Auto", "1080p", "720p", "480p").forEach { quality ->
-                        val selected = selectedQuality == quality
-                        Box(Modifier.weight(1f).clip(RoundedCornerShape(7.dp))
-                            .background(if (selected) FocusRed else OakSurfaceElevated)
-                            .border(1.dp, if (selected) FocusRed else Color.White.copy(alpha = 0.12f), RoundedCornerShape(7.dp))
-                            .clickable { onSelectQuality(quality) }.padding(vertical = 9.dp), contentAlignment = Alignment.Center) {
-                            Text(quality, color = Color.White, fontSize = 11.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium)
-                        }
+                        SettingsOption(quality, selected = selectedQuality == quality, onClick = { onSelectQuality(quality) }, modifier = Modifier.weight(1f), fontSize = 11.sp)
                     }
                 }
 
+                SettingsOption("Clear Watch History & Cache", onClick = onClearHistoryAndCache, modifier = Modifier.fillMaxWidth(), fontSize = 12.sp)
+
                 Text("APP UPDATE", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                Box(
-                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
-                        .background(Color.White)
-                        .clickable(enabled = !isCheckingForUpdates) { onCheckForUpdates() }
-                        .padding(vertical = 12.dp, horizontal = 14.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = when {
-                            isCheckingForUpdates -> "Checking / downloading…"
-                            isUpdateDownloaded -> "Install downloaded update"
-                            else -> "Check for updates"
-                        },
-                        color = Color.Black,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 12.sp
-                    )
-                }
+                SettingsOption(
+                    when {
+                        isCheckingForUpdates -> "Checking / downloading…"
+                        isUpdateDownloaded -> "Install downloaded update"
+                        else -> "Check for updates"
+                    },
+                    selected = true,
+                    enabled = !isCheckingForUpdates,
+                    onClick = onCheckForUpdates,
+                    modifier = Modifier.fillMaxWidth(),
+                    fontSize = 12.sp
+                )
                 Text(updateStatus, color = WarmAshMuted, fontSize = 11.sp, lineHeight = 15.sp)
             }
         }
@@ -1394,7 +1399,10 @@ class MainActivity : ComponentActivity() {
 
     private val customM3uUrl = mutableStateOf("")
     private val isWatchdogEnabled = mutableStateOf(true)
-    private val liveNewsTickerMode = mutableStateOf("OFF")
+    private val autoFailoverBackupLinks = mutableStateOf(true)
+    private val hideUnavailableChannels = mutableStateOf(false)
+    private val isPipEnabled = mutableStateOf(false)
+    private val liveNewsTickerMode = mutableStateOf("HOME ONLY")
     private val tickerHeadlines = mutableStateListOf<String>()
     private val liveContentCards = mutableStateListOf<LiveContentCard>()
     private var liveContentJob: Job? = null
@@ -1754,11 +1762,11 @@ class MainActivity : ComponentActivity() {
                                     val fallbackQuality = infoChannel?.linkLabels?.firstOrNull {
                                         it.contains("4K", true) || it.contains("FHD", true) || it.contains("HD", true)
                                     } ?: "HD"
-                                    val channelMeta = listOfNotNull(
-                                        infoChannel?.group?.takeIf { it.isNotBlank() && !it.equals("General", true) && !it.equals("Unknown", true) },
-                                        currentResolution.value ?: fallbackQuality,
-                                        activeLinkSubtitle
-                                    ).distinct().joinToString("  •  ").ifBlank { "Live Stream" }
+                                    val groupTitle = infoChannel?.group?.trim()?.takeIf {
+                                        it.isNotBlank() && !it.equals("General", true) && !it.equals("Unknown", true) && !it.equals("Undefined", true)
+                                    } ?: "Live"
+                                    val channelMeta = listOf(groupTitle, currentResolution.value ?: fallbackQuality, activeLinkSubtitle)
+                                        .filterNotNull().distinct().joinToString("  •  ")
                                     Text(channelMeta, color = Color.White.copy(alpha = 0.78f), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 }
                             }
@@ -2066,18 +2074,16 @@ class MainActivity : ComponentActivity() {
                             }
                             val filteredGroups = remember(currentTab.value, selectedGroupChip.value, channels.toList(), favoriteUrls.toList()) {
                                 when (currentTab.value) {
-                                    "FAVOURITES" -> mapOf("Favourites" to channels.filter { favoriteUrls.contains(it.url) })
+                                    "HOME" -> emptyMap()
+                                    "FAVOURITES" -> mapOf("Favourites" to channels.filter { favoriteUrls.contains(it.url) && (!hideUnavailableChannels.value || it.status != ChannelStatus.OFFLINE) })
                                     "ALL_CHANNELS" -> {
-                                        val matching = if (selectedGroupChip.value == "All") channels else channels.filter {
-                                            it.group.trim().equals(selectedGroupChip.value, true)
+                                        val channelSource = if (hideUnavailableChannels.value) channels.filter { it.status != ChannelStatus.OFFLINE } else channels.toList()
+                                        val matching = if (selectedGroupChip.value == "All") channelSource else channelSource.filter {
+                                            it.group.contains(selectedGroupChip.value, true)
                                         }
                                         mapOf(selectedGroupChip.value.uppercase(Locale.ROOT) to matching)
                                     }
-                                    else -> channels.groupBy { it.group.trim().ifBlank { "General" } }
-                                        .toSortedMap(compareBy<String>(
-                                            { group -> priorityGroups.indexOfFirst { priority -> group.contains(priority, true) }.let { if (it < 0) Int.MAX_VALUE else it } },
-                                            { it.lowercase(Locale.ROOT) }
-                                        ))
+                                    else -> emptyMap()
                                 }
                             }
 
@@ -2119,7 +2125,7 @@ class MainActivity : ComponentActivity() {
                                         horizontalArrangement = Arrangement.spacedBy(7.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        (listOf("All") + groupNames).forEach { group ->
+                                        listOf("All", "Bangla", "Sports", "News", "Movies", "Kids").forEach { group ->
                                             M3uFilterChip(
                                                 label = group,
                                                 selected = selectedGroupChip.value.equals(group, true),
@@ -2135,33 +2141,12 @@ class MainActivity : ComponentActivity() {
                                     verticalArrangement = Arrangement.spacedBy(16.dp),
                                     contentPadding = PaddingValues(bottom = 32.dp)
                                 ) {
-                                    item {
-                                        HeroSection(
-                                            channel = activeChannel,
-                                            resolution = currentResolution.value,
-                                            isFavorite = isFav,
-                                            onToggleFavorite = {
-                                                activeChannel?.url?.let { toggleFavorite(it) }
-                                                resetIdleTimer()
-                                            },
-                                            onFullscreen = {
-                                                isUiVisible.value = false
-                                                isSearchOpen.value = false
-                                                isSettingsOpen.value = false
-                                            }
-                                        )
-                                    }
-
-                                    item {
-                                        Text(playlistStatus.value, color = WarmAshMuted, fontSize = 10.sp,
-                                            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp))
-                                    }
-
-                                    val liveNowHome = liveContentCards.toList().distinctBy { it.channel.url }.take(5)
+                                    if (currentTab.value == "HOME") {
+                                    val liveNowHome = liveContentCards.toList().distinctBy { it.id }.take(8)
                                     if (liveNowHome.isNotEmpty()) {
                                         item {
                                             Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                                                Text("LIVE NOW • SPORTS & EVENTS", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Black,
+                                                Text("LIVE NOW", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Black,
                                                     letterSpacing = 1.sp, modifier = Modifier.padding(horizontal = 24.dp))
                                                 LazyRow(modifier = Modifier.focusGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(horizontal = 24.dp)) {
                                                     items(liveNowHome, key = { it.id }) { item ->
@@ -2174,13 +2159,13 @@ class MainActivity : ComponentActivity() {
                                             }
                                         }
                                     }
-                                    if (liveNewsTickerMode.value != "OFF" && tickerHeadlines.isNotEmpty()) {
+                                    if (liveNewsTickerMode.value in listOf("HOME ONLY", "OVERLAYS ONLY", "ALWAYS ON") && tickerHeadlines.isNotEmpty()) {
                                         item { NewsTickerBar(tickerHeadlines, Modifier.padding(horizontal = 24.dp), onClick = { playNewsChannelFromTicker() }) }
                                     }
 
                                     val recentlyWatched = recentChannelUrls.mapNotNull { url -> channels.firstOrNull { it.url == url } }
-                                    if (recentlyWatched.isNotEmpty()) {
-                                        item {
+                                    item {
+                                        if (recentlyWatched.isNotEmpty()) {
                                             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                                 Text("RECENTLY WATCHED", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Black,
                                                     letterSpacing = 1.sp, modifier = Modifier.padding(horizontal = 24.dp))
@@ -2193,7 +2178,13 @@ class MainActivity : ComponentActivity() {
                                                     }
                                                 }
                                             }
+                                        } else {
+                                            Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                                Text("RECENTLY WATCHED", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
+                                                Text("Your recently watched channels will appear here.", color = WarmAshMuted, fontSize = 11.sp)
+                                            }
                                         }
+                                    }
                                     }
 
                                     filteredGroups.forEach { (groupName, groupChannels) ->
@@ -2306,6 +2297,9 @@ class MainActivity : ComponentActivity() {
                         SettingsModal(
                             customM3uUrl = customM3uUrl.value,
                             isWatchdogEnabled = isWatchdogEnabled.value,
+                            autoFailoverBackupLinks = autoFailoverBackupLinks.value,
+                            hideUnavailableChannels = hideUnavailableChannels.value,
+                            isPipEnabled = isPipEnabled.value,
                             selectedQuality = selectedQuality.value,
                             onSelectQuality = { quality ->
                                 selectedQuality.value = quality
@@ -2326,7 +2320,16 @@ class MainActivity : ComponentActivity() {
                                 saveSettingsToStorage()
                                 loadPlaylists()
                             },
-                            onToggleWatchdog = { isWatchdogEnabled.value = it },
+                            onToggleWatchdog = { isWatchdogEnabled.value = it; getSharedPreferences("retro_iptv_prefs", Context.MODE_PRIVATE).edit().putBoolean("watchdog_enabled", it).apply() },
+                            onToggleAutoFailover = { autoFailoverBackupLinks.value = it; getSharedPreferences("retro_iptv_prefs", Context.MODE_PRIVATE).edit().putBoolean("auto_failover_backup_links", it).apply() },
+                            onToggleHideUnavailable = { hideUnavailableChannels.value = it; getSharedPreferences("retro_iptv_prefs", Context.MODE_PRIVATE).edit().putBoolean("hide_unavailable_channels", it).apply() },
+                            onTogglePip = { isPipEnabled.value = it; getSharedPreferences("retro_iptv_prefs", Context.MODE_PRIVATE).edit().putBoolean("pip_enabled", it).apply() },
+                            onClearHistoryAndCache = {
+                                recentChannelUrls.clear()
+                                getSharedPreferences("retro_iptv_prefs", Context.MODE_PRIVATE).edit().remove("recent_channel_urls").apply()
+                                File(cacheDir, "channel_logos").deleteRecursively()
+                                Toast.makeText(applicationContext, "Watch history and logo cache cleared", Toast.LENGTH_SHORT).show()
+                            },
                             tickerMode = liveNewsTickerMode.value,
                             onTickerModeChange = {
                                 liveNewsTickerMode.value = it
@@ -2584,7 +2587,11 @@ class MainActivity : ComponentActivity() {
         favoriteUrls.addAll(savedFavs)
         customM3uUrl.value = prefs.getString("custom_m3u_url", "") ?: ""
         selectedQuality.value = prefs.getString("stream_quality", "Auto") ?: "Auto"
-        liveNewsTickerMode.value = prefs.getString("live_news_ticker_mode", "OFF") ?: "OFF"
+        liveNewsTickerMode.value = prefs.getString("live_news_ticker_mode", "HOME ONLY") ?: "HOME ONLY"
+        isWatchdogEnabled.value = prefs.getBoolean("watchdog_enabled", true)
+        autoFailoverBackupLinks.value = prefs.getBoolean("auto_failover_backup_links", true)
+        hideUnavailableChannels.value = prefs.getBoolean("hide_unavailable_channels", false)
+        isPipEnabled.value = prefs.getBoolean("pip_enabled", false)
         recentChannelUrls.clear()
         recentChannelUrls.addAll(prefs.getString("recent_channel_urls", "")?.split("\\n")?.filter { it.isNotBlank() }?.take(8) ?: emptyList())
     }
@@ -3033,9 +3040,9 @@ class MainActivity : ComponentActivity() {
         val total = channel.allUrls.size
         val current = activeStreamIndex.value.coerceIn(0, total - 1)
         triedStreamIndices.add(current)
-        val nextIndex = (1 until total).asSequence()
+        val nextIndex = if (autoFailoverBackupLinks.value) (1 until total).asSequence()
             .map { (current + it) % total }
-            .firstOrNull { it !in triedStreamIndices }
+            .firstOrNull { it !in triedStreamIndices } else null
 
         retryJob?.cancel()
         if (nextIndex != null) {
@@ -3448,6 +3455,19 @@ class MainActivity : ComponentActivity() {
         if (requestCode == REQUEST_VOICE_SEARCH && resultCode == RESULT_OK) {
             val spoken = data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull().orEmpty()
             if (spoken.isNotBlank()) searchVoiceQuery.value = spoken
+        }
+    }
+
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (isPipEnabled.value && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !isUiVisible.value &&
+            !isSearchOpen.value && !isSettingsOpen.value && packageManager.hasSystemFeature("android.software.picture_in_picture")
+        ) {
+            runCatching {
+                enterPictureInPictureMode(
+                    PictureInPictureParams.Builder().setAspectRatio(Rational(16, 9)).build()
+                )
+            }
         }
     }
 
