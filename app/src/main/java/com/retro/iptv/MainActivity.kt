@@ -979,7 +979,7 @@ fun SearchModal(
                 }
                 Spacer(Modifier.height(8.dp))
             }
-            if (query.isBlank() && tickerMode != "OFF" && tickerHeadlines.isNotEmpty()) {
+            if (query.isBlank() && tickerMode == "ALWAYS ON" && tickerHeadlines.isNotEmpty()) {
                 NewsTickerBar(tickerHeadlines, onClick = onTickerTap)
                 Spacer(Modifier.height(8.dp))
             }
