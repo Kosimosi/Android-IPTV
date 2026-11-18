@@ -8,7 +8,6 @@ import androidx.compose.animation.core.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
@@ -21,9 +20,12 @@ import androidx.compose.ui.input.key.nativeKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.awaitPointerEvent
-import androidx.compose.ui.input.pointer.awaitPointerEventScope
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import kotlinx.coroutines.CoroutineScope
@@ -115,33 +117,39 @@ fun Modifier.retroTvHoverRequestsFocus(focusRequester: FocusRequester): Modifier
  * Center a focused LazyColumn item. Extra vertical content padding lets the first and
  * last results reach the same center position as items in the middle.
  */
+@androidx.compose.runtime.Composable
 fun Modifier.retroTvCenterOnFocus(
     listState: LazyListState,
     itemIndex: Int,
     scope: CoroutineScope,
     onFocusChanged: (Boolean) -> Unit = {},
     estimatedItemHeight: Dp = 64.dp
-): Modifier = this.onFocusChanged { state ->
-    onFocusChanged(state.isFocused)
-    if (state.isFocused) {
-        scope.launch {
-            val layout = listState.layoutInfo
-            val viewportHeight = layout.viewportSize.height
-            val itemHeight = layout.visibleItemsInfo.firstOrNull { it.index == itemIndex }?.size
-                ?: estimatedItemHeight.roundToPx()
+): Modifier {
+    val density = LocalDensity.current
+    return this.onFocusChanged { state ->
+        onFocusChanged(state.isFocused)
+        if (state.isFocused) {
+            scope.launch {
+                val layout = listState.layoutInfo
+                val viewportHeight = layout.viewportSize.height
+                val itemHeight = layout.visibleItemsInfo.firstOrNull { it.index == itemIndex }?.size
+                    ?: with(density) { estimatedItemHeight.roundToPx() }
             val centerOffset = ((viewportHeight - itemHeight) / 2).coerceAtLeast(0)
-            listState.animateScrollToItem(itemIndex, scrollOffset = -centerOffset)
+                listState.animateScrollToItem(itemIndex, scrollOffset = -centerOffset)
+            }
         }
     }
 }
 
 /** Throttle held directional-key repeats to at most one accepted step per 95ms. */
-fun Modifier.retroTvDpadRepeatThrottle(
+@androidx.compose.runtime.Composable
+fun rememberRetroTvDpadRepeatThrottle(
     onRapidNavigation: () -> Unit = {},
     intervalMs: Long = 95L
 ): Modifier {
-    var lastAcceptedRepeat = 0L
-    return this.onPreviewKeyEvent { event: KeyEvent ->
+    var lastAcceptedRepeat by remember { mutableLongStateOf(0L) }
+    val currentCallback = rememberUpdatedState(onRapidNavigation)
+    return Modifier.onPreviewKeyEvent { event: KeyEvent ->
         val native = event.nativeKeyEvent
         val directional = native.keyCode == AndroidKeyEvent.KEYCODE_DPAD_UP ||
             native.keyCode == AndroidKeyEvent.KEYCODE_DPAD_DOWN ||
@@ -153,7 +161,7 @@ fun Modifier.retroTvDpadRepeatThrottle(
                 true
             } else {
                 lastAcceptedRepeat = now
-                onRapidNavigation()
+                currentCallback.value()
                 false
             }
         } else false
