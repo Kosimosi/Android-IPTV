@@ -8,6 +8,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
@@ -104,12 +105,15 @@ fun Modifier.retroTvFocusLayer(focused: Boolean, scale: Float): Modifier =
         }
 
 /** Request focus when an air-mouse enters a focusable Compose item. */
-fun Modifier.retroTvHoverRequestsFocus(focusRequester: FocusRequester): Modifier =
-    this.pointerInput(focusRequester) {
+fun Modifier.retroTvHoverRequestsFocus(
+    focusRequester: FocusRequester,
+    canRequestFocus: () -> Boolean = { true }
+): Modifier =
+    this.pointerInput(focusRequester, canRequestFocus) {
         awaitPointerEventScope {
             while (true) {
                 val event = awaitPointerEvent()
-                if (event.type == PointerEventType.Enter) {
+                if (event.type == PointerEventType.Enter && canRequestFocus()) {
                     focusRequester.requestFocus()
                 }
             }
@@ -126,7 +130,8 @@ fun Modifier.retroTvCenterOnFocus(
     itemIndex: Int,
     scope: CoroutineScope,
     onFocusChanged: (Boolean) -> Unit = {},
-    estimatedItemHeight: Dp = 64.dp
+    estimatedItemHeight: Dp = 64.dp,
+    rapidNavigation: Boolean = false
 ): Modifier {
     val density = LocalDensity.current
     return this.onFocusChanged { state ->
@@ -135,10 +140,23 @@ fun Modifier.retroTvCenterOnFocus(
             scope.launch {
                 val layout = listState.layoutInfo
                 val viewportHeight = layout.viewportSize.height
-                val itemHeight = layout.visibleItemsInfo.firstOrNull { it.index == itemIndex }?.size
-                    ?: with(density) { estimatedItemHeight.roundToPx() }
-            val centerOffset = ((viewportHeight - itemHeight) / 2).coerceAtLeast(0)
-                listState.animateScrollToItem(itemIndex, scrollOffset = -centerOffset)
+                val targetItem = layout.visibleItemsInfo.firstOrNull { it.index == itemIndex }
+                if (targetItem != null) {
+                    val deltaPx = targetItem.offset + targetItem.size / 2f - viewportHeight / 2f
+                    if (kotlin.math.abs(deltaPx) > 1f) {
+                        val distanceDp = kotlin.math.abs(deltaPx) / density.density
+                        val msPerInch = if (rapidNavigation) 50f else 110f
+                        val durationMs = (distanceDp / 160f * msPerInch).toInt().coerceIn(50, 1200)
+                        listState.animateScrollBy(
+                            deltaPx,
+                            animationSpec = tween(durationMillis = durationMs)
+                        )
+                    }
+                } else {
+                    val itemHeight = with(density) { estimatedItemHeight.roundToPx() }
+                    val centerOffset = ((viewportHeight - itemHeight) / 2).coerceAtLeast(0)
+                    listState.animateScrollToItem(itemIndex, scrollOffset = -centerOffset)
+                }
             }
         }
     }
