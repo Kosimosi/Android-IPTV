@@ -611,6 +611,7 @@ fun ChannelCard(
     channelNumber: Int? = null,
     onSelect: () -> Unit,
     onUserInteract: () -> Unit,
+    canRequestFocus: () -> Boolean = { true },
     modifier: Modifier = Modifier.width(88.dp)
 ) {
     var isFocused by remember { mutableStateOf(false) }
@@ -630,7 +631,7 @@ fun ChannelCard(
             .aspectRatio(2f / 3f)
             .retroTvFocusLayer(isFocused, focusStyle.scale)
             .focusRequester(focusRequester)
-            .retroTvHoverRequestsFocus(focusRequester)
+            .retroTvHoverRequestsFocus(focusRequester, canRequestFocus)
             .then(rememberRetroTvDpadRepeatThrottle { rapidNavigation = true })
             .clip(shape)
             .background(focusStyle.fill)
@@ -2208,7 +2209,8 @@ class MainActivity : ComponentActivity() {
                                                         ChannelCard(channel = ch, isSelected = ch.url == activeChannel?.url,
                                                             channelNumber = channels.indexOfFirst { it.url == ch.url }.takeIf { it >= 0 }?.plus(1),
                                                             onSelect = { val idx = channels.indexOfFirst { it.url == ch.url }; if (idx >= 0) { currentChannelIndex.value = idx; playChannel(idx); isUiVisible.value = false; isSearchOpen.value = false; isSettingsOpen.value = false } },
-                                                            onUserInteract = { resetIdleTimer() })
+                                                            onUserInteract = { resetIdleTimer() },
+                                                            canRequestFocus = { !listState.isScrollInProgress })
                                                     }
                                                 }
                                             }
@@ -2279,7 +2281,8 @@ class MainActivity : ComponentActivity() {
                                                                             isSettingsOpen.value = false
                                                                         }
                                                                     },
-                                                                    onUserInteract = { resetIdleTimer() }
+                                                                    onUserInteract = { resetIdleTimer() },
+                                                                    canRequestFocus = { !listState.isScrollInProgress }
                                                                 )
                                                             }
                                                             repeat(columns - rowChannels.size) { Spacer(Modifier.width(tileWidth)) }
