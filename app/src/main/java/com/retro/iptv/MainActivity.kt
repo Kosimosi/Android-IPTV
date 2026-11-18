@@ -1027,11 +1027,11 @@ fun SearchModal(
                             Modifier.fillMaxWidth()
                                 .retroTvFocusLayer(focused, searchCardFocus.scale)
                                 .focusRequester(searchCardRequester)
-                                .retroTvHoverRequestsFocus(searchCardRequester)
+                                .retroTvHoverRequestsFocus(searchCardRequester) { !searchListState.isScrollInProgress }
                                 .clip(RoundedCornerShape(11.dp))
                                 .background(searchCardFocus.fill)
                                 .border(searchCardFocus.strokeWidth, searchCardFocus.stroke, RoundedCornerShape(11.dp))
-                                .retroTvCenterOnFocus(searchListState, channelPosition, searchScope, { focused = it })
+                                .retroTvCenterOnFocus(searchListState, channelPosition, searchScope, { focused = it }, rapidNavigation = rapidNavigation)
                                 .onPreviewKeyEvent { keyEvent ->
                                     val isConfirm = keyEvent.key == Key.DirectionCenter ||
                                         keyEvent.key == Key.Enter || keyEvent.key == Key.NumPadEnter
@@ -2171,7 +2171,7 @@ class MainActivity : ComponentActivity() {
 
                                 LazyColumn(
                                     state = listState,
-                                    modifier = Modifier.fillMaxSize(),
+                                    modifier = Modifier.fillMaxSize().graphicsLayer { clip = false },
                                     verticalArrangement = Arrangement.spacedBy(16.dp),
                                     contentPadding = PaddingValues(bottom = 32.dp)
                                 ) {
@@ -2259,7 +2259,8 @@ class MainActivity : ComponentActivity() {
                                                 .chunked(columns).forEach { rowChannels ->
                                                     item {
                                                         Row(
-                                                            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).focusGroup(),
+                                                            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)
+                                                                .focusGroup().graphicsLayer { clip = false },
                                                             horizontalArrangement = Arrangement.spacedBy(gap)
                                                         ) {
                                                             rowChannels.forEach { ch ->
