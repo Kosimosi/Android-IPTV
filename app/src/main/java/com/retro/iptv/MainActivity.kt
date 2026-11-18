@@ -904,7 +904,7 @@ fun SearchModal(
                 .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(topEnd = 16.dp, bottomEnd = 16.dp))
                 .clickable(enabled = false) { }
                 .padding(start = 16.dp, end = 14.dp, top = 16.dp, bottom = 12.dp)
-                .retroTvDpadRepeatThrottle { rapidNavigation = true },
+                .then(rememberRetroTvDpadRepeatThrottle { rapidNavigation = true }),
             verticalArrangement = Arrangement.Top
         ) {
             Row(
@@ -991,7 +991,7 @@ fun SearchModal(
                     state = searchListState,
                     modifier = Modifier.weight(1f).fillMaxWidth().focusGroup()
                         .graphicsLayer { clip = false }
-                        .retroTvDpadRepeatThrottle { rapidNavigation = true },
+                        .then(rememberRetroTvDpadRepeatThrottle { rapidNavigation = true }),
                     contentPadding = PaddingValues(vertical = 24.dp),
                     verticalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
