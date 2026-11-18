@@ -1,10 +1,9 @@
 package com.retro.iptv
 
 import android.os.SystemClock
-import android.view.KeyEvent as AndroidKeyEvent
 import androidx.compose.animation.core.Easing
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateColorAsState
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -16,7 +15,10 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.KeyEvent
-import androidx.compose.ui.input.key.nativeKeyEvent
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -97,7 +99,7 @@ fun Modifier.retroTvFocusLayer(focused: Boolean, scale: Float): Modifier =
         .graphicsLayer {
             scaleX = scale
             scaleY = scale
-            translationZ = if (focused) 12.dp.toPx() else 0f
+            shadowElevation = if (focused) 12.dp.toPx() else 0f
             clip = false
         }
 
@@ -145,18 +147,15 @@ fun Modifier.retroTvCenterOnFocus(
 /** Throttle held directional-key repeats to at most one accepted step per 95ms. */
 @androidx.compose.runtime.Composable
 fun rememberRetroTvDpadRepeatThrottle(
-    onRapidNavigation: () -> Unit = {},
-    intervalMs: Long = 95L
+    intervalMs: Long = 95L,
+    onRapidNavigation: () -> Unit = {}
 ): Modifier {
     var lastAcceptedRepeat by remember { mutableLongStateOf(0L) }
     val currentCallback = rememberUpdatedState(onRapidNavigation)
     return Modifier.onPreviewKeyEvent { event: KeyEvent ->
-        val native = event.nativeKeyEvent
-        val directional = native.keyCode == AndroidKeyEvent.KEYCODE_DPAD_UP ||
-            native.keyCode == AndroidKeyEvent.KEYCODE_DPAD_DOWN ||
-            native.keyCode == AndroidKeyEvent.KEYCODE_DPAD_LEFT ||
-            native.keyCode == AndroidKeyEvent.KEYCODE_DPAD_RIGHT
-        if (native.action == AndroidKeyEvent.ACTION_DOWN && native.repeatCount > 0 && directional) {
+        val directional = event.key == Key.DirectionUp || event.key == Key.DirectionDown ||
+            event.key == Key.DirectionLeft || event.key == Key.DirectionRight
+        if (event.type == KeyEventType.KeyDown && directional) {
             val now = SystemClock.elapsedRealtime()
             if (now - lastAcceptedRepeat < intervalMs) {
                 true
