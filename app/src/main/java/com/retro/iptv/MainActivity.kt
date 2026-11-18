@@ -616,43 +616,17 @@ fun ChannelCard(
     var isFocused by remember { mutableStateOf(false) }
     var confirmPressed by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(8.dp)
-    val fill by animateColorAsState(
-        targetValue = when {
-            isFocused -> ChannelCardFocusedFill
-            isSelected -> OakSurfaceElevated
-            else -> OakSurface
-        },
-        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium),
-        label = "channelCardFill"
-    )
-    val focusScale by animateFloatAsState(
-        targetValue = if (isFocused) 1.07f else 1f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
-        label = "channelCardFocusScale"
-    )
+    val focusStyle = rememberRetroTvFocusStyle(isFocused, isSelected)
+    val focusRequester = remember(channel.url) { FocusRequester() }
     Box(
         modifier = modifier
             .aspectRatio(2f / 3f)
-            .graphicsLayer {
-                scaleX = focusScale
-                scaleY = focusScale
-                translationZ = if (isFocused) 12.dp.toPx() else 0f
-                clip = false
-            }
-            .shadow(
-                elevation = if (isFocused) 12.dp else 0.dp,
-                shape = shape,
-                clip = false,
-                ambientColor = ChannelCardFocusGlow,
-                spotColor = ChannelCardFocusGlow
-            )
+            .retroTvFocusLayer(isFocused, focusStyle.scale)
+            .focusRequester(focusRequester)
+            .retroTvHoverRequestsFocus(focusRequester)
             .clip(shape)
-            .background(fill)
-            .border(
-                width = if (isFocused) 2.dp else 1.dp,
-                color = if (isFocused) FocusRed else ChannelCardIdleStroke,
-                shape = shape
-            )
+            .background(focusStyle.fill)
+            .border(focusStyle.strokeWidth, focusStyle.stroke, shape)
             .onFocusChanged {
                 isFocused = it.isFocused
                 if (it.isFocused) onUserInteract()
@@ -765,9 +739,17 @@ private fun LiveNowEventCard(
 ) {
     var focused by remember { mutableStateOf(false) }
     Row(
-        Modifier.widthIn(min = 260.dp).width(260.dp).clip(RoundedCornerShape(10.dp))
-            .background(if (focused) Color(0xE51A1115) else Color(0xD914161D))
-            .border(1.dp, if (focused) FocusRed.copy(alpha = 0.85f) else Color(0x55E50914), RoundedCornerShape(10.dp))
+        Modifier.widthIn(min = 260.dp).width(260.dp)
+            .shadow(
+                elevation = if (focused) 10.dp else 0.dp,
+                shape = RoundedCornerShape(10.dp),
+                clip = false,
+                ambientColor = ChannelCardFocusGlow,
+                spotColor = ChannelCardFocusGlow
+            )
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (focused) ChannelCardFocusedFill else OakSurface)
+            .border(1.5.dp, if (focused) FocusRed else RetroTvFocusKit.CricketCardStroke, RoundedCornerShape(10.dp))
             .onFocusChanged { focused = it.isFocused }
             .clickable { onClick() }.focusable()
             .padding(10.dp),
@@ -780,7 +762,7 @@ private fun LiveNowEventCard(
             }
             Text(title, color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(channel.title, color = WarmAshMuted, fontSize = 9.sp, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                Text(channel.title, color = RetroTvFocusKit.SecondaryText, fontSize = 10.sp, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                 if (channelNumber != null && channelNumber > 0) {
                     Text(
                         text = "${channelNumber.toString().padStart(3, '0')} • HD",
@@ -826,21 +808,22 @@ private fun NewsTickerBar(headlines: List<String>, modifier: Modifier = Modifier
             factory = { context ->
                 android.widget.TextView(context).apply {
                     text = tickerText
-                    setTextColor(android.graphics.Color.WHITE)
+                    setTextColor(android.graphics.Color.rgb(0xF5, 0xF5, 0xF5))
                     textSize = 11f
                     setSingleLine(true)
+                    setHorizontallyScrolling(true)
                     ellipsize = android.text.TextUtils.TruncateAt.MARQUEE
                     marqueeRepeatLimit = -1
                     isSelected = true
                     gravity = android.view.Gravity.CENTER_VERTICAL
                     setPadding((8 * resources.displayMetrics.density).toInt(), 0, (10 * resources.displayMetrics.density).toInt(), 0)
                     setHorizontalFadingEdgeEnabled(true)
-                    setFadingEdgeLength((20 * resources.displayMetrics.density).toInt())
+                    setFadingEdgeLength((36 * resources.displayMetrics.density).toInt())
                 }
             },
             update = { view ->
                 if (view.text.toString() != tickerText) view.text = tickerText
-                view.isSelected = !focused
+                view.isSelected = true
             }
         )
     }
@@ -862,7 +845,16 @@ fun SearchModal(
     val context = LocalContext.current
     val keyboardController = LocalSoftwareKeyboardController.current
     val searchFocusRequester = remember { FocusRequester() }
+    val searchListState = rememberLazyListState()
+    val searchScope = rememberCoroutineScope()
+    var rapidNavigation by remember { mutableStateOf(false) }
     val isTv = remember { context.packageManager.hasSystemFeature("android.software.leanback") }
+    LaunchedEffect(rapidNavigation) {
+        if (rapidNavigation) {
+            delay(180)
+            rapidNavigation = false
+        }
+    }
     LaunchedEffect(Unit) {
         delay(if (isTv) 160L else 80L)
         runCatching { searchFocusRequester.requestFocus() }
@@ -911,7 +903,8 @@ fun SearchModal(
                 .background(Color(0xD112141A))
                 .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(topEnd = 16.dp, bottomEnd = 16.dp))
                 .clickable(enabled = false) { }
-                .padding(start = 16.dp, end = 14.dp, top = 16.dp, bottom = 12.dp),
+                .padding(start = 16.dp, end = 14.dp, top = 16.dp, bottom = 12.dp)
+                .retroTvDpadRepeatThrottle { rapidNavigation = true },
             verticalArrangement = Arrangement.Top
         ) {
             Row(
@@ -995,10 +988,14 @@ fun SearchModal(
                 }
             } else {
                 LazyColumn(
-                    modifier = Modifier.weight(1f).fillMaxWidth().focusGroup(),
+                    state = searchListState,
+                    modifier = Modifier.weight(1f).fillMaxWidth().focusGroup()
+                        .graphicsLayer { clip = false }
+                        .retroTvDpadRepeatThrottle { rapidNavigation = true },
+                    contentPadding = PaddingValues(vertical = 24.dp),
                     verticalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
-                    itemsIndexed(visibleChannels, key = { _, channel -> channel.url }) { _, channel ->
+                    itemsIndexed(visibleChannels, key = { _, channel -> channel.url }) { channelPosition, channel ->
                         val channelIndex = channelIndexByUrl[channel.url] ?: -1
                         val channelProgrammes = channel.epgId
                             ?.lowercase(Locale.ROOT)
@@ -1014,11 +1011,17 @@ fun SearchModal(
                         }?.uppercase()
                         var focused by remember(channel.url) { mutableStateOf(false) }
                         var confirmPressed by remember(channel.url) { mutableStateOf(false) }
+                        val searchCardFocus = rememberRetroTvFocusStyle(focused, rapidNavigation = rapidNavigation)
+                        val searchCardRequester = remember(channel.url) { FocusRequester() }
                         Row(
-                            Modifier.fillMaxWidth().clip(RoundedCornerShape(11.dp))
-                                .background(if (focused) ChannelCardFocusedFill else Color(0xFF15171C))
-                                .border(1.dp, if (focused) FocusRed else ChannelCardIdleStroke, RoundedCornerShape(11.dp))
-                                .onFocusChanged { focused = it.isFocused }
+                            Modifier.fillMaxWidth()
+                                .retroTvFocusLayer(focused, searchCardFocus.scale)
+                                .focusRequester(searchCardRequester)
+                                .retroTvHoverRequestsFocus(searchCardRequester)
+                                .clip(RoundedCornerShape(11.dp))
+                                .background(searchCardFocus.fill)
+                                .border(searchCardFocus.strokeWidth, searchCardFocus.stroke, RoundedCornerShape(11.dp))
+                                .retroTvCenterOnFocus(searchListState, channelPosition, searchScope, { focused = it })
                                 .onPreviewKeyEvent { keyEvent ->
                                     val isConfirm = keyEvent.key == Key.DirectionCenter ||
                                         keyEvent.key == Key.Enter || keyEvent.key == Key.NumPadEnter
