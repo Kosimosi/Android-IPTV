@@ -995,7 +995,7 @@ fun SearchModal(
                 }
             } else {
                 LazyColumn(
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    modifier = Modifier.weight(1f).fillMaxWidth().focusGroup(),
                     verticalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
                     itemsIndexed(visibleChannels, key = { _, channel -> channel.url }) { _, channel ->
@@ -3286,6 +3286,12 @@ class MainActivity : ComponentActivity() {
             event.keyCode == KeyEvent.KEYCODE_ENTER ||
             event.keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER ||
             event.keyCode == KeyEvent.KEYCODE_BUTTON_SELECT
+
+        // The search drawer owns OK/Select while it is open. Do not let the
+        // playback toolbar's Activity-level handler steal channel selection.
+        if (isSearchOpen.value && isConfirmKey) {
+            return super.dispatchKeyEvent(event)
+        }
 
         // The update dialog has its own D-pad selection state. Intercept OK here
         // so a focused Compose clickable cannot require a long press or double-activate.
