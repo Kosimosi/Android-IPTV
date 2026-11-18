@@ -122,10 +122,12 @@ const val DEFAULT_PLAYLIST_URL = "https://raw.githubusercontent.com/Kosimosi/And
 const val IPTV_INDIA_EPG_URL = "https://iptv-epg.org/files/epg-in.xml"
 
 // --- COLOR PALETTE (Modern Oak) ---
-val OakDarkBackground = Color(0xFF080808)
-val OakSurface = Color(0xFF151515)
-val OakSurfaceElevated = Color(0xFF222222)
-val FocusRed = Color(0xFFE50914)
+val OakDarkBackground = Color(0xFF0B0C0E)
+val OakSurface = Color(0xFF15171C)
+val OakSurfaceElevated = Color(0xFF1D2027)
+val FocusRed = Color(0xFFE11D48)
+val ChannelCardFocusedFill = Color(0xFF241419)
+val ChannelCardIdleStroke = Color(0xFF242832)
 val RetroGlass = Color(0xD912141A)
 val RetroGlassBorder = Color.White.copy(alpha = 0.12f)
 val ParchmentWhite = Color.White
@@ -614,27 +616,33 @@ fun ChannelCard(
     val shape = RoundedCornerShape(8.dp)
     val fill by animateColorAsState(
         targetValue = when {
-            isFocused -> FocusRed
-            isSelected -> OakSurfaceElevated.copy(alpha = 0.92f)
-            else -> OakSurface.copy(alpha = 0.76f)
+            isFocused -> ChannelCardFocusedFill
+            isSelected -> OakSurfaceElevated
+            else -> OakSurface
         },
-        animationSpec = tween(160),
+        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium),
         label = "channelCardFill"
+    )
+    val focusScale by animateFloatAsState(
+        targetValue = if (isFocused) 1.07f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+        label = "channelCardFocusScale"
     )
     Box(
         modifier = modifier
             .aspectRatio(2f / 3f)
             .graphicsLayer {
-                val scale = if (isFocused) 1.06f else 1f
-                scaleX = scale
-                scaleY = scale
-                shadowElevation = if (isFocused) 12f else 1f
+                scaleX = focusScale
+                scaleY = focusScale
+                translationZ = if (isFocused) 12.dp.toPx() else 0f
+                shadowElevation = if (isFocused) 12.dp.toPx() else 0f
+                clip = false
             }
             .clip(shape)
             .background(fill)
             .border(
-                width = if (isFocused) 2.dp else if (isSelected) 1.5.dp else 1.dp,
-                color = if (isFocused) FocusRed else if (isSelected) Color.White.copy(alpha = 0.65f) else Color.White.copy(alpha = 0.08f),
+                width = if (isFocused) 2.dp else 1.dp,
+                color = if (isFocused) FocusRed else ChannelCardIdleStroke,
                 shape = shape
             )
             .onFocusChanged {
@@ -838,10 +846,6 @@ fun SearchModal(
     recentUrls: List<String>,
     epgPrograms: List<Programme>,
     voiceQuery: String,
-    tickerMode: String,
-    tickerHeadlines: List<String>,
-    remoteLiveItems: List<LiveContentCard>,
-    onTickerTap: () -> Unit,
     onSelectChannel: (Channel) -> Unit,
     onClose: () -> Unit
 ) {
@@ -860,22 +864,15 @@ fun SearchModal(
     }
 
     val now = System.currentTimeMillis()
-    val liveNowItems = remember(epgPrograms, channels, now, remoteLiveItems) {
-        val epgItems = epgPrograms.asSequence()
-            .filter { it.startTimeMs <= now && it.stopTimeMs > now }
-            .filter { programme ->
-                listOf("live", "cricket", "football", "final", "breaking", "match", "bulletin")
-                    .any { keyword -> programme.title.contains(keyword, true) }
-            }
-            .mapNotNull { programme ->
-                channels.firstOrNull { !it.epgId.isNullOrBlank() && it.epgId.equals(programme.channelId, true) }
-                    ?.let { channel -> LiveContentCard("epg-" + channel.url, "LIVE NOW", programme.title, channel) }
-            }.toList()
-        (epgItems + remoteLiveItems).distinctBy { it.channel.url }.take(5)
+    val channelByUrl = remember(channels) { channels.associateBy { it.url } }
+    val channelIndexByUrl = remember(channels) { channels.withIndex().associate { it.value.url to it.index } }
+    val favoriteUrlSet = remember(favoriteUrls) { favoriteUrls.toHashSet() }
+    val programmesByChannel = remember(epgPrograms) {
+        epgPrograms.groupBy { it.channelId.lowercase(Locale.ROOT) }
     }
-    val visibleChannels = remember(query, selectedFilter, channels, favoriteUrls, recentUrls, epgPrograms) {
-        val recent = recentUrls.mapNotNull { url -> channels.firstOrNull { it.url == url } }
-        val favorites = channels.filter { it.url in favoriteUrls }
+    val visibleChannels = remember(query, selectedFilter, channels, favoriteUrlSet, recentUrls, channelByUrl, channelIndexByUrl) {
+        val recent = recentUrls.mapNotNull { channelByUrl[it] }
+        val favorites = channels.filter { it.url in favoriteUrlSet }
         val base = when (selectedFilter) {
             "Favorites" -> favorites
             "Recent" -> recent
@@ -886,7 +883,7 @@ fun SearchModal(
         else {
             val number = query.trim().toIntOrNull()
             base.filterIndexed { _, channel ->
-                val index = channels.indexOfFirst { it.url == channel.url }
+                val index = channelIndexByUrl[channel.url] ?: -1
                 val numberMatch = number != null && index + 1 == number
                 numberMatch || channel.title.contains(query.trim(), ignoreCase = true)
             }
@@ -970,19 +967,6 @@ fun SearchModal(
                 }
             }
 
-            if (query.isBlank() && liveNowItems.isNotEmpty()) {
-                Text("LIVE NOW • SPORTS & EVENTS", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Black, letterSpacing = 0.8.sp)
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                    items(liveNowItems, key = { it.id }) { item ->
-                        LiveNowEventCard(item.title, item.channel, item.badge, channels.indexOfFirst { it.url == item.channel.url }.takeIf { it >= 0 }?.plus(1)) { onSelectChannel(item.channel) }
-                    }
-                }
-                Spacer(Modifier.height(8.dp))
-            }
-            if (query.isBlank() && tickerMode == "ALWAYS ON" && tickerHeadlines.isNotEmpty()) {
-                NewsTickerBar(tickerHeadlines, onClick = onTickerTap)
-                Spacer(Modifier.height(8.dp))
-            }
             Spacer(Modifier.height(10.dp))
             Text(
                 if (query.isNotBlank()) "SEARCH RESULTS (${visibleChannels.size})" else when (selectedFilter) {
@@ -1007,26 +991,50 @@ fun SearchModal(
                     verticalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
                     itemsIndexed(visibleChannels, key = { _, channel -> channel.url }) { _, channel ->
-                        val channelIndex = channels.indexOfFirst { it.url == channel.url }
-                        val currentProgram = epgPrograms.firstOrNull {
-                            it.channelId.equals(channel.epgId, ignoreCase = true) &&
-                                it.startTimeMs <= now && it.stopTimeMs > now
+                        val channelIndex = channelIndexByUrl[channel.url] ?: -1
+                        val channelProgrammes = channel.epgId
+                            ?.lowercase(Locale.ROOT)
+                            ?.let { programmesByChannel[it] }
+                            .orEmpty()
+                        val currentProgram = channelProgrammes.firstOrNull {
+                            it.startTimeMs <= now && it.stopTimeMs > now
                         }
-                        val upcomingProgram = epgPrograms.firstOrNull {
-                            it.channelId.equals(channel.epgId, ignoreCase = true) && it.startTimeMs > now
-                        }
+                        val upcomingProgram = channelProgrammes.firstOrNull { it.startTimeMs > now }
                         val streamBadge = channel.linkLabels.firstOrNull { label ->
                             val upper = label.uppercase()
                             upper.contains("FHD") || upper.contains("HD") || upper.contains("4K") || upper.contains("1080") || upper.contains("720")
                         }?.uppercase()
-                        var focused by remember { mutableStateOf(false) }
+                        var focused by remember(channel.url) { mutableStateOf(false) }
+                        var confirmPressed by remember(channel.url) { mutableStateOf(false) }
                         Row(
                             Modifier.fillMaxWidth().clip(RoundedCornerShape(11.dp))
-                                .background(if (focused) FocusRed.copy(alpha = 0.30f) else Color.White.copy(alpha = 0.045f))
-                                .border(1.dp, if (focused) FocusRed else Color.White.copy(alpha = 0.07f), RoundedCornerShape(11.dp))
+                                .background(if (focused) ChannelCardFocusedFill else Color(0xFF15171C))
+                                .border(1.dp, if (focused) FocusRed else ChannelCardIdleStroke, RoundedCornerShape(11.dp))
                                 .onFocusChanged { focused = it.isFocused }
-                                .clickable { onSelectChannel(channel) }
+                                .onPreviewKeyEvent { keyEvent ->
+                                    val isConfirm = keyEvent.key == Key.DirectionCenter ||
+                                        keyEvent.key == Key.Enter || keyEvent.key == Key.NumPadEnter
+                                    if (!focused || !isConfirm) {
+                                        false
+                                    } else {
+                                        when (keyEvent.type) {
+                                            KeyEventType.KeyDown -> {
+                                                if (!confirmPressed) {
+                                                    confirmPressed = true
+                                                    onSelectChannel(channel)
+                                                }
+                                                true
+                                            }
+                                            KeyEventType.KeyUp -> {
+                                                confirmPressed = false
+                                                true
+                                            }
+                                            else -> true
+                                        }
+                                    }
+                                }
                                 .focusable()
+                                .clickable { onSelectChannel(channel) }
                                 .padding(horizontal = 9.dp, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
@@ -2280,10 +2288,6 @@ class MainActivity : ComponentActivity() {
                             recentUrls = recentChannelUrls.toList(),
                             epgPrograms = epgPrograms.toList(),
                             voiceQuery = searchVoiceQuery.value,
-                            tickerMode = liveNewsTickerMode.value,
-                            tickerHeadlines = tickerHeadlines.toList(),
-                            remoteLiveItems = liveContentCards.toList(),
-                            onTickerTap = { playNewsChannelFromTicker() },
                             onSelectChannel = { ch ->
                                 val idx = channels.indexOf(ch)
                                 if (idx >= 0) {
@@ -2398,1171 +2402,3 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
-
-    private data class UpdateCheckResult(
-        val latestTag: String,
-        val apkFile: File?,
-        val updateAvailable: Boolean,
-        val releaseNotes: String
-    )
-
-    private data class UpdateNotice(val version: String, val releaseNotes: String, val apkFile: File?)
-
-    private fun checkForUpdates() {
-        downloadedUpdateApk?.delete()
-        downloadedUpdateApk = null
-        isUpdateDownloaded.value = false
-        if (isCheckingForUpdates.value) return
-
-        isCheckingForUpdates.value = true
-        updateStatus.value = "Checking GitHub for the latest release…"
-        lifecycleScope.launch {
-            try {
-                val result = withContext(Dispatchers.IO) {
-                    val releaseConnection = (URL("https://api.github.com/repos/Kosimosi/Android-IPTV/releases/latest")
-                        .openConnection() as HttpURLConnection).apply {
-                        connectTimeout = 12000
-                        readTimeout = 15000
-                        requestMethod = "GET"
-                        setRequestProperty("Accept", "application/vnd.github+json")
-                        setRequestProperty("User-Agent", "RETROTV-Android")
-                    }
-                    val releaseJson = try {
-                        if (releaseConnection.responseCode !in 200..299) {
-                            throw IOException("GitHub returned HTTP ${releaseConnection.responseCode}")
-                        }
-                        JSONObject(releaseConnection.inputStream.bufferedReader().use { it.readText() })
-                    } finally {
-                        releaseConnection.disconnect()
-                    }
-
-                    val latestTag = releaseJson.optString("tag_name").trim()
-                    if (latestTag.isBlank()) throw IOException("The latest release has no version tag.")
-                    val assets = releaseJson.optJSONArray("assets") ?: throw IOException("No APK was published in the latest release.")
-                    val apkAsset = (0 until assets.length())
-                        .mapNotNull { assets.optJSONObject(it) }
-                        .firstOrNull {
-                            it.optString("name").endsWith(".apk", ignoreCase = true) &&
-                                it.optString("browser_download_url").startsWith("https://")
-                        } ?: throw IOException("No downloadable APK was found in the latest release.")
-
-                    val installedVersion = packageManager.getPackageInfo(packageName, 0).versionName ?: "0"
-                    if (compareVersions(latestTag, installedVersion) <= 0) {
-                        return@withContext UpdateCheckResult(latestTag, null, false, releaseJson.optString("body"))
-                    }
-
-                    val apkName = apkAsset.optString("name").replace(Regex("[^A-Za-z0-9._-]"), "_")
-                    val updateDir = File(cacheDir, "updates").apply { mkdirs() }
-                    val safeTag = latestTag.replace(Regex("[^A-Za-z0-9._-]"), "_")
-                    val apkFile = File(updateDir, "$safeTag-$apkName")
-                    apkFile.delete()
-                    val downloadConnection = (URL(apkAsset.optString("browser_download_url"))
-                        .openConnection() as HttpURLConnection).apply {
-                        connectTimeout = 15000
-                        readTimeout = 60000
-                        requestMethod = "GET"
-                        setRequestProperty("User-Agent", "RETROTV-Android")
-                    }
-                    try {
-                        if (downloadConnection.responseCode !in 200..299) {
-                            throw IOException("APK download failed (HTTP ${downloadConnection.responseCode}).")
-                        }
-                        downloadConnection.inputStream.use { input ->
-                            apkFile.outputStream().use { output -> input.copyTo(output) }
-                        }
-                    } finally {
-                        downloadConnection.disconnect()
-                    }
-                    if (!apkFile.exists() || apkFile.length() == 0L) {
-                        apkFile.delete()
-                        throw IOException("The downloaded APK is empty.")
-                    }
-                    val archiveInfo = packageManager.getPackageArchiveInfo(apkFile.absolutePath, 0)
-                        ?: run {
-                            apkFile.delete()
-                            throw IOException("The downloaded file is not a valid Android APK.")
-                        }
-                    val archiveVersion = archiveInfo.versionName ?: "0"
-                    if (archiveInfo.packageName != packageName) {
-                        apkFile.delete()
-                        throw IOException("The downloaded APK is for a different application.")
-                    }
-                    if (compareVersions(archiveVersion, installedVersion) <= 0 ||
-                        compareVersions(latestTag, archiveVersion) != 0) {
-                        apkFile.delete()
-                        throw IOException("GitHub's APK version ($archiveVersion) does not match the newer release ($latestTag). Update blocked to prevent installing an older build.")
-                    }
-                    UpdateCheckResult(latestTag, apkFile, true, releaseJson.optString("body"))
-                }
-
-                if (!result.updateAvailable || result.apkFile == null) {
-                    updateStatus.value = "You're using the latest version (${result.latestTag})."
-                    Toast.makeText(this@MainActivity, "RETROTV is up to date", Toast.LENGTH_SHORT).show()
-                } else {
-                    downloadedUpdateApk = result.apkFile
-                    isUpdateDownloaded.value = true
-                    updateStatus.value = "Version ${result.latestTag} downloaded. Review the changes and choose Install update."
-                    selectedUpdateAction.value = 0
-                    updateNotice.value = UpdateNotice(result.latestTag.removePrefix("v"), result.releaseNotes, result.apkFile)
-                    Toast.makeText(this@MainActivity, "RETROTV update ${result.latestTag} is ready", Toast.LENGTH_LONG).show()
-                }
-            } catch (error: Exception) {
-                updateStatus.value = "Update check failed: ${error.message ?: "network error"}"
-                Toast.makeText(this@MainActivity, "Could not check for updates", Toast.LENGTH_SHORT).show()
-            } finally {
-                isCheckingForUpdates.value = false
-            }
-        }
-    }
-
-    private fun compareVersions(first: String, second: String): Int {
-        val left = Regex("\\d+").findAll(first).mapNotNull { it.value.toIntOrNull() }.toList()
-        val right = Regex("\\d+").findAll(second).mapNotNull { it.value.toIntOrNull() }.toList()
-        for (index in 0 until maxOf(left.size, right.size)) {
-            val a = left.getOrElse(index) { 0 }
-            val b = right.getOrElse(index) { 0 }
-            if (a != b) return a.compareTo(b)
-        }
-        return 0
-    }
-
-    private fun launchUpdateInstaller(apkFile: File) {
-        if (!apkFile.exists()) {
-            downloadedUpdateApk = null
-            isUpdateDownloaded.value = false
-            updateStatus.value = "The downloaded update is missing. Check again."
-            return
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
-            updateStatus.value = "APK downloaded. Allow RETROTV to install apps in Android settings, then tap Install downloaded update."
-            try {
-                startActivity(
-                    Intent(
-                        AndroidSystemSettings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
-                        Uri.parse("package:$packageName")
-                    )
-                )
-            } catch (_: Exception) {
-                Toast.makeText(this, "Enable permission to install unknown apps for RETROTV", Toast.LENGTH_LONG).show()
-            }
-            return
-        }
-
-        try {
-            val apkUri = FileProvider.getUriForFile(this, "$packageName.fileprovider", apkFile)
-            val installIntent = Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(apkUri, "application/vnd.android.package-archive")
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            startActivity(installIntent)
-        } catch (error: Exception) {
-            updateStatus.value = "Unable to open installer: ${error.message ?: "unknown error"}"
-            Toast.makeText(this, "Could not open the Android installer", Toast.LENGTH_LONG).show()
-        }
-    }
-
-    private fun applyStreamQuality(showToast: Boolean = true) {
-        val builder = player.trackSelectionParameters.buildUpon()
-        when (selectedQuality.value) {
-            "1080p" -> builder.setMaxVideoSize(1920, 1080)
-            "720p" -> builder.setMaxVideoSize(1280, 720)
-            "480p" -> builder.setMaxVideoSize(854, 480)
-            else -> builder.setMaxVideoSize(Int.MAX_VALUE, Int.MAX_VALUE)
-        }
-        player.trackSelectionParameters = builder.build()
-        if (showToast) Toast.makeText(this, "Stream quality: ${selectedQuality.value}", Toast.LENGTH_SHORT).show()
-    }
-
-    private fun resetIdleTimer() {
-        autoHideJob?.cancel()
-        // Main channel browser stays open until BACK is pressed.
-        autoHideJob = null
-    }
-
-    private fun loadSettingsFromStorage() {
-        val prefs = getSharedPreferences("retro_iptv_prefs", Context.MODE_PRIVATE)
-        val cachedHeadlines = runCatching {
-            val array = org.json.JSONArray(prefs.getString("live_content_headlines", "[]") ?: "[]")
-            (0 until array.length()).mapNotNull { array.optString(it).takeIf(String::isNotBlank) }
-        }.getOrDefault(emptyList())
-        tickerHeadlines.clear()
-        tickerHeadlines.addAll(cachedHeadlines)
-        val savedFavs = prefs.getStringSet("fav_urls", emptySet()) ?: emptySet()
-        favoriteUrls.clear()
-        favoriteUrls.addAll(savedFavs)
-        customM3uUrl.value = prefs.getString("custom_m3u_url", "") ?: ""
-        selectedQuality.value = prefs.getString("stream_quality", "Auto") ?: "Auto"
-        liveNewsTickerMode.value = prefs.getString("live_news_ticker_mode", "HOME ONLY") ?: "HOME ONLY"
-        isWatchdogEnabled.value = prefs.getBoolean("watchdog_enabled", true)
-        autoFailoverBackupLinks.value = prefs.getBoolean("auto_failover_backup_links", true)
-        hideUnavailableChannels.value = prefs.getBoolean("hide_unavailable_channels", false)
-        isPipEnabled.value = prefs.getBoolean("pip_enabled", false)
-        recentChannelUrls.clear()
-        recentChannelUrls.addAll(prefs.getString("recent_channel_urls", "")?.split("\\n")?.filter { it.isNotBlank() }?.take(8) ?: emptyList())
-    }
-
-    private suspend fun refreshLiveContent() {
-        val channelSnapshot = channels.toList()
-        val snapshot = runCatching {
-            withContext(Dispatchers.IO) { LiveContentRepository.load(channelSnapshot) }
-        }.getOrNull() ?: return
-        if (snapshot.headlines.isNotEmpty()) {
-            tickerHeadlines.clear()
-            tickerHeadlines.addAll(snapshot.headlines)
-            val cached = org.json.JSONArray()
-            snapshot.headlines.forEach(cached::put)
-            getSharedPreferences("retro_iptv_prefs", Context.MODE_PRIVATE).edit()
-                .putString("live_content_headlines", cached.toString()).apply()
-        }
-        liveContentCards.clear()
-        liveContentCards.addAll(snapshot.cards)
-    }
-
-    private fun playNewsChannelFromTicker() {
-        val aliases = listOf("Somoy", "Jamuna", "Channel 24", "Ekattor", "Independent", "DBC", "ATN News", "News 24")
-        val sourceText = tickerHeadlines.joinToString(" ")
-        val alias = aliases.firstOrNull { sourceText.contains(it, ignoreCase = true) }
-        val channel = if (alias != null) {
-            channels.firstOrNull { it.title.contains(alias, ignoreCase = true) && it.status != ChannelStatus.OFFLINE }
-        } else null
-        val target = channel ?: channels.firstOrNull {
-            it.group.contains("news", ignoreCase = true) && it.status != ChannelStatus.OFFLINE
-        } ?: return
-        val index = channels.indexOfFirst { it.url == target.url }
-        if (index >= 0) {
-            currentChannelIndex.value = index
-            playChannel(index)
-            isUiVisible.value = false
-            isSearchOpen.value = false
-        }
-    }
-
-    private fun saveSettingsToStorage() {
-        val prefs = getSharedPreferences("retro_iptv_prefs", Context.MODE_PRIVATE)
-        prefs.edit().putString("custom_m3u_url", customM3uUrl.value).apply()
-    }
-
-    private fun recordRecentlyWatched(channel: Channel) {
-        recentChannelUrls.remove(channel.url)
-        recentChannelUrls.add(0, channel.url)
-        while (recentChannelUrls.size > 8) recentChannelUrls.removeAt(recentChannelUrls.lastIndex)
-        getSharedPreferences("retro_iptv_prefs", Context.MODE_PRIVATE).edit()
-            .putString("recent_channel_urls", recentChannelUrls.joinToString("\\n")).apply()
-    }
-
-    private fun toggleFavorite(url: String) {
-        if (favoriteUrls.contains(url)) {
-            favoriteUrls.remove(url)
-            Toast.makeText(this, "Removed from Favourites", Toast.LENGTH_SHORT).show()
-        } else {
-            favoriteUrls.add(url)
-            Toast.makeText(this, "Added to Favourites ★", Toast.LENGTH_SHORT).show()
-        }
-        val prefs = getSharedPreferences("retro_iptv_prefs", Context.MODE_PRIVATE)
-        prefs.edit().putStringSet("fav_urls", favoriteUrls.toSet()).apply()
-    }
-
-    private fun loadPlaylists() {
-        lifecycleScope.launch(Dispatchers.IO) {
-            val cacheFile = File(filesDir, "cached_playlist.m3u")
-            val cachedText = runCatching {
-                if (cacheFile.exists() && cacheFile.length() <= MAX_PLAYLIST_BYTES) cacheFile.readText() else ""
-            }.getOrDefault("")
-            val cachedList = parseM3u(cachedText).distinctBy { it.url }
-            val initialList = cachedList.ifEmpty { fallbackChannels }
-
-            withContext(Dispatchers.Main) {
-                channels.clear()
-                channels.addAll(initialList)
-                playlistStatus.value = if (cachedList.isNotEmpty()) "Cached channels ready • refreshing playlists…" else "Loading channels • using local fallback while refreshing…"
-                if (currentChannelIndex.value !in channels.indices) currentChannelIndex.value = 0
-                if (channels.isNotEmpty()) playChannel(currentChannelIndex.value)
-            }
-
-            val primaryUrl = if (customM3uUrl.value.isNotBlank()) customM3uUrl.value else DEFAULT_PLAYLIST_URL
-            val sources = listOf(primaryUrl).distinct()
-            val playlistSemaphore = Semaphore(3)
-            val fetched = sources.map { url ->
-                async { url to playlistSemaphore.withPermit { fetchUrl(url) } }
-            }.awaitAll()
-            val successfulTexts = fetched.mapNotNull { it.second }
-            var combinedChars = 0
-            val boundedTexts = mutableListOf<String>()
-            var rejectedOversizeSources = 0
-            for (text in successfulTexts) {
-                val extra = text.length + if (boundedTexts.isEmpty()) 0 else 1
-                if (combinedChars + extra > MAX_PLAYLIST_CHARS) {
-                    rejectedOversizeSources++
-                    continue
-                }
-                boundedTexts.add(text)
-                combinedChars += extra
-            }
-            val failedCount = fetched.count { it.second == null } + rejectedOversizeSources
-            val combinedText = boundedTexts.joinToString("\n")
-            val freshList = if (combinedText.isNotBlank()) parseM3u(combinedText).distinctBy { it.url } else emptyList()
-
-            withContext(Dispatchers.Main) {
-                if (freshList.isNotEmpty()) {
-                    // Keep every successful source even if one provider is temporarily unavailable.
-                    runCatching { cacheFile.writeText(combinedText) }
-                    val currentUrl = channels.getOrNull(currentChannelIndex.value)?.url
-                    channels.clear()
-                    channels.addAll(freshList)
-                    val sameIndex = channels.indexOfFirst { it.url == currentUrl }
-                    currentChannelIndex.value = if (sameIndex >= 0) sameIndex else 0
-                    if (sameIndex < 0 && channels.isNotEmpty()) playChannel(0)
-                    playlistStatus.value = if (failedCount == 0) {
-                        "Playlists updated • ${channels.size} channels"
-                    } else {
-                        "Partial refresh • ${channels.size} channels • $failedCount source(s) unavailable"
-                    }
-                } else if (cachedList.isNotEmpty()) {
-                    playlistStatus.value = if (failedCount > 0) {
-                        "Refresh incomplete: $failedCount source(s) unavailable • keeping cached channels"
-                    } else {
-                        "No usable channels returned • keeping cached channels"
-                    }
-                } else {
-                    playlistStatus.value = "Playlist refresh failed • showing local fallback channels"
-                }
-            }
-            checkPlaylistHealth()
-        }
-
-        // EPG downloads independently, so a slow guide cannot delay channel playback.
-        lifecycleScope.launch(Dispatchers.IO) {
-            val xml = fetchUrl(IPTV_INDIA_EPG_URL)
-            val parsed = if (!xml.isNullOrBlank()) runCatching { parseXmlTv(xml) }.getOrDefault(emptyList()) else emptyList()
-            withContext(Dispatchers.Main) {
-                epgPrograms.clear()
-                epgPrograms.addAll(parsed)
-            }
-        }
-    }
-
-    private fun checkPlaylistHealth() {
-        // This callback can be reached after playlist work running on Dispatchers.IO.
-        // Keep health scheduling state and all ExoPlayer reads on the player application thread.
-        lifecycleScope.launch(Dispatchers.Main.immediate) {
-            healthCheckPending = true
-            scheduleBackgroundNetworkWorkAfterReady()
-        }
-    }
-
-    /** Defer all non-playback network work until the current stream has been stable for 3 seconds. */
-    private fun scheduleBackgroundNetworkWorkAfterReady() {
-        // ExoPlayer is created on main; even playbackState reads must stay on that thread.
-        lifecycleScope.launch(Dispatchers.Main.immediate) {
-            if (!isHostForeground || player.playbackState != Player.STATE_READY) return@launch
-            backgroundNetworkResumeJob?.cancel()
-            backgroundNetworkResumeJob = lifecycleScope.launch {
-                delay(3_000L)
-                if (!isHostForeground || player.playbackState != Player.STATE_READY) return@launch
-                if (healthCheckPending && healthCheckJob?.isActive != true) runPlaylistHealthCheck()
-                if (liveContentRefreshPending && liveContentJob?.isActive != true) startLiveContentPolling()
-            }
-        }
-    }
-
-    private fun runPlaylistHealthCheck() {
-        healthCheckPending = false
-        healthCheckJob?.cancel()
-        healthCheckJob = lifecycleScope.launch(Dispatchers.IO) {
-            try {
-                val sample = withContext(Dispatchers.Main) {
-                    val allChannels = channels.toList()
-                    val priorityNames = listOf(
-                        "Somoy", "Jamuna", "Channel 24", "Ekattor", "Independent", "DBC", "ATN News",
-                        "T Sports", "GTV", "Gazi TV", "Nagorik TV", "Star Sports", "Sony Sports Ten",
-                        "BTV", "Channel i"
-                    )
-                    (allChannels.take(48) + allChannels.filter { channel ->
-                        priorityNames.any { channel.title.contains(it, ignoreCase = true) }
-                    }).distinctBy { it.url }.take(128)
-                }
-                val healthSemaphore = Semaphore(2)
-                val results = sample.map { channel ->
-                    async {
-                        val online = healthSemaphore.withPermit {
-                            (listOf(channel.url) + channel.backupUrls).take(2).any { testStream(it) }
-                        }
-                        channel.url to if (online) ChannelStatus.ONLINE else ChannelStatus.OFFLINE
-                    }
-                }.awaitAll().toMap()
-                withContext(Dispatchers.Main) {
-                    channels.indices.forEach { index ->
-                        results[channels[index].url]?.let { status ->
-                            channels[index] = channels[index].copy(status = status)
-                        }
-                    }
-                    val offlineCount = results.values.count { it == ChannelStatus.OFFLINE }
-                    playlistStatus.value += " • health checked (${results.size - offlineCount} online, $offlineCount unavailable)"
-                }
-            } finally {
-                healthCheckJob = null
-            }
-        }
-    }
-
-    private fun startLiveContentPolling() {
-        if (!isHostForeground || liveContentJob?.isActive == true) return
-        liveContentRefreshPending = false
-        liveContentJob = lifecycleScope.launch {
-            refreshLiveContent()
-            while (isHostForeground) {
-                delay(150_000L)
-                if (isHostForeground) refreshLiveContent()
-            }
-        }
-    }
-
-    /** Stop health/RSS requests as soon as a zap begins; they resume only after STATE_READY + 3s. */
-    private fun pauseBackgroundNetworkForPlaybackStart() {
-        backgroundNetworkResumeJob?.cancel()
-        backgroundNetworkResumeJob = null
-        if (healthCheckJob?.isActive == true) healthCheckPending = true
-        healthCheckJob?.cancel()
-        healthCheckJob = null
-        if (liveContentJob?.isActive == true) liveContentRefreshPending = true
-        liveContentJob?.cancel()
-        liveContentJob = null
-    }
-
-    private fun testStream(streamUrl: String): Boolean {
-        var connection: HttpURLConnection? = null
-        return try {
-            connection = (URL(streamUrl).openConnection() as HttpURLConnection).apply {
-                connectTimeout = 3500
-                readTimeout = 3500
-                requestMethod = "GET"
-                setRequestProperty("Range", "bytes=0-0")
-                setRequestProperty("User-Agent", "RETROTV-Android")
-                instanceFollowRedirects = true
-            }
-            connection.responseCode in 200..299
-        } catch (_: Exception) {
-            false
-        } finally {
-            connection?.disconnect()
-        }
-    }
-
-    private fun parseXmlTv(xml: String): List<Programme> {
-        val parser = Xml.newPullParser()
-        parser.setInput(xml.reader())
-        val programmes = mutableListOf<Programme>()
-        var event = parser.eventType
-        var channelId = ""
-        var title = ""
-        var start = 0L
-        var stop = 0L
-        while (event != XmlPullParser.END_DOCUMENT) {
-            when (event) {
-                XmlPullParser.START_TAG -> when (parser.name) {
-                    "programme" -> {
-                        channelId = parser.getAttributeValue(null, "channel").orEmpty()
-                        start = parseXmlTvTime(parser.getAttributeValue(null, "start"))
-                        stop = parseXmlTvTime(parser.getAttributeValue(null, "stop"))
-                        title = ""
-                    }
-                    "title" -> if (channelId.isNotBlank()) title = parser.nextText().trim()
-                }
-                XmlPullParser.END_TAG -> if (parser.name == "programme" && channelId.isNotBlank() && title.isNotBlank() && start > 0L && stop > start) {
-                    programmes.add(Programme(channelId, title, start, stop))
-                    channelId = ""
-                }
-            }
-            event = parser.next()
-        }
-        return programmes
-    }
-
-    private fun parseXmlTvTime(value: String?): Long {
-        if (value.isNullOrBlank()) return 0L
-        val patterns = listOf("yyyyMMddHHmmss Z", "yyyyMMddHHmmss")
-        for (pattern in patterns) {
-            try {
-                val formatter = SimpleDateFormat(pattern, Locale.US)
-                formatter.isLenient = false
-                if (!pattern.contains("Z")) formatter.timeZone = java.util.TimeZone.getTimeZone("UTC")
-                return formatter.parse(value.trim())?.time ?: 0L
-            } catch (_: Exception) { }
-        }
-        return 0L
-    }
-
-    private fun fetchUrl(urlString: String): String? {
-        // Bound remote responses and total read time; older Android TV devices have a small heap.
-        val maxBytes = if (urlString == IPTV_INDIA_EPG_URL) 8L * 1024 * 1024 else 12L * 1024 * 1024
-        var connection: HttpURLConnection? = null
-        val deadlineMs = SystemClock.elapsedRealtime() + 30_000L
-        return try {
-            connection = (URL(urlString).openConnection() as HttpURLConnection).apply {
-                connectTimeout = 8000
-                readTimeout = 5000
-                requestMethod = "GET"
-                setRequestProperty("User-Agent", "Mozilla/5.0")
-                instanceFollowRedirects = true
-            }
-            if (connection.responseCode !in 200..299) return null
-            val declaredLength = connection.contentLengthLong
-            if (declaredLength > maxBytes) return null
-
-            connection.inputStream.use { input ->
-                ByteArrayOutputStream().use { output ->
-                    val buffer = ByteArray(8192)
-                    var total = 0L
-                    while (true) {
-                        if (SystemClock.elapsedRealtime() > deadlineMs) return null
-                        val count = input.read(buffer)
-                        if (count < 0) break
-                        total += count
-                        if (total > maxBytes) return null
-                        output.write(buffer, 0, count)
-                    }
-                    output.toString("UTF-8")
-                }
-            }
-        } catch (e: Exception) {
-            null
-        } finally {
-            connection?.disconnect()
-        }
-    }
-
-    private val attributeRegex = Regex("([A-Za-z0-9_\\-]+)=\"([^\"]*)\"")
-
-    private fun parseM3u(content: String): List<Channel> {
-        if (content.length > MAX_PLAYLIST_CHARS) return emptyList()
-        val list = mutableListOf<Channel>()
-        var currentTitle = ""
-        var currentGroup = "General"
-        var currentLogo: String? = null
-        var currentRegion = "Unknown Region"
-        var currentLanguage = "Unknown"
-        var currentCountry = "Unknown"
-        var currentEpgId: String? = null
-        // Alternative links for the current entry: x-backup -> 1, x-backup2 -> 2, ...
-        var currentBackups: List<Pair<Int, String>> = emptyList()
-        // x-link-labels, index 0 = primary URL, index N = x-backup N.
-        var currentLabels: List<String> = emptyList()
-        var lineCount = 0
-        for (line in content.lineSequence()) {
-            if (++lineCount > MAX_PLAYLIST_LINES || list.size >= MAX_PLAYLIST_CHANNELS) break
-            if (line.length > MAX_PLAYLIST_LINE_CHARS) continue
-            val trimmed = line.trim()
-            if (trimmed.startsWith("#EXTINF", ignoreCase = true)) {
-                currentTitle = trimmed.substringAfterLast(",").trim()
-                val groupMatch = """group-title="([^"]*)"""".toRegex(RegexOption.IGNORE_CASE).find(trimmed)
-                currentGroup = groupMatch?.groupValues?.get(1)?.trim() ?: "General"
-
-                val logoMatch = """tvg-logo="([^"]*)"""".toRegex(RegexOption.IGNORE_CASE).find(trimmed)
-                currentLogo = logoMatch?.groupValues?.get(1)?.trim()
-                val epgMatch = """tvg-id="([^"]*)"""".toRegex(RegexOption.IGNORE_CASE).find(trimmed)
-                currentEpgId = epgMatch?.groupValues?.get(1)?.trim()?.takeIf { it.isNotBlank() }
-                // Attributes live before the final comma; the channel name follows it.
-                val attributes = attributeRegex.findAll(trimmed.substringBeforeLast(","))
-                    .associate { it.groupValues[1].lowercase(Locale.ROOT) to it.groupValues[2] }
-                currentBackups = attributes.mapNotNull { (key, value) ->
-                    val order = when {
-                        key == "x-backup" -> 1
-                        key.startsWith("x-backup") -> key.removePrefix("x-backup").toIntOrNull()
-                        else -> null
-                    } ?: return@mapNotNull null
-                    val url = value.trim()
-                    if (!url.startsWith("http://", ignoreCase = true) && !url.startsWith("https://", ignoreCase = true)) return@mapNotNull null
-                    order to url
-                }.sortedBy { it.first }
-                currentLabels = attributes["x-link-labels"]?.split(',')?.map { it.trim() }.orEmpty()
-                val countryMatch = """tvg-country="([^"]*)"""" .trim().toRegex(RegexOption.IGNORE_CASE).find(trimmed)
-                currentCountry = countryMatch?.groupValues?.get(1)?.trim()?.takeIf { it.isNotBlank() } ?: "Unknown"
-                val languageMatch = """tvg-language="([^"]*)"""" .trim().toRegex(RegexOption.IGNORE_CASE).find(trimmed)
-                currentLanguage = languageMatch?.groupValues?.get(1)?.trim()?.takeIf { it.isNotBlank() } ?: "Unknown"
-                val lowerMeta = (currentLanguage + " " + currentCountry + " " + currentTitle + " " + currentGroup).lowercase(Locale.ROOT)
-                currentLanguage = when {
-                    lowerMeta.contains("urdu") || currentCountry.equals("Pakistan", true) || currentCountry.equals("PK", true) -> "Urdu"
-                    lowerMeta.contains("hindi") || currentLanguage.split(',', ';', '/', ' ').any { it.equals("hin", true) } -> "Hindi"
-                    lowerMeta.contains("bangla") || lowerMeta.contains("bengali") ||
-                        currentLanguage.split(',', ';', '/', ' ').any { it.equals("ben", true) } ||
-                        currentCountry.equals("Bangladesh", true) || currentCountry.equals("BD", true) ||
-                        listOf("jamuna", "dbc", "ekattor", "ntv", "deepto", "maasranga", "somoy", "channel i", "gazi tv", "banglavision").any { currentTitle.contains(it, true) } -> "Bangla"
-                    else -> "Unknown"
-                }
-                currentRegion = if (currentLanguage == "Urdu") "Urdu / Pakistan" else currentLanguage
-                if (currentCountry == "Unknown") currentCountry = when (currentLanguage) {
-                    "Hindi" -> "India"
-                    "Urdu" -> "Pakistan"
-                    "Bangla" -> "Bangladesh"
-                    else -> "Unknown"
-                }
-            } else if (trimmed.startsWith("http://", ignoreCase = true) || trimmed.startsWith("https://", ignoreCase = true)) {
-                if (currentTitle.isNotEmpty()) {
-                    list.add(
-                        Channel(
-                            title = currentTitle,
-                            url = trimmed,
-                            group = currentGroup,
-                            logo = currentLogo,
-                            region = currentRegion,
-                            epgId = currentEpgId,
-                            language = currentLanguage,
-                            country = currentCountry,
-                            backupUrls = currentBackups.map { it.second },
-                            linkLabels = listOf(currentLabels.getOrNull(0).orEmpty()) +
-                                currentBackups.map { currentLabels.getOrNull(it.first).orEmpty() }
-                        )
-                    )
-                    currentBackups = emptyList()
-                    currentLabels = emptyList()
-                    currentTitle = ""
-                    currentGroup = "General"
-                    currentLogo = null
-                    currentRegion = "Unknown Region"
-                    currentLanguage = "Unknown"
-                    currentCountry = "Unknown"
-                    currentEpgId = null
-                }
-            }
-        }
-        // Entries sharing a channel name are alternative links of one channel. Keep the
-        // first URL as primary, then every other URL in order, dropping duplicates.
-        return list.groupBy { it.title.trim().lowercase(Locale.ROOT) }.values.map { variants ->
-            val primary = variants.first()
-            val seen = HashSet<String>()
-            val urls = mutableListOf<String>()
-            val labels = mutableListOf<String>()
-            for (variant in variants) {
-                variant.allUrls.forEachIndexed { index, link ->
-                    if (seen.add(link)) {
-                        urls.add(link)
-                        labels.add(variant.linkLabels.getOrNull(index).orEmpty())
-                    }
-                }
-            }
-            primary.copy(backupUrls = urls.drop(1), linkLabels = labels)
-        }
-    }
-
-    private fun playChannel(index: Int) {
-        val channel = channels.getOrNull(index) ?: return
-        pauseBackgroundNetworkForPlaybackStart()
-        isBuffering.value = true
-        currentResolution.value = null
-        isChannelInfoVisible.value = true
-        recordRecentlyWatched(channel)
-        retryJob?.cancel()
-        retryAttempt = 0
-        triedStreamIndices.clear()
-        isLinkPickerVisible.value = false
-        playbackRetryMessage.value = null
-        channelInfoJob?.cancel()
-        // Keep the channel banner visible for five seconds after the menu fades away.
-        val infoDuration = if (isUiVisible.value) 10_000L else 5_000L
-        channelInfoJob = lifecycleScope.launch {
-            delay(infoDuration)
-            isChannelInfoVisible.value = false
-        }
-
-        // Always start a channel on its primary link.
-        loadLink(channel, 0)
-    }
-
-    // Loads one of the channel's links into the player. Does not cancel retry jobs; callers own that.
-    private fun loadLink(channel: Channel, linkIndex: Int) {
-        val url = channel.allUrls.getOrNull(linkIndex) ?: return
-        activeStreamIndex.value = linkIndex
-        triedStreamIndices.add(linkIndex)
-        currentStreamUrl = url
-        retryAttempt = 0
-        playerController.setStream(url)
-        player.prepare()
-        // Selecting a channel or link is an explicit user action; start playback after a foreground pause.
-        playerController.play()
-        armWatchdog()
-    }
-
-    private fun armWatchdog() {
-        watchdogJob?.cancel()
-        if (!isWatchdogEnabled.value) return
-        watchdogJob = lifecycleScope.launch {
-            delay(WATCHDOG_TIMEOUT_MS)
-            if (isBuffering.value) tryNextBackupOrAdvanceChannel("Stream timed out")
-        }
-    }
-
-    // Failover: try the next untried link of the current channel; when every link has failed,
-    // mark the channel offline and move on to the next channel.
-    private fun tryNextBackupOrAdvanceChannel(reasonPrefix: String) {
-        val idx = currentChannelIndex.value
-        val channel = channels.getOrNull(idx) ?: return
-        val total = channel.allUrls.size
-        val current = activeStreamIndex.value.coerceIn(0, total - 1)
-        triedStreamIndices.add(current)
-        val nextIndex = if (autoFailoverBackupLinks.value) (1 until total).asSequence()
-            .map { (current + it) % total }
-            .firstOrNull { it !in triedStreamIndices } else null
-
-        retryJob?.cancel()
-        if (nextIndex != null) {
-            playbackRetryMessage.value = "$reasonPrefix — trying ${channel.labelForStream(nextIndex)} (${triedStreamIndices.size + 1}/$total)…"
-            retryJob = lifecycleScope.launch {
-                delay(350)
-                if (currentChannelIndex.value == idx) loadLink(channel, nextIndex)
-            }
-        } else {
-            channels[idx] = channel.copy(status = ChannelStatus.OFFLINE)
-            playbackRetryMessage.value = "All links unavailable — switching to next channel…"
-            retryJob = lifecycleScope.launch {
-                delay(1200)
-                if (currentChannelIndex.value == idx) switchChannel(1)
-            }
-        }
-    }
-
-    // Manual link choice from the playback toolbar or picker.
-    private fun selectChannelStream(index: Int, showToast: Boolean = false) {
-        val channel = channels.getOrNull(currentChannelIndex.value) ?: return
-        if (index !in channel.allUrls.indices) return
-        retryJob?.cancel()
-        playbackRetryMessage.value = null
-        isBuffering.value = true
-        loadLink(channel, index)
-        if (showToast) {
-            Toast.makeText(this, "Playing ${channel.labelForStream(index)}", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun openOrCycleChannelLink() {
-        val channel = channels.getOrNull(currentChannelIndex.value)
-        if (channel == null || channel.allUrls.size <= 1) {
-            Toast.makeText(this, "No alternative links for this channel", Toast.LENGTH_SHORT).show()
-            return
-        }
-        val opening = !isLinkPickerVisible.value
-        isLinkPickerVisible.value = opening
-        if (opening) {
-            linkPickerIndex.value = activeStreamIndex.value.coerceIn(0, channel.allUrls.lastIndex)
-            isQualityPickerVisible.value = false
-            isEpgOverlayVisible.value = false
-        }
-    }
-
-    private fun cycleVideoScaling() {
-        scalingModeIndex.value = (scalingModeIndex.value + 1) % scalingModes.size
-        playbackPlayerView?.resizeMode = when (scalingModes[scalingModeIndex.value]) {
-            "Fill" -> androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FILL
-            "Zoom" -> androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-            else -> androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT
-        }
-    }
-
-    private fun openChannelMenuFromPlayback() {
-        isPlaybackOverlayVisible.value = false
-        isUiVisible.value = true
-        resetIdleTimer()
-    }
-
-    private fun openChannelNumberPad() {
-        channelNumberJob?.cancel()
-        typedChannelNumber.value = ""
-        channelNumberOriginalIndex.intValue = currentChannelIndex.value
-        channelNumberPreviewIndex.intValue = -1
-        channelNumberPadFocus.intValue = 0
-        isQualityPickerVisible.value = false
-        isLinkPickerVisible.value = false
-        isEpgOverlayVisible.value = false
-        isChannelNumberPadVisible.value = true
-    }
-
-    private fun appendChannelNumberDigit(digit: Int) {
-        if (digit !in 0..9 || channels.isEmpty()) return
-        val maxDigits = channels.size.toString().length.coerceAtLeast(1)
-        if (typedChannelNumber.value.length >= maxDigits) return
-        typedChannelNumber.value += digit.toString()
-        channelNumberJob?.cancel()
-        channelNumberJob = lifecycleScope.launch {
-            delay(900L)
-            if (!isChannelNumberPadVisible.value) return@launch
-            val requestedNumber = typedChannelNumber.value.toIntOrNull() ?: return@launch
-            val targetIndex = requestedNumber - 1
-            val hasLongerMatch = !typedChannelNumber.value.startsWith("0") &&
-                channels.indices.any { index ->
-                    val candidate = (index + 1).toString()
-                    candidate.length > typedChannelNumber.value.length && candidate.startsWith(typedChannelNumber.value)
-                }
-            // Do not preview "1" while it could still become 10, 15, etc.
-            // The user can always press OK to explicitly choose the exact number.
-            if (targetIndex in channels.indices && !hasLongerMatch) {
-                channelNumberPreviewIndex.intValue = targetIndex
-                currentChannelIndex.value = targetIndex
-                playChannel(targetIndex)
-            }
-        }
-    }
-
-    private fun clearChannelNumberEntry() {
-        channelNumberJob?.cancel()
-        typedChannelNumber.value = ""
-        channelNumberPreviewIndex.intValue = -1
-        val original = channelNumberOriginalIndex.intValue
-        if (currentChannelIndex.value != original) {
-            currentChannelIndex.value = original
-            playChannel(original)
-        }
-    }
-
-    private fun confirmChannelNumberEntry() {
-        channelNumberJob?.cancel()
-        val requestedNumber = typedChannelNumber.value.toIntOrNull()
-        val targetIndex = (requestedNumber ?: 0) - 1
-        if (targetIndex in channels.indices) {
-            if (currentChannelIndex.value != targetIndex) {
-                currentChannelIndex.value = targetIndex
-                playChannel(targetIndex)
-            }
-            isChannelNumberPadVisible.value = false
-            typedChannelNumber.value = ""
-            channelNumberPreviewIndex.intValue = -1
-        } else {
-            Toast.makeText(this, if (typedChannelNumber.value.isBlank()) "Enter a channel number" else "Channel $requestedNumber not found", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun cancelChannelNumberEntry() {
-        channelNumberJob?.cancel()
-        val original = channelNumberOriginalIndex.intValue
-        if (channelNumberPreviewIndex.intValue >= 0 && original in channels.indices && currentChannelIndex.value != original) {
-            currentChannelIndex.value = original
-            playChannel(original)
-        }
-        isChannelNumberPadVisible.value = false
-        typedChannelNumber.value = ""
-        channelNumberPreviewIndex.intValue = -1
-    }
-
-    private fun activatePlaybackAction(index: Int) {
-        when (index) {
-            ACTION_FAVOURITE -> channels.getOrNull(currentChannelIndex.value)?.let { toggleFavorite(it.url) }
-            ACTION_SEARCH -> isSearchOpen.value = true
-            ACTION_QUALITY -> {
-                qualityPickerIndex.value = qualityOptions.indexOf(selectedQuality.value).coerceAtLeast(0)
-                isQualityPickerVisible.value = !isQualityPickerVisible.value
-                isLinkPickerVisible.value = false
-                isEpgOverlayVisible.value = false
-            }
-            ACTION_CHANGE_LINK -> openOrCycleChannelLink()
-            ACTION_EPG -> {
-                isEpgOverlayVisible.value = !isEpgOverlayVisible.value
-                isQualityPickerVisible.value = false
-                isLinkPickerVisible.value = false
-            }
-            ACTION_SETTINGS -> isSettingsOpen.value = true
-            ACTION_SCALING -> cycleVideoScaling()
-            ACTION_LOCK -> playbackControlsLocked.value = !playbackControlsLocked.value
-            ACTION_MENU -> openChannelMenuFromPlayback()
-            ACTION_NUMBER_PAD -> openChannelNumberPad()
-        }
-    }
-
-    private fun switchChannel(delta: Int) {
-        if (channels.isEmpty()) return
-        val newIndex = (currentChannelIndex.value + delta + channels.size) % channels.size
-        currentChannelIndex.value = newIndex
-        playChannel(newIndex)
-    }
-
-    // Intercept playback confirmation before Compose clickable/focus handlers.
-    // This makes the Activity the sole owner of OK/Select while the video controls are open.
-    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        val isConfirmKey = event.keyCode == KeyEvent.KEYCODE_DPAD_CENTER ||
-            event.keyCode == KeyEvent.KEYCODE_ENTER ||
-            event.keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER ||
-            event.keyCode == KeyEvent.KEYCODE_BUTTON_SELECT
-
-        // The update dialog has its own D-pad selection state. Intercept OK here
-        // so a focused Compose clickable cannot require a long press or double-activate.
-        if (updateNotice.value != null && isConfirmKey) {
-            when (event.action) {
-                KeyEvent.ACTION_DOWN -> {
-                    if (event.repeatCount == 0) {
-                        val notice = updateNotice.value
-                        if (selectedUpdateAction.value == 0) {
-                            updateNotice.value = null
-                            notice?.apkFile?.let { launchUpdateInstaller(it) }
-                        } else {
-                            updateNotice.value = null
-                        }
-                    }
-                    return true
-                }
-                KeyEvent.ACTION_UP -> return true
-            }
-        }
-
-        if (!isUiVisible.value && updateNotice.value == null && isConfirmKey) {
-            when (event.action) {
-                KeyEvent.ACTION_DOWN -> {
-                    // Ignore long-press repeats, but consume them so Compose cannot
-                    // interpret the held centre button as a second click.
-                    if (event.repeatCount == 0) {
-                        if (playbackControlsLocked.value) {
-                            playbackControlsLocked.value = false
-                            isPlaybackOverlayVisible.value = true
-                            selectedPlaybackAction.value = ACTION_LOCK
-                        } else if (!isPlaybackOverlayVisible.value) {
-                            isPlaybackOverlayVisible.value = true
-                            selectedPlaybackAction.value = ACTION_FAVOURITE
-                        } else if (isLinkPickerVisible.value) {
-                            selectChannelStream(linkPickerIndex.value, showToast = true)
-                            isLinkPickerVisible.value = false
-                        } else if (isQualityPickerVisible.value) {
-                            selectedQuality.value = qualityOptions[qualityPickerIndex.value]
-                            getSharedPreferences("retro_iptv_prefs", Context.MODE_PRIVATE).edit()
-                                .putString("stream_quality", selectedQuality.value).apply()
-                            applyStreamQuality()
-                            isQualityPickerVisible.value = false
-                        } else if (isChannelNumberPadVisible.value) {
-                            val focus = channelNumberPadFocus.intValue
-                            when (focus) {
-                                9 -> clearChannelNumberEntry()
-                                11 -> confirmChannelNumberEntry()
-                                10 -> appendChannelNumberDigit(0)
-                                else -> appendChannelNumberDigit(focus + 1)
-                            }
-                        } else if (isEpgOverlayVisible.value) {
-                            isEpgOverlayVisible.value = false
-                        } else {
-                            activatePlaybackAction(selectedPlaybackAction.value)
-                        }
-                    }
-                    return true
-                }
-                KeyEvent.ACTION_UP -> return true
-            }
-        }
-        return super.dispatchKeyEvent(event)
-    }
-
-    // Menu hidden: Left/Right zap channels, Up/Down/OK/Menu open the menu.
-    // Menu visible: all D-pad keys go to the menu so you can move around in it.
-    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        // OK/Enter is an activation, not a repeatable navigation key. Some TV remotes
-        // emit repeated ACTION_DOWN events while the centre button is held; ignore them
-        // to prevent repeated toggles and flickering overlays.
-        if ((keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER ||
-                keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER) && (event?.repeatCount ?: 0) > 0
-        ) return true
-
-        // Let Android handle hardware volume keys normally.
-        if (keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN || keyCode == KeyEvent.KEYCODE_VOLUME_MUTE) {
-            return super.onKeyDown(keyCode, event)
-        }
-        // Route remote input to the custom update prompt rather than touch-only actions.
-        if (updateNotice.value != null) {
-            when (keyCode) {
-                KeyEvent.KEYCODE_BACK -> updateNotice.value = null
-                KeyEvent.KEYCODE_DPAD_LEFT -> selectedUpdateAction.value = 0
-                KeyEvent.KEYCODE_DPAD_RIGHT -> selectedUpdateAction.value = 1
-                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
-                    val notice = updateNotice.value
-                    if (selectedUpdateAction.value == 0) {
-                        updateNotice.value = null
-                        notice?.apkFile?.let { launchUpdateInstaller(it) }
-                    } else {
-                        updateNotice.value = null
-                    }
-                }
-            }
-            return true
-        }
-
-        // Physical digit keys use the same preview/confirm flow as the on-screen keypad.
-        if (!isUiVisible.value && !isSearchOpen.value && !isSettingsOpen.value) {
-            val digit = when {
-                keyCode in KeyEvent.KEYCODE_0..KeyEvent.KEYCODE_9 -> keyCode - KeyEvent.KEYCODE_0
-                keyCode in KeyEvent.KEYCODE_NUMPAD_0..KeyEvent.KEYCODE_NUMPAD_9 -> keyCode - KeyEvent.KEYCODE_NUMPAD_0
-                else -> -1
-            }
-            if (digit >= 0) {
-                if ((event?.repeatCount ?: 0) > 0) return true
-                if (!isChannelNumberPadVisible.value) openChannelNumberPad()
-                appendChannelNumberDigit(digit)
-                return true
-            }
-        }
-
-        if (isChannelNumberPadVisible.value) {
-            when (keyCode) {
-                KeyEvent.KEYCODE_BACK -> cancelChannelNumberEntry()
-                KeyEvent.KEYCODE_DPAD_LEFT -> channelNumberPadFocus.intValue = if (channelNumberPadFocus.intValue % 3 == 0) channelNumberPadFocus.intValue else channelNumberPadFocus.intValue - 1
-                KeyEvent.KEYCODE_DPAD_RIGHT -> channelNumberPadFocus.intValue = if (channelNumberPadFocus.intValue % 3 == 2) channelNumberPadFocus.intValue else channelNumberPadFocus.intValue + 1
-                KeyEvent.KEYCODE_DPAD_UP -> channelNumberPadFocus.intValue = (channelNumberPadFocus.intValue - 3).coerceAtLeast(0)
-                KeyEvent.KEYCODE_DPAD_DOWN -> channelNumberPadFocus.intValue = (channelNumberPadFocus.intValue + 3).coerceAtMost(11)
-                else -> return true
-            }
-            return true
-        }
-
-        // Modal overlays take Back priority even when the main browser is hidden
-        // (for example, Search opened from the playback toolbar).
-        // Search is modal: route D-pad input to Compose, never to playback controls.
-        if (isSearchOpen.value && keyCode in setOf(
-                KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN,
-                KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT,
-                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER,
-                KeyEvent.KEYCODE_NUMPAD_ENTER
-            )
-        ) return super.onKeyDown(keyCode, event)
-
-        if (keyCode == KeyEvent.KEYCODE_BACK && isSearchOpen.value) {
-            isSearchOpen.value = false
-            return true
-        }
-        if (keyCode == KeyEvent.KEYCODE_BACK && isSettingsOpen.value) {
-            isSettingsOpen.value = false
-            return true
-        }
-
-        if (!isUiVisible.value) {
-            if (playbackControlsLocked.value) {
-                if (keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
-                    playbackControlsLocked.value = false
-                    isPlaybackOverlayVisible.value = true
-                    selectedPlaybackAction.value = ACTION_LOCK
-                }
-                return true
-            }
-            if (keyCode == KeyEvent.KEYCODE_BACK) {
-                when {
-                    isLinkPickerVisible.value -> isLinkPickerVisible.value = false
-                    isQualityPickerVisible.value -> isQualityPickerVisible.value = false
-                    isEpgOverlayVisible.value -> isEpgOverlayVisible.value = false
-                    isPlaybackOverlayVisible.value -> isPlaybackOverlayVisible.value = false
-                    else -> isCrtExiting.value = true
-                }
-                return true
-            }
-
-            // Playing video: Left/Right change channels. Down opens the playback
-            // toolbar. Up always opens the channel browser/menu.
-            if (keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_MENU) {
-                openChannelMenuFromPlayback()
-                return true
-            }
-            if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-                val delta = if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) 1 else -1
-                val linkCount = channels.getOrNull(currentChannelIndex.value)?.allUrls?.size ?: 1
-                when {
-                    isLinkPickerVisible.value ->
-                        linkPickerIndex.value = (linkPickerIndex.value + delta + linkCount) % linkCount
-                    isQualityPickerVisible.value ->
-                        qualityPickerIndex.value = (qualityPickerIndex.value + delta + qualityOptions.size) % qualityOptions.size
-                    isEpgOverlayVisible.value -> Unit // Guide navigation must never zap the playing channel.
-                    isPlaybackOverlayVisible.value ->
-                        selectedPlaybackAction.value = (selectedPlaybackAction.value + delta + PLAYBACK_ACTION_COUNT) % PLAYBACK_ACTION_COUNT
-                    else -> switchChannel(delta)
-                }
-                return true
-            }
-            if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
-                if (!isPlaybackOverlayVisible.value) {
-                    isPlaybackOverlayVisible.value = true
-                    selectedPlaybackAction.value = ACTION_FAVOURITE
-                } else if (!isQualityPickerVisible.value && !isLinkPickerVisible.value && !isEpgOverlayVisible.value) {
-                    selectedPlaybackAction.value = ACTION_MENU
-                }
-                return true
-            }
-            if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
-                if (!isPlaybackOverlayVisible.value) {
-                    isPlaybackOverlayVisible.value = true
-                } else if (isLinkPickerVisible.value) {
-                    selectChannelStream(linkPickerIndex.value, showToast = true)
-                    isLinkPickerVisible.value = false
-                } else if (isQualityPickerVisible.value) {
-                    selectedQuality.value = qualityOptions[qualityPickerIndex.value]
-                    getSharedPreferences("retro_iptv_prefs", Context.MODE_PRIVATE).edit()
-                        .putString("stream_quality", selectedQuality.value).apply()
-                    applyStreamQuality()
-                    isQualityPickerVisible.value = false
-                } else if (isEpgOverlayVisible.value) {
-                    isEpgOverlayVisible.value = false
-                } else {
-                    activatePlaybackAction(selectedPlaybackAction.value)
-                }
-                return true
-            }
-        } else {
-            if (keyCode == KeyEvent.KEYCODE_BACK) {
-                when {
-                    isSearchOpen.value -> isSearchOpen.value = false
-                    isSettingsOpen.value -> isSettingsOpen.value = false
-                    else -> isUiVisible.value = false
-                }
-                return true
-            }
-            resetIdleTimer()
-        }
-
-        return super.onKeyDown(keyCode, event)
-    }
-
-    @Deprecated("Deprecated in Android API; retained for broad TV device compatibility")
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == REQUEST_VOICE_SEARCH && resultCode == RESULT_OK) {
-            val spoken = data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull().orEmpty()
-            if (spoken.isNotBlank()) searchVoiceQuery.value = spoken
-        }
-    }
-
-    override fun onUserLeaveHint() {
-        super.onUserLeaveHint()
-        if (isPipEnabled.value && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !isUiVisible.value &&
-            !isSearchOpen.value && !isSettingsOpen.value && packageManager.hasSystemFeature("android.software.picture_in_picture")
-        ) {
-            runCatching {
-                enterPictureInPictureMode(
-                    PictureInPictureParams.Builder().setAspectRatio(Rational(16, 9)).build()
-                )
-            }
-        }
-    }
-
-    override fun onStart() {
-        super.onStart()
-        isHostForeground = true
-        liveContentRefreshPending = true
-        if (player.playbackState == Player.STATE_READY) scheduleBackgroundNetworkWorkAfterReady()
-    }
-
-    override fun onStop() {
-        // Home, app switching, and screen-off must never leave a live stream playing.
-        isHostForeground = false
-        backgroundNetworkResumeJob?.cancel()
-        backgroundNetworkResumeJob = null
-        if (healthCheckJob?.isActive == true) healthCheckPending = true
-        healthCheckJob?.cancel()
-        healthCheckJob = null
-        if (liveContentJob?.isActive == true) liveContentRefreshPending = true
-        liveContentJob?.cancel()
-        liveContentJob = null
-        retryJob?.cancel()
-        watchdogJob?.cancel()
-        playerController.pauseForBackground()
-        super.onStop()
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        autoHideJob?.cancel()
-        watchdogJob?.cancel()
-        channelInfoJob?.cancel()
-        retryJob?.cancel()
-        liveContentJob?.cancel()
-        healthCheckJob?.cancel()
-        backgroundNetworkResumeJob?.cancel()
-        playerController.release()
-    }
-}
