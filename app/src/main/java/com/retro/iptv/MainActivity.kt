@@ -52,6 +52,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusProperties
@@ -128,6 +129,7 @@ val OakSurfaceElevated = Color(0xFF1D2027)
 val FocusRed = Color(0xFFE11D48)
 val ChannelCardFocusedFill = Color(0xFF241419)
 val ChannelCardIdleStroke = Color(0xFF242832)
+val ChannelCardFocusGlow = Color(0x66E11D48)
 val RetroGlass = Color(0xD912141A)
 val RetroGlassBorder = Color.White.copy(alpha = 0.12f)
 val ParchmentWhite = Color.White
@@ -635,9 +637,15 @@ fun ChannelCard(
                 scaleX = focusScale
                 scaleY = focusScale
                 translationZ = if (isFocused) 12.dp.toPx() else 0f
-                shadowElevation = if (isFocused) 12.dp.toPx() else 0f
                 clip = false
             }
+            .shadow(
+                elevation = if (isFocused) 12.dp else 0.dp,
+                shape = shape,
+                clip = false,
+                ambientColor = ChannelCardFocusGlow,
+                spotColor = ChannelCardFocusGlow
+            )
             .clip(shape)
             .background(fill)
             .border(
@@ -2398,7 +2406,3 @@ class MainActivity : ComponentActivity() {
                             RetroTvMark(Modifier.size(150.dp).graphicsLayer { scaleX = pulse; scaleY = pulse })
                         }
                     }
-                }
-            }
-        }
-    }
