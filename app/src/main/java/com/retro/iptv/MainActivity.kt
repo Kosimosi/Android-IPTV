@@ -900,6 +900,7 @@ fun SearchModal(
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val drawerWidth = (maxWidth * 0.40f).coerceIn(280.dp, 560.dp)
+        val searchEdgePadding = (maxHeight / 2 - 32.dp).coerceAtLeast(24.dp)
         // The video remains visible under a light scrim; tapping outside dismisses the drawer.
         Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.40f)).clickable { onClose() })
         Column(
@@ -1001,7 +1002,7 @@ fun SearchModal(
                     modifier = Modifier.weight(1f).fillMaxWidth().focusGroup()
                         .graphicsLayer { clip = false }
                         .then(rememberRetroTvDpadRepeatThrottle { rapidNavigation = true }),
-                    contentPadding = PaddingValues(vertical = (maxHeight / 2 - 32.dp).coerceAtLeast(24.dp)),
+                    contentPadding = PaddingValues(vertical = searchEdgePadding),
                     verticalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
                     itemsIndexed(visibleChannels, key = { _, channel -> channel.url }) { channelPosition, channel ->
@@ -2418,6 +2419,11 @@ class MainActivity : ComponentActivity() {
                             RetroTvMark(Modifier.size(150.dp).graphicsLayer { scaleX = pulse; scaleY = pulse })
                         }
                     }
+                }
+            }
+        }
+    }
+
     private data class UpdateCheckResult(
         val latestTag: String,
         val apkFile: File?,
