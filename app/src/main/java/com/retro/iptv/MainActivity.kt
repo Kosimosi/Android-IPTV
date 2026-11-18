@@ -52,6 +52,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusProperties
@@ -122,10 +123,13 @@ const val DEFAULT_PLAYLIST_URL = "https://raw.githubusercontent.com/Kosimosi/And
 const val IPTV_INDIA_EPG_URL = "https://iptv-epg.org/files/epg-in.xml"
 
 // --- COLOR PALETTE (Modern Oak) ---
-val OakDarkBackground = Color(0xFF080808)
-val OakSurface = Color(0xFF151515)
-val OakSurfaceElevated = Color(0xFF222222)
-val FocusRed = Color(0xFFE50914)
+val OakDarkBackground = Color(0xFF0B0C0E)
+val OakSurface = Color(0xFF15171C)
+val OakSurfaceElevated = Color(0xFF1D2027)
+val FocusRed = Color(0xFFE11D48)
+val ChannelCardFocusedFill = Color(0xFF241419)
+val ChannelCardIdleStroke = Color(0xFF242832)
+val ChannelCardFocusGlow = Color(0x66E11D48)
 val RetroGlass = Color(0xD912141A)
 val RetroGlassBorder = Color.White.copy(alpha = 0.12f)
 val ParchmentWhite = Color.White
@@ -607,36 +611,31 @@ fun ChannelCard(
     channelNumber: Int? = null,
     onSelect: () -> Unit,
     onUserInteract: () -> Unit,
+    canRequestFocus: () -> Boolean = { true },
     modifier: Modifier = Modifier.width(88.dp)
 ) {
     var isFocused by remember { mutableStateOf(false) }
     var confirmPressed by remember { mutableStateOf(false) }
+    var rapidNavigation by remember { mutableStateOf(false) }
+    LaunchedEffect(rapidNavigation) {
+        if (rapidNavigation) {
+            delay(180)
+            rapidNavigation = false
+        }
+    }
     val shape = RoundedCornerShape(8.dp)
-    val fill by animateColorAsState(
-        targetValue = when {
-            isFocused -> FocusRed
-            isSelected -> OakSurfaceElevated.copy(alpha = 0.92f)
-            else -> OakSurface.copy(alpha = 0.76f)
-        },
-        animationSpec = tween(160),
-        label = "channelCardFill"
-    )
+    val focusStyle = rememberRetroTvFocusStyle(isFocused, isSelected, rapidNavigation)
+    val focusRequester = remember(channel.url) { FocusRequester() }
     Box(
         modifier = modifier
             .aspectRatio(2f / 3f)
-            .graphicsLayer {
-                val scale = if (isFocused) 1.06f else 1f
-                scaleX = scale
-                scaleY = scale
-                shadowElevation = if (isFocused) 12f else 1f
-            }
+            .retroTvFocusLayer(isFocused, focusStyle.scale)
+            .focusRequester(focusRequester)
+            .retroTvHoverRequestsFocus(focusRequester, canRequestFocus)
+            .then(rememberRetroTvDpadRepeatThrottle { rapidNavigation = true })
             .clip(shape)
-            .background(fill)
-            .border(
-                width = if (isFocused) 2.dp else if (isSelected) 1.5.dp else 1.dp,
-                color = if (isFocused) FocusRed else if (isSelected) Color.White.copy(alpha = 0.65f) else Color.White.copy(alpha = 0.08f),
-                shape = shape
-            )
+            .background(focusStyle.fill)
+            .border(focusStyle.strokeWidth, focusStyle.stroke, shape)
             .onFocusChanged {
                 isFocused = it.isFocused
                 if (it.isFocused) onUserInteract()
@@ -749,9 +748,17 @@ private fun LiveNowEventCard(
 ) {
     var focused by remember { mutableStateOf(false) }
     Row(
-        Modifier.widthIn(min = 260.dp).width(260.dp).clip(RoundedCornerShape(10.dp))
-            .background(if (focused) Color(0xE51A1115) else Color(0xD914161D))
-            .border(1.dp, if (focused) FocusRed.copy(alpha = 0.85f) else Color(0x55E50914), RoundedCornerShape(10.dp))
+        Modifier.widthIn(min = 260.dp).width(260.dp)
+            .shadow(
+                elevation = if (focused) 10.dp else 0.dp,
+                shape = RoundedCornerShape(10.dp),
+                clip = false,
+                ambientColor = ChannelCardFocusGlow,
+                spotColor = ChannelCardFocusGlow
+            )
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (focused) ChannelCardFocusedFill else OakSurface)
+            .border(1.5.dp, if (focused) FocusRed else RetroTvFocusKit.CricketCardStroke, RoundedCornerShape(10.dp))
             .onFocusChanged { focused = it.isFocused }
             .clickable { onClick() }.focusable()
             .padding(10.dp),
@@ -764,7 +771,7 @@ private fun LiveNowEventCard(
             }
             Text(title, color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(channel.title, color = WarmAshMuted, fontSize = 9.sp, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                Text(channel.title, color = RetroTvFocusKit.SecondaryText, fontSize = 10.sp, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                 if (channelNumber != null && channelNumber > 0) {
                     Text(
                         text = "${channelNumber.toString().padStart(3, '0')} • HD",
@@ -810,21 +817,22 @@ private fun NewsTickerBar(headlines: List<String>, modifier: Modifier = Modifier
             factory = { context ->
                 android.widget.TextView(context).apply {
                     text = tickerText
-                    setTextColor(android.graphics.Color.WHITE)
+                    setTextColor(android.graphics.Color.rgb(0xF5, 0xF5, 0xF5))
                     textSize = 11f
                     setSingleLine(true)
+                    setHorizontallyScrolling(true)
                     ellipsize = android.text.TextUtils.TruncateAt.MARQUEE
                     marqueeRepeatLimit = -1
                     isSelected = true
                     gravity = android.view.Gravity.CENTER_VERTICAL
                     setPadding((8 * resources.displayMetrics.density).toInt(), 0, (10 * resources.displayMetrics.density).toInt(), 0)
                     setHorizontalFadingEdgeEnabled(true)
-                    setFadingEdgeLength((20 * resources.displayMetrics.density).toInt())
+                    setFadingEdgeLength((36 * resources.displayMetrics.density).toInt())
                 }
             },
             update = { view ->
                 if (view.text.toString() != tickerText) view.text = tickerText
-                view.isSelected = !focused
+                view.isSelected = true
             }
         )
     }
@@ -838,10 +846,6 @@ fun SearchModal(
     recentUrls: List<String>,
     epgPrograms: List<Programme>,
     voiceQuery: String,
-    tickerMode: String,
-    tickerHeadlines: List<String>,
-    remoteLiveItems: List<LiveContentCard>,
-    onTickerTap: () -> Unit,
     onSelectChannel: (Channel) -> Unit,
     onClose: () -> Unit
 ) {
@@ -850,7 +854,16 @@ fun SearchModal(
     val context = LocalContext.current
     val keyboardController = LocalSoftwareKeyboardController.current
     val searchFocusRequester = remember { FocusRequester() }
+    val searchListState = rememberLazyListState()
+    val searchScope = rememberCoroutineScope()
+    var rapidNavigation by remember { mutableStateOf(false) }
     val isTv = remember { context.packageManager.hasSystemFeature("android.software.leanback") }
+    LaunchedEffect(rapidNavigation) {
+        if (rapidNavigation) {
+            delay(180)
+            rapidNavigation = false
+        }
+    }
     LaunchedEffect(Unit) {
         delay(if (isTv) 160L else 80L)
         runCatching { searchFocusRequester.requestFocus() }
@@ -860,22 +873,15 @@ fun SearchModal(
     }
 
     val now = System.currentTimeMillis()
-    val liveNowItems = remember(epgPrograms, channels, now, remoteLiveItems) {
-        val epgItems = epgPrograms.asSequence()
-            .filter { it.startTimeMs <= now && it.stopTimeMs > now }
-            .filter { programme ->
-                listOf("live", "cricket", "football", "final", "breaking", "match", "bulletin")
-                    .any { keyword -> programme.title.contains(keyword, true) }
-            }
-            .mapNotNull { programme ->
-                channels.firstOrNull { !it.epgId.isNullOrBlank() && it.epgId.equals(programme.channelId, true) }
-                    ?.let { channel -> LiveContentCard("epg-" + channel.url, "LIVE NOW", programme.title, channel) }
-            }.toList()
-        (epgItems + remoteLiveItems).distinctBy { it.channel.url }.take(5)
+    val channelByUrl = remember(channels) { channels.associateBy { it.url } }
+    val channelIndexByUrl = remember(channels) { channels.withIndex().associate { it.value.url to it.index } }
+    val favoriteUrlSet = remember(favoriteUrls) { favoriteUrls.toHashSet() }
+    val programmesByChannel = remember(epgPrograms) {
+        epgPrograms.groupBy { it.channelId.lowercase(Locale.ROOT) }
     }
-    val visibleChannels = remember(query, selectedFilter, channels, favoriteUrls, recentUrls, epgPrograms) {
-        val recent = recentUrls.mapNotNull { url -> channels.firstOrNull { it.url == url } }
-        val favorites = channels.filter { it.url in favoriteUrls }
+    val visibleChannels = remember(query, selectedFilter, channels, favoriteUrlSet, recentUrls, channelByUrl, channelIndexByUrl) {
+        val recent = recentUrls.mapNotNull { channelByUrl[it] }
+        val favorites = channels.filter { it.url in favoriteUrlSet }
         val base = when (selectedFilter) {
             "Favorites" -> favorites
             "Recent" -> recent
@@ -886,7 +892,7 @@ fun SearchModal(
         else {
             val number = query.trim().toIntOrNull()
             base.filterIndexed { _, channel ->
-                val index = channels.indexOfFirst { it.url == channel.url }
+                val index = channelIndexByUrl[channel.url] ?: -1
                 val numberMatch = number != null && index + 1 == number
                 numberMatch || channel.title.contains(query.trim(), ignoreCase = true)
             }
@@ -895,6 +901,7 @@ fun SearchModal(
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val drawerWidth = (maxWidth * 0.40f).coerceIn(280.dp, 560.dp)
+        val searchEdgePadding = (maxHeight / 2 - 32.dp).coerceAtLeast(24.dp)
         // The video remains visible under a light scrim; tapping outside dismisses the drawer.
         Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.40f)).clickable { onClose() })
         Column(
@@ -906,7 +913,9 @@ fun SearchModal(
                 .background(Color(0xD112141A))
                 .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(topEnd = 16.dp, bottomEnd = 16.dp))
                 .clickable(enabled = false) { }
-                .padding(start = 16.dp, end = 14.dp, top = 16.dp, bottom = 12.dp),
+                .padding(start = 16.dp, end = 14.dp, top = 16.dp, bottom = 12.dp)
+                .graphicsLayer { clip = false }
+                .then(rememberRetroTvDpadRepeatThrottle { rapidNavigation = true }),
             verticalArrangement = Arrangement.Top
         ) {
             Row(
@@ -970,19 +979,6 @@ fun SearchModal(
                 }
             }
 
-            if (query.isBlank() && liveNowItems.isNotEmpty()) {
-                Text("LIVE NOW • SPORTS & EVENTS", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Black, letterSpacing = 0.8.sp)
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                    items(liveNowItems, key = { it.id }) { item ->
-                        LiveNowEventCard(item.title, item.channel, item.badge, channels.indexOfFirst { it.url == item.channel.url }.takeIf { it >= 0 }?.plus(1)) { onSelectChannel(item.channel) }
-                    }
-                }
-                Spacer(Modifier.height(8.dp))
-            }
-            if (query.isBlank() && tickerMode == "ALWAYS ON" && tickerHeadlines.isNotEmpty()) {
-                NewsTickerBar(tickerHeadlines, onClick = onTickerTap)
-                Spacer(Modifier.height(8.dp))
-            }
             Spacer(Modifier.height(10.dp))
             Text(
                 if (query.isNotBlank()) "SEARCH RESULTS (${visibleChannels.size})" else when (selectedFilter) {
@@ -1003,30 +999,64 @@ fun SearchModal(
                 }
             } else {
                 LazyColumn(
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    state = searchListState,
+                    modifier = Modifier.weight(1f).fillMaxWidth().focusGroup()
+                        .graphicsLayer { clip = false }
+                        .then(rememberRetroTvDpadRepeatThrottle { rapidNavigation = true }),
+                    contentPadding = PaddingValues(vertical = searchEdgePadding),
                     verticalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
-                    itemsIndexed(visibleChannels, key = { _, channel -> channel.url }) { _, channel ->
-                        val channelIndex = channels.indexOfFirst { it.url == channel.url }
-                        val currentProgram = epgPrograms.firstOrNull {
-                            it.channelId.equals(channel.epgId, ignoreCase = true) &&
-                                it.startTimeMs <= now && it.stopTimeMs > now
+                    itemsIndexed(visibleChannels, key = { _, channel -> channel.url }) { channelPosition, channel ->
+                        val channelIndex = channelIndexByUrl[channel.url] ?: -1
+                        val channelProgrammes = channel.epgId
+                            ?.lowercase(Locale.ROOT)
+                            ?.let { programmesByChannel[it] }
+                            .orEmpty()
+                        val currentProgram = channelProgrammes.firstOrNull {
+                            it.startTimeMs <= now && it.stopTimeMs > now
                         }
-                        val upcomingProgram = epgPrograms.firstOrNull {
-                            it.channelId.equals(channel.epgId, ignoreCase = true) && it.startTimeMs > now
-                        }
+                        val upcomingProgram = channelProgrammes.firstOrNull { it.startTimeMs > now }
                         val streamBadge = channel.linkLabels.firstOrNull { label ->
                             val upper = label.uppercase()
                             upper.contains("FHD") || upper.contains("HD") || upper.contains("4K") || upper.contains("1080") || upper.contains("720")
                         }?.uppercase()
-                        var focused by remember { mutableStateOf(false) }
+                        var focused by remember(channel.url) { mutableStateOf(false) }
+                        var confirmPressed by remember(channel.url) { mutableStateOf(false) }
+                        val searchCardFocus = rememberRetroTvFocusStyle(focused, rapidNavigation = rapidNavigation)
+                        val searchCardRequester = remember(channel.url) { FocusRequester() }
                         Row(
-                            Modifier.fillMaxWidth().clip(RoundedCornerShape(11.dp))
-                                .background(if (focused) FocusRed.copy(alpha = 0.30f) else Color.White.copy(alpha = 0.045f))
-                                .border(1.dp, if (focused) FocusRed else Color.White.copy(alpha = 0.07f), RoundedCornerShape(11.dp))
-                                .onFocusChanged { focused = it.isFocused }
-                                .clickable { onSelectChannel(channel) }
+                            Modifier.fillMaxWidth()
+                                .retroTvFocusLayer(focused, searchCardFocus.scale)
+                                .focusRequester(searchCardRequester)
+                                .retroTvHoverRequestsFocus(searchCardRequester) { !searchListState.isScrollInProgress }
+                                .clip(RoundedCornerShape(11.dp))
+                                .background(searchCardFocus.fill)
+                                .border(searchCardFocus.strokeWidth, searchCardFocus.stroke, RoundedCornerShape(11.dp))
+                                .retroTvCenterOnFocus(searchListState, channelPosition, searchScope, { focused = it }, rapidNavigation = rapidNavigation)
+                                .onPreviewKeyEvent { keyEvent ->
+                                    val isConfirm = keyEvent.key == Key.DirectionCenter ||
+                                        keyEvent.key == Key.Enter || keyEvent.key == Key.NumPadEnter
+                                    if (!focused || !isConfirm) {
+                                        false
+                                    } else {
+                                        when (keyEvent.type) {
+                                            KeyEventType.KeyDown -> {
+                                                if (!confirmPressed) {
+                                                    confirmPressed = true
+                                                    onSelectChannel(channel)
+                                                }
+                                                true
+                                            }
+                                            KeyEventType.KeyUp -> {
+                                                confirmPressed = false
+                                                true
+                                            }
+                                            else -> true
+                                        }
+                                    }
+                                }
                                 .focusable()
+                                .clickable { onSelectChannel(channel) }
                                 .padding(horizontal = 9.dp, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
@@ -2142,7 +2172,7 @@ class MainActivity : ComponentActivity() {
 
                                 LazyColumn(
                                     state = listState,
-                                    modifier = Modifier.fillMaxSize(),
+                                    modifier = Modifier.fillMaxSize().graphicsLayer { clip = false },
                                     verticalArrangement = Arrangement.spacedBy(16.dp),
                                     contentPadding = PaddingValues(bottom = 32.dp)
                                 ) {
@@ -2179,7 +2209,8 @@ class MainActivity : ComponentActivity() {
                                                         ChannelCard(channel = ch, isSelected = ch.url == activeChannel?.url,
                                                             channelNumber = channels.indexOfFirst { it.url == ch.url }.takeIf { it >= 0 }?.plus(1),
                                                             onSelect = { val idx = channels.indexOfFirst { it.url == ch.url }; if (idx >= 0) { currentChannelIndex.value = idx; playChannel(idx); isUiVisible.value = false; isSearchOpen.value = false; isSettingsOpen.value = false } },
-                                                            onUserInteract = { resetIdleTimer() })
+                                                            onUserInteract = { resetIdleTimer() },
+                                                            canRequestFocus = { !listState.isScrollInProgress })
                                                     }
                                                 }
                                             }
@@ -2230,7 +2261,8 @@ class MainActivity : ComponentActivity() {
                                                 .chunked(columns).forEach { rowChannels ->
                                                     item {
                                                         Row(
-                                                            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).focusGroup(),
+                                                            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)
+                                                                .focusGroup().graphicsLayer { clip = false },
                                                             horizontalArrangement = Arrangement.spacedBy(gap)
                                                         ) {
                                                             rowChannels.forEach { ch ->
@@ -2249,7 +2281,8 @@ class MainActivity : ComponentActivity() {
                                                                             isSettingsOpen.value = false
                                                                         }
                                                                     },
-                                                                    onUserInteract = { resetIdleTimer() }
+                                                                    onUserInteract = { resetIdleTimer() },
+                                                                    canRequestFocus = { !listState.isScrollInProgress }
                                                                 )
                                                             }
                                                             repeat(columns - rowChannels.size) { Spacer(Modifier.width(tileWidth)) }
@@ -2280,10 +2313,6 @@ class MainActivity : ComponentActivity() {
                             recentUrls = recentChannelUrls.toList(),
                             epgPrograms = epgPrograms.toList(),
                             voiceQuery = searchVoiceQuery.value,
-                            tickerMode = liveNewsTickerMode.value,
-                            tickerHeadlines = tickerHeadlines.toList(),
-                            remoteLiveItems = liveContentCards.toList(),
-                            onTickerTap = { playNewsChannelFromTicker() },
                             onSelectChannel = { ch ->
                                 val idx = channels.indexOf(ch)
                                 if (idx >= 0) {
@@ -3279,6 +3308,12 @@ class MainActivity : ComponentActivity() {
             event.keyCode == KeyEvent.KEYCODE_ENTER ||
             event.keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER ||
             event.keyCode == KeyEvent.KEYCODE_BUTTON_SELECT
+
+        // The search drawer owns OK/Select while it is open. Do not let the
+        // playback toolbar's Activity-level handler steal channel selection.
+        if (isSearchOpen.value && isConfirmKey) {
+            return super.dispatchKeyEvent(event)
+        }
 
         // The update dialog has its own D-pad selection state. Intercept OK here
         // so a focused Compose clickable cannot require a long press or double-activate.
