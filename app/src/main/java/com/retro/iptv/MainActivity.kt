@@ -615,8 +615,15 @@ fun ChannelCard(
 ) {
     var isFocused by remember { mutableStateOf(false) }
     var confirmPressed by remember { mutableStateOf(false) }
+    var rapidNavigation by remember { mutableStateOf(false) }
+    LaunchedEffect(rapidNavigation) {
+        if (rapidNavigation) {
+            delay(180)
+            rapidNavigation = false
+        }
+    }
     val shape = RoundedCornerShape(8.dp)
-    val focusStyle = rememberRetroTvFocusStyle(isFocused, isSelected)
+    val focusStyle = rememberRetroTvFocusStyle(isFocused, isSelected, rapidNavigation)
     val focusRequester = remember(channel.url) { FocusRequester() }
     Box(
         modifier = modifier
@@ -624,6 +631,7 @@ fun ChannelCard(
             .retroTvFocusLayer(isFocused, focusStyle.scale)
             .focusRequester(focusRequester)
             .retroTvHoverRequestsFocus(focusRequester)
+            .then(rememberRetroTvDpadRepeatThrottle { rapidNavigation = true })
             .clip(shape)
             .background(focusStyle.fill)
             .border(focusStyle.strokeWidth, focusStyle.stroke, shape)
@@ -904,6 +912,7 @@ fun SearchModal(
                 .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(topEnd = 16.dp, bottomEnd = 16.dp))
                 .clickable(enabled = false) { }
                 .padding(start = 16.dp, end = 14.dp, top = 16.dp, bottom = 12.dp)
+                .graphicsLayer { clip = false }
                 .then(rememberRetroTvDpadRepeatThrottle { rapidNavigation = true }),
             verticalArrangement = Arrangement.Top
         ) {
@@ -992,7 +1001,7 @@ fun SearchModal(
                     modifier = Modifier.weight(1f).fillMaxWidth().focusGroup()
                         .graphicsLayer { clip = false }
                         .then(rememberRetroTvDpadRepeatThrottle { rapidNavigation = true }),
-                    contentPadding = PaddingValues(vertical = 24.dp),
+                    contentPadding = PaddingValues(vertical = (maxHeight / 2 - 32.dp).coerceAtLeast(24.dp)),
                     verticalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
                     itemsIndexed(visibleChannels, key = { _, channel -> channel.url }) { channelPosition, channel ->
