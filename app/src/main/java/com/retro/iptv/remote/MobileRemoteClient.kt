@@ -52,7 +52,8 @@ class MobileRemoteClient(
                         override fun onResolveFailed(serviceInfo: NsdServiceInfo, errorCode: Int) {}
                         override fun onServiceResolved(resolved: NsdServiceInfo) {
                             val host = resolved.host ?: return
-                            connectToTv(host, resolved.port, resolved.serviceName, pairingCode)
+                            stopDiscovery()
+                            connectToTv(host.hostAddress, resolved.port, resolved.serviceName, pairingCode)
                         }
                     })
                 }
@@ -85,6 +86,10 @@ class MobileRemoteClient(
             return
         }
         stopDiscovery()
+        paired = false
+        val previous = wsClient
+        wsClient = null
+        runCatching { previous?.close() }
         pairingCode = cleanPin
         connectToTv(cleanHost, port, "RETROTV", cleanPin)
     }
