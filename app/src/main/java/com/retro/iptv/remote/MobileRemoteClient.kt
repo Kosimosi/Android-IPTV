@@ -9,7 +9,6 @@ import android.os.Looper
 import org.java_websocket.client.WebSocketClient
 import org.java_websocket.handshake.ServerHandshake
 import org.json.JSONObject
-import java.net.InetAddress
 import java.net.URI
 
 class MobileRemoteClient(
@@ -87,10 +86,7 @@ class MobileRemoteClient(
         }
         stopDiscovery()
         pairingCode = cleanPin
-        connectToTv(runCatching { InetAddress.getByName(cleanHost) }.getOrNull() ?: run {
-            mainHandler.post { onConnectionStateChanged(false, "Invalid TV address") }
-            return
-        }, port, "RETROTV", cleanPin)
+        connectToTv(cleanHost, port, "RETROTV", cleanPin)
     }
 
     fun sendCommand(command: String, value: String = "") {
@@ -107,10 +103,6 @@ class MobileRemoteClient(
         wsClient = null
         runCatching { client?.close() }
         mainHandler.post { onConnectionStateChanged(false, "Disconnected") }
-    }
-
-    private fun connectToTv(host: InetAddress, port: Int, serviceName: String, pin: String) {
-        connectToTv(host.hostAddress, port, serviceName, pin)
     }
 
     private fun connectToTv(host: String, port: Int, serviceName: String, pin: String) {
