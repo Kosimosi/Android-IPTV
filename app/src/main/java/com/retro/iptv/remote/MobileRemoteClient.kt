@@ -29,6 +29,10 @@ class MobileRemoteClient(
 
     fun startDiscovery(pin: String) {
         stopDiscovery()
+        val previous = wsClient
+        wsClient = null
+        paired = false
+        runCatching { previous?.close() }
         pairingCode = pin.filter(Char::isDigit).take(6)
         if (pairingCode.length != 6) {
             mainHandler.post { onConnectionStateChanged(false, "Enter the 6-digit TV pairing PIN") }
@@ -132,12 +136,20 @@ class MobileRemoteClient(
                 }
             }
             override fun onClose(code: Int, reason: String?, remote: Boolean) {
-                paired = false
-                mainHandler.post { onConnectionStateChanged(false, "Disconnected from RETROTV") }
+                if (wsClient === this) {
+                    paired = false
+                    mainHandler.post {
+                        if (wsClient === this) onConnectionStateChanged(false, "Disconnected from RETROTV")
+                    }
+                }
             }
             override fun onError(ex: Exception?) {
-                paired = false
-                mainHandler.post { onConnectionStateChanged(false, "Could not connect. Check TV PIN and Wi-Fi.") }
+                if (wsClient === this) {
+                    paired = false
+                    mainHandler.post {
+                        if (wsClient === this) onConnectionStateChanged(false, "Could not connect. Check TV PIN and Wi-Fi.")
+                    }
+                }
             }
         }
         wsClient = client
