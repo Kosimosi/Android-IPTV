@@ -31,9 +31,8 @@ class TvRemoteServer(
     fun start(port: Int = DEFAULT_PORT) {
         if (wsServer != null) return
         val server = RetroWsServer(InetSocketAddress("0.0.0.0", port))
-        server.isReuseAddr = true
-        server.connectionLostTimeout = 25
-        server.setMaxFrameSize(MAX_MESSAGE_CHARS)
+        server.setReuseAddr(true)
+        server.setConnectionLostTimeout(25)
         wsServer = server
         try {
             server.start()
@@ -94,7 +93,7 @@ class TvRemoteServer(
 
     private inner class RetroWsServer(address: InetSocketAddress) : WebSocketServer(address) {
         override fun onOpen(conn: WebSocket, handshake: ClientHandshake) {
-            if (connections.size > MAX_CLIENTS) {
+            if (getConnections().size > MAX_CLIENTS) {
                 conn.close(1008, "Too many remote clients")
                 return
             }
