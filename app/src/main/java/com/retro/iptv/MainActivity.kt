@@ -3738,8 +3738,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onStop() {
-        tvRemoteServer?.stop()
-        tvRemoteServer = null
+        RemoteCommandBridge.detach()
         // Home, app switching, and screen-off must never leave a live stream playing.
         isHostForeground = false
         backgroundNetworkResumeJob?.cancel()
@@ -3757,8 +3756,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        tvRemoteServer?.stop()
-        tvRemoteServer = null
+        RemoteCommandBridge.detach()
         super.onDestroy()
         autoHideJob?.cancel()
         watchdogJob?.cancel()
