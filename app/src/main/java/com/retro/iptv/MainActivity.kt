@@ -3632,6 +3632,13 @@ class MainActivity : ComponentActivity() {
     private fun findLocalIpv4Address(): String? = runCatching {
         Collections.list(NetworkInterface.getNetworkInterfaces())
             .filter { network -> runCatching { network.isUp && !network.isLoopback }.getOrDefault(false) }
+            .sortedBy { network ->
+                when {
+                    network.name.startsWith("wlan", true) -> 0
+                    network.name.startsWith("eth", true) -> 1
+                    else -> 2
+                }
+            }
             .flatMap { network -> Collections.list(network.inetAddresses) }
             .filterIsInstance<Inet4Address>()
             .firstOrNull { it.isSiteLocalAddress && !it.isLoopbackAddress }
