@@ -1741,7 +1741,10 @@ class MainActivity : ComponentActivity() {
             BackHandler(enabled = true) {
                 when {
                     isLinkPickerVisible.value -> isLinkPickerVisible.value = false
-                    isSearchOpen.value -> isSearchOpen.value = false
+                    isSearchOpen.value -> {
+                        isSearchOpen.value = false
+                        searchVoiceQuery.value = ""
+                    }
                     isSettingsOpen.value -> isSettingsOpen.value = false
                     isUiVisible.value -> isUiVisible.value = false
                     else -> {
@@ -2176,6 +2179,7 @@ class MainActivity : ComponentActivity() {
                                         resetIdleTimer()
                                     },
                                     onOpenSearch = {
+                                        searchVoiceQuery.value = ""
                                         isSearchOpen.value = true
                                         resetIdleTimer()
                                     },
@@ -2355,7 +2359,10 @@ class MainActivity : ComponentActivity() {
                                     isSettingsOpen.value = false
                                 }
                             },
-                            onClose = { isSearchOpen.value = false }
+                            onClose = {
+                                isSearchOpen.value = false
+                                searchVoiceQuery.value = ""
+                            }
                         )
                     }
 
@@ -3570,7 +3577,10 @@ class MainActivity : ComponentActivity() {
         } else {
             if (keyCode == KeyEvent.KEYCODE_BACK) {
                 when {
-                    isSearchOpen.value -> isSearchOpen.value = false
+                    isSearchOpen.value -> {
+                        isSearchOpen.value = false
+                        searchVoiceQuery.value = ""
+                    }
                     isSettingsOpen.value -> isSettingsOpen.value = false
                     else -> isUiVisible.value = false
                 }
