@@ -123,10 +123,8 @@ class TvRemoteServer(
                 }
                 authenticated.add(conn)
                 failedAttempts.remove(address)
-                runCatching {
-                    conn.send(JSONObject().put("type", RemoteProtocol.EVT_PAIRED).toString())
-                    conn.send(stateProvider())
-                }
+                runCatching { conn.send(JSONObject().put("type", RemoteProtocol.EVT_PAIRED).toString()) }
+                mainHandler.post { runCatching { if (conn.isOpen) conn.send(stateProvider()) } }
                 mainHandler.post { onStatusChanged("Paired • ${authenticated.size} remote(s)") }
                 return
             }
@@ -143,14 +141,14 @@ class TvRemoteServer(
                 RemoteProtocol.CMD_NUMBER -> if (value.length == 1 && value[0].isDigit()) {
                     mainHandler.post { onCommandReceived(command, value) }
                 }
-                RemoteProtocol.CMD_CHANNEL_ID -> if (value.toIntOrNull() in 1..20_000) {
+                RemoteProtocol.CMD_CHANNEL_ID -> if (value.toIntOrNull()?.let { it in 1..20_000 } == true) {
                     mainHandler.post { onCommandReceived(command, value) }
                 }
                 RemoteProtocol.CMD_SEARCH -> mainHandler.post { onCommandReceived(command, value) }
                 RemoteProtocol.CMD_MEDIA -> if (value in ALLOWED_MEDIA) {
                     mainHandler.post { onCommandReceived(command, value) }
                 }
-                RemoteProtocol.CMD_SYNC_REQ -> mainHandler.post { runCatching { conn.send(stateProvider()) } }
+                RemoteProtocol.CMD_SYNC_REQ -> mainHandler.post { runCatching { if (conn.isOpen) conn.send(stateProvider()) } }
             }
         }
 
