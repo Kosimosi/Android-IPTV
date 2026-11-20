@@ -1649,6 +1649,7 @@ class MainActivity : ComponentActivity() {
                                 channels[idx] = channels[idx].copy(status = ChannelStatus.ONLINE)
                             }
                             scheduleBackgroundNetworkWorkAfterReady()
+                            broadcastRemoteState()
                         }
                     }
 
@@ -1661,6 +1662,7 @@ class MainActivity : ComponentActivity() {
                                 videoSize.height >= 720 -> "720p HD"
                                 else -> "${videoSize.height}p"
                             }
+                            broadcastRemoteState()
                         }
                     }
 
