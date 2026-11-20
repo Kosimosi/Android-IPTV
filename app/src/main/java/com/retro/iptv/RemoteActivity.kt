@@ -155,9 +155,10 @@ private fun RemoteControlScreen(
     val view = LocalView.current
     var selectedTab by androidx.compose.runtime.remember { mutableStateOf("PAD") }
     var searchText by androidx.compose.runtime.remember { mutableStateOf("") }
+    var searchStarted by androidx.compose.runtime.remember { mutableStateOf(false) }
 
-    LaunchedEffect(searchText, connected) {
-        if (connected) {
+    LaunchedEffect(searchText, connected, searchStarted) {
+        if (connected && searchStarted) {
             delay(250)
             onSend(RemoteProtocol.CMD_SEARCH, searchText)
         }
@@ -210,7 +211,7 @@ private fun RemoteControlScreen(
 
         OutlinedTextField(
             value = searchText,
-            onValueChange = { searchText = it },
+            onValueChange = { searchText = it; searchStarted = true },
             modifier = Modifier.fillMaxWidth(),
             enabled = connected,
             label = { Text("Search channels on TV") },
@@ -301,7 +302,7 @@ private fun RemoteActionButton(
     label: String,
     selected: Boolean = false,
     enabled: Boolean = true,
-    modifier: Modifier = Modifier,
+    modifier: Modifier = Modifier.height(46.dp),
     onClick: () -> Unit
 ) {
     val view = LocalView.current
@@ -311,7 +312,7 @@ private fun RemoteActionButton(
             onClick()
         },
         enabled = enabled,
-        modifier = modifier.height(46.dp),
+        modifier = modifier,
         shape = RoundedCornerShape(11.dp),
         colors = ButtonDefaults.buttonColors(
             containerColor = if (selected) FocusRed else OakSurfaceElevated,
