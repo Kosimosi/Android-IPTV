@@ -1396,7 +1396,6 @@ class MainActivity : ComponentActivity() {
     }
     private val remoteServerStatus = mutableStateOf("Not running")
     private val remoteServerAddress = mutableStateOf("Unavailable")
-    private var tvRemoteServer: TvRemoteServer? = null
 
     private lateinit var audioManager: AudioManager
     private lateinit var playerController: PlayerController
