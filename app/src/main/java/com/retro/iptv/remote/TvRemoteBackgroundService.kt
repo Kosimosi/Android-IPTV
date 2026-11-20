@@ -15,27 +15,7 @@ import java.security.SecureRandom
 class TvRemoteBackgroundService : Service() {
     private var server: TvRemoteServer? = null
 
-    override fun onCreate() {
-        super.onCreate()
-        createNotificationChannel()
-        startForeground(NOTIFICATION_ID, buildNotification())
-        val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
-        val pin = prefs.getString(KEY_PIN, null)?.takeIf { it.matches(Regex("\\d{6}")) }
-            ?: (SecureRandom().nextInt(900_000) + 100_000).toString().also {
-                prefs.edit().putString(KEY_PIN, it).apply()
-            }
-        server = TvRemoteServer(
-            context = applicationContext,
-            pairingCode = pin,
-            stateProvider = RemoteCommandBridge::state,
-            onCommandReceived = { command, value ->
-                RemoteCommandBridge.dispatch(applicationContext, command, value)
-            },
-            onStatusChanged = { status ->
-                getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(KEY_STATUS, status).apply()
-            }
-        ).also { it.start() }
-    }
+
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
 
@@ -65,7 +45,7 @@ class TvRemoteBackgroundService : Service() {
         } else {
             @Suppress("DEPRECATION") Notification.Builder(this)
         }
-        return builder.setSmallIcon(R.drawable.ic_launcher)
+        return builder.setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle("RetroTV remote is available")
             .setContentText("Phone remote server • port 8899")
             .setContentIntent(launch)
