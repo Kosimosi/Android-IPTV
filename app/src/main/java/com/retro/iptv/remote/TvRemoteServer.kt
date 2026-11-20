@@ -116,7 +116,7 @@ class TvRemoteServer(
                     return
                 }
                 if (!constantTimeEquals(value, pairingCode)) {
-                    failedAttempts.merge(address, 1, Int::plus)
+                    failedAttempts[address] = (failedAttempts[address] ?: 0) + 1
                     conn.close(1008, "Incorrect pairing code")
                     return
                 }
