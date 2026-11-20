@@ -27,6 +27,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -187,7 +188,17 @@ private fun RemoteControlScreen(
                         modifier = Modifier.weight(1f),
                         label = { Text("6-digit TV PIN") },
                         singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            disabledTextColor = WarmAshMuted,
+                            cursorColor = FocusRed,
+                            focusedBorderColor = FocusRed,
+                            unfocusedBorderColor = Color.White.copy(alpha = 0.28f),
+                            focusedLabelColor = FocusRed,
+                            unfocusedLabelColor = WarmAshMuted
+                        )
                     )
                     RemoteActionButton("FIND TV", enabled = true, modifier = Modifier.width(100.dp)) { onDiscover() }
                 }
@@ -197,7 +208,17 @@ private fun RemoteControlScreen(
                         onValueChange = onAddressChange,
                         modifier = Modifier.weight(1f),
                         label = { Text("TV IP:port (fallback)") },
-                        singleLine = true
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            disabledTextColor = WarmAshMuted,
+                            cursorColor = FocusRed,
+                            focusedBorderColor = FocusRed,
+                            unfocusedBorderColor = Color.White.copy(alpha = 0.28f),
+                            focusedLabelColor = FocusRed,
+                            unfocusedLabelColor = WarmAshMuted
+                        )
                     )
                     RemoteActionButton("CONNECT", enabled = true, modifier = Modifier.width(100.dp)) { onManualConnect() }
                 }
@@ -215,7 +236,17 @@ private fun RemoteControlScreen(
             modifier = Modifier.fillMaxWidth(),
             enabled = connected,
             label = { Text("Search channels on TV") },
-            singleLine = true
+            singleLine = true,
+            colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            disabledTextColor = WarmAshMuted,
+                            cursorColor = FocusRed,
+                            focusedBorderColor = FocusRed,
+                            unfocusedBorderColor = Color.White.copy(alpha = 0.28f),
+                            focusedLabelColor = FocusRed,
+                            unfocusedLabelColor = WarmAshMuted
+                        )
         )
 
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
