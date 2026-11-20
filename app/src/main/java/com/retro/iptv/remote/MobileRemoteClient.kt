@@ -116,12 +116,19 @@ class MobileRemoteClient(
 
     private fun connectToTv(host: String, port: Int, serviceName: String, pin: String) {
         if (wsClient?.isOpen == true) return
+        val uri = try {
+            val uriHost = if (host.contains(":") && !host.startsWith("[")) "[$host]" else host
+            URI("ws://$uriHost:$port")
+        } catch (_: Exception) {
+            mainHandler.post { onConnectionStateChanged(false, "Invalid TV address") }
+            return
+        }
         selectedServiceName = serviceName
         val old = wsClient
         wsClient = null
         runCatching { old?.close() }
         paired = false
-        val client = object : WebSocketClient(URI("ws://$host:$port")) {
+        val client = object : WebSocketClient(uri) {
             override fun onOpen(handshakedata: ServerHandshake?) {
                 runCatching { send(RemoteProtocol.createCommand(RemoteProtocol.CMD_PAIR, pin)) }
             }
