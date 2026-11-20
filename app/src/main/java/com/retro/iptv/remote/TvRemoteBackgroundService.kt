@@ -15,11 +15,37 @@ import java.security.SecureRandom
 class TvRemoteBackgroundService : Service() {
     private var server: TvRemoteServer? = null
 
-
+    override fun onCreate() {
+        super.onCreate()
+        instance = this
+        createNotificationChannel()
+        startForeground(NOTIFICATION_ID, buildNotification())
+        val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
+        val savedPin = prefs.getString(KEY_PIN, null)
+        val pin = if (savedPin != null && savedPin.length == 6 && savedPin.all { it.isDigit() }) {
+            savedPin
+        } else {
+            (SecureRandom().nextInt(900_000) + 100_000).toString().also {
+                prefs.edit().putString(KEY_PIN, it).apply()
+            }
+        }
+        server = TvRemoteServer(
+            context = applicationContext,
+            pairingCode = pin,
+            stateProvider = RemoteCommandBridge::state,
+            onCommandReceived = { command, value ->
+                RemoteCommandBridge.dispatch(applicationContext, command, value)
+            },
+            onStatusChanged = { status ->
+                prefs.edit().putString(KEY_STATUS, status).apply()
+            }
+        ).also { it.start() }
+    }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
 
     override fun onDestroy() {
+        if (instance === this) instance = null
         server?.stop()
         server = null
         super.onDestroy()
@@ -54,6 +80,8 @@ class TvRemoteBackgroundService : Service() {
     }
 
     companion object {
+        @Volatile private var instance: TvRemoteBackgroundService? = null
+        fun broadcastState(state: String) { instance?.server?.broadcastState(state) }
         const val PREFS = "retro_remote_service"
         const val KEY_PIN = "pairing_pin"
         const val KEY_STATUS = "server_status"
