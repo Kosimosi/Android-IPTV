@@ -1389,7 +1389,11 @@ private fun OverlayIconAction(
 class MainActivity : ComponentActivity() {
 
     private val isTvDevice: Boolean by lazy { packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK) }
-    private val remotePairCode: String by lazy { getSharedPreferences(TvRemoteBackgroundService.PREFS, MODE_PRIVATE).getString(TvRemoteBackgroundService.KEY_PIN, null) ?: "------" }
+    private val remotePairCode: String by lazy {
+        val prefs = getSharedPreferences(TvRemoteBackgroundService.PREFS, MODE_PRIVATE)
+        prefs.getString(TvRemoteBackgroundService.KEY_PIN, null) ?: (java.security.SecureRandom().nextInt(900_000) + 100_000)
+            .toString().also { prefs.edit().putString(TvRemoteBackgroundService.KEY_PIN, it).apply() }
+    }
     private val remoteServerStatus = mutableStateOf("Not running")
     private val remoteServerAddress = mutableStateOf("Unavailable")
     private var tvRemoteServer: TvRemoteServer? = null
