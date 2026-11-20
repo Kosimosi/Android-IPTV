@@ -33,7 +33,7 @@ class TvRemoteServer(
         val server = RetroWsServer(InetSocketAddress("0.0.0.0", port))
         server.isReuseAddr = true
         server.connectionLostTimeout = 25
-        server.maxFrameSize = MAX_MESSAGE_CHARS
+        server.setMaxFrameSize(MAX_MESSAGE_CHARS)
         wsServer = server
         try {
             server.start()
@@ -112,7 +112,7 @@ class TvRemoteServer(
 
             if (command == RemoteProtocol.CMD_PAIR) {
                 val address = conn.remoteSocketAddress?.address?.hostAddress ?: "unknown"
-                if (failedAttempts[address] ?: 0 >= MAX_PAIR_ATTEMPTS) {
+                if ((failedAttempts[address] ?: 0) >= MAX_PAIR_ATTEMPTS) {
                     conn.close(1008, "Pairing attempts exceeded")
                     return
                 }
