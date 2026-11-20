@@ -4,6 +4,7 @@ package com.retro.iptv
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings as AndroidSystemSettings
@@ -117,6 +118,12 @@ import java.util.Date
 import java.util.Locale
 import kotlin.math.abs
 import java.net.URL
+import java.net.Inet4Address
+import java.net.NetworkInterface
+import java.security.SecureRandom
+import java.util.Collections
+import com.retro.iptv.remote.RemoteProtocol
+import com.retro.iptv.remote.TvRemoteServer
 
 // --- YOUR PERSONAL GITHUB PLAYLIST URL ---
 const val DEFAULT_PLAYLIST_URL = "https://raw.githubusercontent.com/Kosimosi/Android-IPTV/main/playlist.m3u"
@@ -869,7 +876,7 @@ fun SearchModal(
         runCatching { searchFocusRequester.requestFocus() }
     }
     LaunchedEffect(voiceQuery) {
-        if (voiceQuery.isNotBlank()) query = voiceQuery
+        query = voiceQuery
     }
 
     val now = System.currentTimeMillis()
@@ -1144,6 +1151,11 @@ private fun SettingToggleRow(label: String, checked: Boolean, onToggle: (Boolean
 // --- SETTINGS MODAL ---
 @Composable
 fun SettingsModal(
+    remoteIsTv: Boolean,
+    remoteStatus: String,
+    remoteAddress: String,
+    remotePairCode: String,
+    onOpenMobileRemote: () -> Unit,
     customM3uUrl: String,
     isWatchdogEnabled: Boolean,
     autoFailoverBackupLinks: Boolean,
@@ -1250,6 +1262,20 @@ fun SettingsModal(
                 }
 
                 SettingsOption("Clear Watch History & Cache", onClick = onClearHistoryAndCache, modifier = Modifier.fillMaxWidth(), fontSize = 12.sp)
+
+                Text("MOBILE REMOTE", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                if (remoteIsTv) {
+                    Text("Connect your phone to the same Wi-Fi, then enter this address and PIN in its Smart Remote screen.",
+                        color = WarmAshMuted, fontSize = 11.sp, lineHeight = 15.sp)
+                    Text("TV address: $remoteAddress", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Text("Pairing PIN: $remotePairCode", color = FocusRed, fontSize = 18.sp, fontWeight = FontWeight.Black, letterSpacing = 2.sp)
+                    Text("Server: $remoteStatus", color = WarmAshMuted, fontSize = 10.sp)
+                } else {
+                    SettingsOption("Open Smart Remote", selected = true, onClick = onOpenMobileRemote,
+                        modifier = Modifier.fillMaxWidth(), fontSize = 12.sp)
+                    Text("Connect this phone and your RETROTV device to the same Wi-Fi network.",
+                        color = WarmAshMuted, fontSize = 11.sp)
+                }
 
                 Text("APP UPDATE", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 SettingsOption(
@@ -1359,6 +1385,12 @@ private fun OverlayIconAction(
 
 // --- MAIN ACTIVITY CONTROLLER ---
 class MainActivity : ComponentActivity() {
+
+    private val isTvDevice: Boolean by lazy { packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK) }
+    private val remotePairCode: String by lazy { (SecureRandom().nextInt(900_000) + 100_000).toString() }
+    private val remoteServerStatus = mutableStateOf("Not running")
+    private val remoteServerAddress = mutableStateOf("Unavailable")
+    private var tvRemoteServer: TvRemoteServer? = null
 
     private lateinit var audioManager: AudioManager
     private lateinit var playerController: PlayerController
@@ -1617,6 +1649,7 @@ class MainActivity : ComponentActivity() {
                                 channels[idx] = channels[idx].copy(status = ChannelStatus.ONLINE)
                             }
                             scheduleBackgroundNetworkWorkAfterReady()
+                            broadcastRemoteState()
                         }
                     }
 
@@ -1629,6 +1662,7 @@ class MainActivity : ComponentActivity() {
                                 videoSize.height >= 720 -> "720p HD"
                                 else -> "${videoSize.height}p"
                             }
+                            broadcastRemoteState()
                         }
                     }
 
@@ -1709,7 +1743,10 @@ class MainActivity : ComponentActivity() {
             BackHandler(enabled = true) {
                 when {
                     isLinkPickerVisible.value -> isLinkPickerVisible.value = false
-                    isSearchOpen.value -> isSearchOpen.value = false
+                    isSearchOpen.value -> {
+                        isSearchOpen.value = false
+                        searchVoiceQuery.value = ""
+                    }
                     isSettingsOpen.value -> isSettingsOpen.value = false
                     isUiVisible.value -> isUiVisible.value = false
                     else -> {
@@ -2144,6 +2181,7 @@ class MainActivity : ComponentActivity() {
                                         resetIdleTimer()
                                     },
                                     onOpenSearch = {
+                                        searchVoiceQuery.value = ""
                                         isSearchOpen.value = true
                                         resetIdleTimer()
                                     },
@@ -2323,7 +2361,10 @@ class MainActivity : ComponentActivity() {
                                     isSettingsOpen.value = false
                                 }
                             },
-                            onClose = { isSearchOpen.value = false }
+                            onClose = {
+                                isSearchOpen.value = false
+                                searchVoiceQuery.value = ""
+                            }
                         )
                     }
 
@@ -2369,6 +2410,11 @@ class MainActivity : ComponentActivity() {
                                 liveNewsTickerMode.value = it
                                 getSharedPreferences("retro_iptv_prefs", Context.MODE_PRIVATE).edit().putString("live_news_ticker_mode", it).apply()
                             },
+                            remoteIsTv = isTvDevice,
+                            remoteStatus = remoteServerStatus.value,
+                            remoteAddress = remoteServerAddress.value,
+                            remotePairCode = remotePairCode,
+                            onOpenMobileRemote = { startActivity(Intent(this@MainActivity, RemoteActivity::class.java)) },
                             onClose = { isSettingsOpen.value = false }
                         )
                     }
@@ -2741,6 +2787,7 @@ class MainActivity : ComponentActivity() {
                     val sameIndex = channels.indexOfFirst { it.url == currentUrl }
                     currentChannelIndex.value = if (sameIndex >= 0) sameIndex else 0
                     if (sameIndex < 0 && channels.isNotEmpty()) playChannel(0)
+                    broadcastRemoteState()
                     playlistStatus.value = if (failedCount == 0) {
                         "Playlists updated • ${channels.size} channels"
                     } else {
@@ -3095,6 +3142,7 @@ class MainActivity : ComponentActivity() {
 
         // Always start a channel on its primary link.
         loadLink(channel, 0)
+        broadcastRemoteState()
     }
 
     // Loads one of the channel's links into the player. Does not cancel retry jobs; callers own that.
@@ -3531,7 +3579,10 @@ class MainActivity : ComponentActivity() {
         } else {
             if (keyCode == KeyEvent.KEYCODE_BACK) {
                 when {
-                    isSearchOpen.value -> isSearchOpen.value = false
+                    isSearchOpen.value -> {
+                        isSearchOpen.value = false
+                        searchVoiceQuery.value = ""
+                    }
                     isSettingsOpen.value -> isSettingsOpen.value = false
                     else -> isUiVisible.value = false
                 }
@@ -3565,14 +3616,128 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun startTvRemoteServer() {
+        if (!isTvDevice || tvRemoteServer != null) return
+        val ip = findLocalIpv4Address()
+        remoteServerAddress.value = if (ip != null) "$ip:${TvRemoteServer.DEFAULT_PORT}" else "IP unavailable • port ${TvRemoteServer.DEFAULT_PORT}"
+        val server = TvRemoteServer(
+            context = this,
+            pairingCode = remotePairCode,
+            stateProvider = ::buildRemoteStateJson,
+            onCommandReceived = ::handleMobileRemoteCommand,
+            onStatusChanged = { status -> remoteServerStatus.value = status }
+        )
+        tvRemoteServer = server
+        server.start()
+    }
+
+    private fun findLocalIpv4Address(): String? = runCatching {
+        Collections.list(NetworkInterface.getNetworkInterfaces())
+            .filter { network -> runCatching { network.isUp && !network.isLoopback }.getOrDefault(false) }
+            .sortedBy { network ->
+                when {
+                    network.name.startsWith("wlan", true) -> 0
+                    network.name.startsWith("eth", true) -> 1
+                    else -> 2
+                }
+            }
+            .flatMap { network -> Collections.list(network.inetAddresses) }
+            .filterIsInstance<Inet4Address>()
+            .firstOrNull { it.isSiteLocalAddress && !it.isLoopbackAddress }
+            ?.hostAddress
+    }.getOrNull()
+
+    /** Called only on the main thread; stream URLs are deliberately never sent to the phone. */
+    private fun buildRemoteStateJson(): String {
+        val channelArray = org.json.JSONArray()
+        channels.take(2_000).forEachIndexed { index, channel ->
+            channelArray.put(JSONObject().apply {
+                put("number", index + 1)
+                put("title", channel.title)
+                put("group", channel.group)
+                put("logo", channel.logo ?: "")
+                put("status", channel.status.name)
+            })
+        }
+        return JSONObject().apply {
+            put("type", RemoteProtocol.EVT_STATE)
+            put("currentChannel", currentChannelIndex.value)
+            put("resolution", currentResolution.value ?: "")
+            put("playing", player.isPlaying)
+            put("channelCount", channels.size)
+            put("channels", channelArray)
+        }.toString()
+    }
+
+    private fun broadcastRemoteState() {
+        if (isTvDevice) tvRemoteServer?.broadcastState(buildRemoteStateJson())
+    }
+
+    private fun handleMobileRemoteCommand(command: String, value: String) {
+        when (command) {
+            RemoteProtocol.CMD_DPAD -> {
+                if (value == "HOME") {
+                    moveTaskToBack(true)
+                    return
+                }
+                val keyCode = when (value) {
+                    "UP" -> KeyEvent.KEYCODE_DPAD_UP
+                    "DOWN" -> KeyEvent.KEYCODE_DPAD_DOWN
+                    "LEFT" -> KeyEvent.KEYCODE_DPAD_LEFT
+                    "RIGHT" -> KeyEvent.KEYCODE_DPAD_RIGHT
+                    "OK" -> KeyEvent.KEYCODE_DPAD_CENTER
+                    "BACK" -> KeyEvent.KEYCODE_BACK
+                    else -> return
+                }
+                val now = SystemClock.uptimeMillis()
+                dispatchKeyEvent(KeyEvent(now, now, KeyEvent.ACTION_DOWN, keyCode, 0))
+                dispatchKeyEvent(KeyEvent(now, now, KeyEvent.ACTION_UP, keyCode, 0))
+            }
+            RemoteProtocol.CMD_NUMBER -> {
+                val digit = value.toIntOrNull() ?: return
+                if (!isChannelNumberPadVisible.value) openChannelNumberPad()
+                appendChannelNumberDigit(digit)
+            }
+            RemoteProtocol.CMD_CHANNEL_ID -> {
+                val index = (value.toIntOrNull() ?: return) - 1
+                if (index !in channels.indices) return
+                currentChannelIndex.value = index
+                playChannel(index)
+                isUiVisible.value = false
+                isSearchOpen.value = false
+                isSettingsOpen.value = false
+                isChannelNumberPadVisible.value = false
+            }
+            RemoteProtocol.CMD_SEARCH -> {
+                searchVoiceQuery.value = value
+                isSearchOpen.value = true
+                isUiVisible.value = false
+            }
+            RemoteProtocol.CMD_MEDIA -> when (value) {
+                "VOL_UP" -> audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_RAISE, 0)
+                "VOL_DOWN" -> audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_LOWER, 0)
+                "MUTE" -> audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_TOGGLE_MUTE, 0)
+                "TICKER_TOGGLE" -> {
+                    liveNewsTickerMode.value = if (liveNewsTickerMode.value == "OFF") "HOME ONLY" else "OFF"
+                    getSharedPreferences("retro_iptv_prefs", Context.MODE_PRIVATE).edit()
+                        .putString("live_news_ticker_mode", liveNewsTickerMode.value).apply()
+                }
+            }
+            RemoteProtocol.CMD_SYNC_REQ -> broadcastRemoteState()
+        }
+    }
+
     override fun onStart() {
         super.onStart()
         isHostForeground = true
         liveContentRefreshPending = true
+        if (isTvDevice) startTvRemoteServer()
         if (player.playbackState == Player.STATE_READY) scheduleBackgroundNetworkWorkAfterReady()
     }
 
     override fun onStop() {
+        tvRemoteServer?.stop()
+        tvRemoteServer = null
         // Home, app switching, and screen-off must never leave a live stream playing.
         isHostForeground = false
         backgroundNetworkResumeJob?.cancel()
@@ -3590,6 +3755,8 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        tvRemoteServer?.stop()
+        tvRemoteServer = null
         super.onDestroy()
         autoHideJob?.cancel()
         watchdogJob?.cancel()
