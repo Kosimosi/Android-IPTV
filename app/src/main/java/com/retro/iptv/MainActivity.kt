@@ -1157,6 +1157,9 @@ fun SettingsModal(
     remoteStatus: String,
     remoteAddress: String,
     remotePairCode: String,
+    remoteEnabled: Boolean,
+    onToggleRemote: (Boolean) -> Unit,
+    onRegenerateRemotePin: () -> Unit,
     onOpenMobileRemote: () -> Unit,
     customM3uUrl: String,
     isWatchdogEnabled: Boolean,
@@ -1272,6 +1275,9 @@ fun SettingsModal(
                     Text("TV address: $remoteAddress", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                     Text("Pairing PIN: $remotePairCode", color = FocusRed, fontSize = 18.sp, fontWeight = FontWeight.Black, letterSpacing = 2.sp)
                     Text("Server: $remoteStatus", color = WarmAshMuted, fontSize = 10.sp)
+                    SettingToggleRow("Turn off remote server", remoteEnabled, onToggleRemote)
+                    SettingsOption("Regenerate PIN", selected = true, onClick = onRegenerateRemotePin,
+                        modifier = Modifier.fillMaxWidth(), fontSize = 12.sp)
                 } else {
                     SettingsOption("Open Smart Remote", selected = true, onClick = onOpenMobileRemote,
                         modifier = Modifier.fillMaxWidth(), fontSize = 12.sp)
@@ -1389,11 +1395,8 @@ private fun OverlayIconAction(
 class MainActivity : ComponentActivity() {
 
     private val isTvDevice: Boolean by lazy { packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK) }
-    private val remotePairCode: String by lazy {
-        val prefs = getSharedPreferences(TvRemoteBackgroundService.PREFS, MODE_PRIVATE)
-        prefs.getString(TvRemoteBackgroundService.KEY_PIN, null) ?: (java.security.SecureRandom().nextInt(900_000) + 100_000)
-            .toString().also { prefs.edit().putString(TvRemoteBackgroundService.KEY_PIN, it).apply() }
-    }
+    private val remotePairCode = mutableStateOf("")
+    private val remoteEnabled = mutableStateOf(true)
     private val remoteServerStatus = mutableStateOf("Not running")
     private val remoteServerAddress = mutableStateOf("Unavailable")
 
@@ -1617,6 +1620,12 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val remotePrefs = getSharedPreferences(TvRemoteBackgroundService.PREFS, MODE_PRIVATE)
+        remoteEnabled.value = remotePrefs.getBoolean(TvRemoteBackgroundService.KEY_REMOTE_ENABLED, true)
+        remotePairCode.value = remotePrefs.getString(TvRemoteBackgroundService.KEY_PIN, null)
+            ?: (java.security.SecureRandom().nextInt(900_000) + 100_000).toString().also {
+                remotePrefs.edit().putString(TvRemoteBackgroundService.KEY_PIN, it).apply()
+            }
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
         loadSettingsFromStorage()
         // Never trust an APK left in cache across launches: it may belong to an older release.
@@ -2418,7 +2427,22 @@ class MainActivity : ComponentActivity() {
                             remoteIsTv = isTvDevice,
                             remoteStatus = remoteServerStatus.value,
                             remoteAddress = remoteServerAddress.value,
-                            remotePairCode = remotePairCode,
+                            remotePairCode = remotePairCode.value,
+                            remoteEnabled = remoteEnabled.value,
+                            onToggleRemote = { enabled ->
+                                remoteEnabled.value = enabled
+                                getSharedPreferences(TvRemoteBackgroundService.PREFS, MODE_PRIVATE).edit()
+                                    .putBoolean(TvRemoteBackgroundService.KEY_REMOTE_ENABLED, enabled).apply()
+                                if (enabled) startTvRemoteServer() else {
+                                    RemoteCommandBridge.detach()
+                                    stopService(Intent(this@MainActivity, TvRemoteBackgroundService::class.java))
+                                    remoteServerStatus.value = "Stopped"
+                                }
+                            },
+                            onRegenerateRemotePin = {
+                                remotePairCode.value = TvRemoteBackgroundService.regeneratePin(this@MainActivity)
+                                remoteServerStatus.value = "Rotating PIN • disconnecting paired phones"
+                            },
                             onOpenMobileRemote = { startActivity(Intent(this@MainActivity, RemoteActivity::class.java)) },
                             onClose = { isSettingsOpen.value = false }
                         )
@@ -3623,6 +3647,11 @@ class MainActivity : ComponentActivity() {
 
     private fun startTvRemoteServer() {
         if (!isTvDevice) return
+        val prefs = getSharedPreferences(TvRemoteBackgroundService.PREFS, MODE_PRIVATE)
+        if (!prefs.getBoolean(TvRemoteBackgroundService.KEY_REMOTE_ENABLED, true)) {
+            remoteServerStatus.value = "Remote disabled in Settings"
+            return
+        }
         RemoteCommandBridge.attach(::handleMobileRemoteCommand, ::buildRemoteStateJson)
         val ip = findLocalIpv4Address()
         remoteServerAddress.value = if (ip != null) "$ip:${TvRemoteServer.DEFAULT_PORT}" else "IP unavailable • port ${TvRemoteServer.DEFAULT_PORT}"
