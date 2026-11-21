@@ -403,7 +403,17 @@ private fun RemoteControlScreen(
                 Spacer(Modifier.height(12.dp))
                 if (setupStep == 1 && irBlasterDetected) {
                     Text("IR Blaster Detected", color = Color(0xFF45D483), fontSize = 17.sp, fontWeight = FontWeight.Bold)
-                    Text("Select your television brand, then test the power signal.", color = WarmAshMuted, fontSize = 12.sp)
+                    Text("Choose device type and brand, then test the power signal.", color = WarmAshMuted, fontSize = 12.sp)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        DeviceCategory.values().forEach { option ->
+                            FilterChip(selected = selectedCategory == option, onClick = {
+                                selectedCategory = option
+                                irRemoteManager.selectedCategory = option
+                                selectedProfile = irRemoteManager.profilesFor(option).first()
+                                irRemoteManager.selectedProfile = selectedProfile
+                            }, label = { Text(option.label, fontSize = 10.sp) })
+                        }
+                    }
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp), modifier = Modifier.fillMaxWidth()) {
                         items(irRemoteManager.profilesFor(selectedCategory)) { brand ->
                             FilterChip(
@@ -543,6 +553,8 @@ private fun RemoteControlScreen(
                             focusedLabelColor = FocusRed, unfocusedLabelColor = WarmAshMuted)
                     )
                     RemoteActionButton("CONNECT WITH IP + PIN", enabled = true, modifier = Modifier.fillMaxWidth()) { onManualConnect() }
+                    RemoteActionButton("BLUETOOTH PAIR TV", enabled = true, modifier = Modifier.fillMaxWidth(), onClick = onEnableBluetooth)
+                    Text(if (btHidConnected) "Bluetooth HID connected" else btHidStatus, color = if (btHidConnected) Color(0xFF45D483) else WarmAshMuted, fontSize = 10.sp)
                     Text(
                         if (hasIrEmitter) "IR BLASTER AVAILABLE · SELECT TV BRAND" else "NO IR BLASTER ON THIS PHONE · WI-FI REMOTE ACTIVE",
                         color = if (hasIrEmitter) Color(0xFF45D483) else WarmAshMuted,
@@ -628,8 +640,8 @@ private fun RemoteControlScreen(
                                 RemoteActionButton(if (digit == -1) "⌫" else if (digit == -2) "↵" else digit.toString(),
                                     enabled = connected, modifier = Modifier.size(62.dp)) {
                                     when (digit) {
-                                        -1 -> onSend(RemoteProtocol.CMD_DPAD, "BACK")
-                                        -2 -> onSend(RemoteProtocol.CMD_DPAD, "OK")
+                                        -1 -> sendTransport("BACK", RemoteProtocol.CMD_DPAD, "BACK")
+                                        -2 -> sendDpad("OK")
                                         else -> onSend(RemoteProtocol.CMD_NUMBER, digit.toString())
                                     }
                                 }
