@@ -132,6 +132,8 @@ class RemoteActivity : ComponentActivity() {
                     .putString(KEY_SAVED_TV_PIN, pin)
                     .putString(KEY_SAVED_TV_BRAND, com.retro.iptv.remote.IrRemoteManager(this).getSelectedBrand().name)
                     .apply()
+                pairingPin.value = pin
+                manualAddress.value = if (host.contains(":")) "[$host]:$port" else "$host:$port"
                 isRemoteSetupComplete.value = true
             }
         )
