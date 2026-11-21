@@ -31,12 +31,12 @@ object RemoteCommandBridge {
         }
         when (command) {
             RemoteProtocol.CMD_DPAD -> when (value) {
-                "HOME" -> RetroTvAccessibilityService.performGlobal(context, android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME)
-                "BACK" -> RetroTvAccessibilityService.performGlobal(context, android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)
+                "HOME" -> RetroTvAccessibilityService.performHome(context)
+                "BACK" -> RetroTvAccessibilityService.performBack(context)
             }
             RemoteProtocol.CMD_SEARCH -> RetroTvAccessibilityService.setFocusedText(value)
             RemoteProtocol.CMD_MEDIA -> if (value == "POWER") {
-                RetroTvAccessibilityService.performGlobal(context, android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME)
+                RetroTvAccessibilityService.performHome(context)
             }
         }
     }
