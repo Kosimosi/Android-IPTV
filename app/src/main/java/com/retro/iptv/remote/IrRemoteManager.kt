@@ -64,7 +64,7 @@ class IrRemoteManager(context: Context) {
 
     private fun rc5Frame(address: Int, command: Int): Pair<Int, IntArray> {
         val field = if (command < 0x40) 1 else 0
-        val frame = (1 shl 13) or (1 shl 12) or (field shl 11) or
+        val frame = (1 shl 13) or (field shl 12) or
             ((address and 0x1F) shl 6) or (command and 0x3F)
         val levels = ArrayList<Boolean>(28)
         for (bit in 13 downTo 0) {
