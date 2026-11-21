@@ -68,8 +68,12 @@ class IrRemoteManager(context: Context) {
     fun transmitPower(profile: IrProfile = selectedProfile): Boolean {
         if (!hasEmitter) return false
         if (profile == IrProfile.MI_BOX) {
-            val xiaomiSent = transmitValidated(XIAOMI_CARRIER_HZ, buildXiaomi20BitFrame(0x86, 0xCC))
+            val xiaomiSent = transmitValidated(XIAOMI_CARRIER_HZ, buildXiaomi20BitFrame(0x3C, 0xCC))
             return xiaomiSent || transmitValidated(CARRIER_HZ, buildExtendedNecFrame(0x847B, 0x02))
+        }
+        if (profile == IrProfile.XIAOMI_TV) {
+            return transmitValidated(XIAOMI_CARRIER_HZ, buildXiaomi20BitFrame(0x3C, 0xCC)) ||
+                transmitValidated(CARRIER_HZ, buildNecFrame(0x00FF, 0x12))
         }
         val frames = when (profile) {
             IrProfile.SAMSUNG -> listOf(CARRIER_HZ to buildSamsungNecxFrame(0xE0E0, 0x99))
@@ -114,15 +118,25 @@ class IrRemoteManager(context: Context) {
     fun sendKey(action: String, profile: IrProfile = selectedProfile): Boolean {
         if (!hasEmitter) return false
         val key = action.uppercase()
-        if (profile == IrProfile.MI_BOX) {
-            val xiaomiFunction = when (key) {
-                "POWER" -> 0xCC; "UP" -> 0x05; "DOWN" -> 0x06; "LEFT" -> 0x07
-                "RIGHT" -> 0x08; "OK" -> 0x09; "BACK" -> 0x0A; "HOME" -> 0x0B
-                "MENU" -> 0x04; "VOL_UP" -> 0x73; "VOL_DOWN" -> 0x72
+        if (profile == IrProfile.MI_BOX || profile == IrProfile.XIAOMI_TV) {
+            val xiaomiCode = when (key) {
+                "POWER" -> 0x3C to 0xCC
+                "UP" -> 0x86 to 0x05
+                "DOWN" -> 0x86 to 0x06
+                "LEFT" -> 0x86 to 0x0B
+                "RIGHT" -> 0x86 to 0x0C
+                "OK" -> 0x86 to 0x0D
+                "BACK" -> 0x86 to 0x07
+                "HOME" -> 0x86 to 0x08
+                "MENU" -> 0x86 to 0x04
+                "VOL_UP" -> 0x86 to 0x0E
+                "VOL_DOWN" -> 0x86 to 0x0F
+                "MUTE" -> 0x86 to 0xA1
                 else -> null
             }
-            if (xiaomiFunction != null &&
-                transmitValidated(XIAOMI_CARRIER_HZ, buildXiaomi20BitFrame(0x86, xiaomiFunction))) return true
+            if (xiaomiCode != null &&
+                transmitValidated(XIAOMI_CARRIER_HZ, buildXiaomi20BitFrame(xiaomiCode.first, xiaomiCode.second))) return true
+            if (profile == IrProfile.XIAOMI_TV) return false
             val necCommand = when (key) {
                 "POWER" -> 0x02; "UP" -> 0x04; "DOWN" -> 0x05; "LEFT" -> 0x06
                 "RIGHT" -> 0x07; "OK" -> 0x08; "HOME" -> 0x09; "BACK" -> 0x0A
