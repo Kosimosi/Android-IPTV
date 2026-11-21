@@ -1,6 +1,36 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+
 package com.retro.iptv
 
 import android.os.Bundle
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Backspace
+import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.Keyboard
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.KeyboardArrowLeft
+import androidx.compose.material.icons.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.rounded.KeyboardArrowUp
+import androidx.compose.material.icons.rounded.Menu
+import androidx.compose.material.icons.rounded.PowerSettingsNew
+import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material.icons.rounded.VolumeDown
+import androidx.compose.material.icons.rounded.VolumeOff
+import androidx.compose.material.icons.rounded.VolumeUp
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import com.retro.iptv.remote.IrRemoteManager
+import com.retro.iptv.remote.TvBrand
 import android.view.HapticFeedbackConstants
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -160,7 +190,18 @@ private fun RemoteControlScreen(
 ) {
     val view = LocalView.current
     var mode by androidx.compose.runtime.remember { mutableStateOf("PAD") }
-    var settingsOpen by androidx.compose.runtime.remember { mutableStateOf(false) }
+    var isPairingExpanded by androidx.compose.runtime.remember { mutableStateOf(false) }
+    var discoveryAttempt by androidx.compose.runtime.remember { mutableIntStateOf(0) }
+    var selectedBrand by androidx.compose.runtime.remember { mutableStateOf(TvBrand.WALTON) }
+    val context = LocalContext.current
+    val irRemoteManager = androidx.compose.runtime.remember { IrRemoteManager(context) }
+    androidx.compose.runtime.LaunchedEffect(Unit) { selectedBrand = irRemoteManager.getSelectedBrand() }
+    androidx.compose.runtime.LaunchedEffect(discoveryAttempt) {
+        if (discoveryAttempt > 0) {
+            delay(3500)
+            if (!connected) isPairingExpanded = true
+        }
+    }
     var keyboardOpen by androidx.compose.runtime.remember { mutableStateOf(false) }
     var searchText by androidx.compose.runtime.remember { mutableStateOf("") }
     var searchStarted by androidx.compose.runtime.remember { mutableStateOf(false) }
@@ -179,7 +220,7 @@ private fun RemoteControlScreen(
     }
 
     Column(
-        Modifier.fillMaxSize().background(OakDarkBackground).padding(horizontal = 16.dp, vertical = 10.dp),
+        Modifier.fillMaxSize().background(OakDarkBackground).navigationBarsPadding().padding(horizontal = 16.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(9.dp)
     ) {
         // Compact status bar: pairing details stay out of the way once connected.
@@ -198,16 +239,21 @@ private fun RemoteControlScreen(
                     )
                 }
             }
-            RemoteActionButton("⏻", enabled = false, modifier = Modifier.size(42.dp)) {}
-            RemoteActionButton("⋮", enabled = true, modifier = Modifier.size(42.dp)) { settingsOpen = !settingsOpen }
+            RemoteIconButton(Icons.Rounded.PowerSettingsNew, "Power", tint = Color(0xFFE11D48), enabled = true) {
+                if (irRemoteManager.hasIrBlaster()) irRemoteManager.sendPowerToggle()
+                else onSend(RemoteProtocol.CMD_MEDIA, "POWER")
+            }
+            RemoteIconButton(Icons.Rounded.Tune, "Pairing settings", tint = Color(0xFFE5E5EA), enabled = true) {
+                isPairingExpanded = !isPairingExpanded
+            }
         }
 
-        if (settingsOpen || !connected) {
+        AnimatedVisibility(visible = isPairingExpanded) {
             Card(colors = CardDefaults.cardColors(containerColor = OakSurface), shape = RoundedCornerShape(14.dp)) {
                 Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                         Text("CONNECTION & IR SETTINGS", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                        Text("CLOSE", color = FocusRed, fontSize = 10.sp, modifier = Modifier.clickable { settingsOpen = false })
+                        Text("CLOSE", color = FocusRed, fontSize = 10.sp, modifier = Modifier.clickable { isPairingExpanded = false })
                     }
                     OutlinedTextField(
                         value = pairingPin, onValueChange = onPinChange, modifier = Modifier.fillMaxWidth(),
@@ -218,7 +264,10 @@ private fun RemoteControlScreen(
                             focusedLabelColor = FocusRed, unfocusedLabelColor = WarmAshMuted)
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        RemoteActionButton("AUTO DISCOVER", modifier = Modifier.weight(1f), enabled = true) { onDiscover() }
+                        RemoteActionButton("AUTO DISCOVER", modifier = Modifier.weight(1f), enabled = true) {
+                            discoveryAttempt++
+                            onDiscover()
+                        }
                         RemoteActionButton("DISCONNECT", modifier = Modifier.weight(1f), enabled = connected) { onDisconnect() }
                     }
                     OutlinedTextField(
@@ -230,11 +279,22 @@ private fun RemoteControlScreen(
                     )
                     RemoteActionButton("CONNECT WITH IP + PIN", enabled = true, modifier = Modifier.fillMaxWidth()) { onManualConnect() }
                     Text(
-                        if (hasIrEmitter) "IR BLASTER AVAILABLE · IR POWER CONTROLS SUPPORTED" else "NO IR BLASTER ON THIS PHONE · WI-FI REMOTE ACTIVE",
+                        if (hasIrEmitter) "IR BLASTER AVAILABLE · SELECT TV BRAND" else "NO IR BLASTER ON THIS PHONE · WI-FI REMOTE ACTIVE",
                         color = if (hasIrEmitter) Color(0xFF45D483) else WarmAshMuted,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold
                     )
+                    if (hasIrEmitter) {
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                            items(TvBrand.values().toList()) { brand ->
+                                FilterChip(
+                                    selected = selectedBrand == brand,
+                                    onClick = { selectedBrand = brand; irRemoteManager.setSelectedBrand(brand) },
+                                    label = { Text(brand.label, fontSize = 11.sp) }
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -260,19 +320,20 @@ private fun RemoteControlScreen(
 
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
             when (mode) {
-                "PAD" -> Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                    circle("⌃", 62.dp) { onSend(RemoteProtocol.CMD_DPAD, "UP") }
-                    Row(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
-                        circle("‹", 68.dp) { onSend(RemoteProtocol.CMD_DPAD, "LEFT") }
-                        Box(Modifier.size(78.dp).background(FocusRed, CircleShape).clickable(enabled = connected) {
-                            view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
-                            onSend(RemoteProtocol.CMD_DPAD, "OK")
-                        }, contentAlignment = Alignment.Center) {
-                            Text("OK", color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Black)
-                        }
-                        circle("›", 68.dp) { onSend(RemoteProtocol.CMD_DPAD, "RIGHT") }
+                "PAD" -> Box(
+                    Modifier.size(240.dp).background(Color(0xFF16161D), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    RemoteIconButton(Icons.Rounded.KeyboardArrowUp, "Up", Modifier.align(Alignment.TopCenter).padding(top = 8.dp)) { onSend(RemoteProtocol.CMD_DPAD, "UP") }
+                    RemoteIconButton(Icons.Rounded.KeyboardArrowDown, "Down", Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp)) { onSend(RemoteProtocol.CMD_DPAD, "DOWN") }
+                    RemoteIconButton(Icons.Rounded.KeyboardArrowLeft, "Left", Modifier.align(Alignment.CenterStart).padding(start = 8.dp)) { onSend(RemoteProtocol.CMD_DPAD, "LEFT") }
+                    RemoteIconButton(Icons.Rounded.KeyboardArrowRight, "Right", Modifier.align(Alignment.CenterEnd).padding(end = 8.dp)) { onSend(RemoteProtocol.CMD_DPAD, "RIGHT") }
+                    Box(Modifier.size(76.dp).background(Color(0xFFE11D48), CircleShape).clickable(enabled = connected) {
+                        view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                        onSend(RemoteProtocol.CMD_DPAD, "OK")
+                    }, contentAlignment = Alignment.Center) {
+                        Text("OK", color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Black)
                     }
-                    circle("⌄", 62.dp) { onSend(RemoteProtocol.CMD_DPAD, "DOWN") }
                 }
                 "NUM" -> Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     (0..3).forEach { row ->
@@ -340,41 +401,100 @@ private fun RemoteControlScreen(
 
         // Ergonomic transport row.
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            RemoteActionButton("←", modifier = Modifier.weight(1f), enabled = connected) { onSend(RemoteProtocol.CMD_DPAD, "BACK") }
+            RemoteIconTextButton(Icons.Rounded.ArrowBack, "BACK", Modifier.weight(1f), connected) { onSend(RemoteProtocol.CMD_DPAD, "BACK") }
             Spacer(Modifier.width(8.dp))
-            RemoteActionButton("⌂", modifier = Modifier.weight(1.35f).height(54.dp), enabled = true) {
-                onSend(RemoteProtocol.CMD_DPAD, "HOME")
-            }
+            RemoteIconTextButton(Icons.Rounded.Home, "HOME", Modifier.weight(1.35f).height(54.dp), true) { onSend(RemoteProtocol.CMD_DPAD, "HOME") }
             Spacer(Modifier.width(8.dp))
-            RemoteActionButton("≡", modifier = Modifier.weight(1f), enabled = connected) { mode = "LIVE" }
+            RemoteIconTextButton(Icons.Rounded.Menu, "MENU", Modifier.weight(1f), connected) { mode = "LIVE" }
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
-            RemoteActionButton("🔇", modifier = Modifier.weight(.8f), enabled = connected) { onSend(RemoteProtocol.CMD_MEDIA, "MUTE") }
-            RemoteActionButton("🔉  VOL −", modifier = Modifier.weight(1.2f), enabled = connected) { onSend(RemoteProtocol.CMD_MEDIA, "VOL_DOWN") }
-            RemoteActionButton("VOL +  🔊", modifier = Modifier.weight(1.2f), enabled = connected) { onSend(RemoteProtocol.CMD_MEDIA, "VOL_UP") }
-            RemoteActionButton("⌨", modifier = Modifier.weight(.8f), enabled = connected) { keyboardOpen = !keyboardOpen }
+            RemoteIconTextButton(Icons.Rounded.VolumeOff, "MUTE", Modifier.weight(.9f), connected) { onSend(RemoteProtocol.CMD_MEDIA, "MUTE") }
+            RemoteIconTextButton(Icons.Rounded.VolumeDown, "VOL −", Modifier.weight(1.1f), connected) { onSend(RemoteProtocol.CMD_MEDIA, "VOL_DOWN") }
+            RemoteIconTextButton(Icons.Rounded.VolumeUp, "VOL +", Modifier.weight(1.1f), connected) { onSend(RemoteProtocol.CMD_MEDIA, "VOL_UP") }
+            RemoteIconTextButton(Icons.Rounded.Keyboard, "KEYS", Modifier.weight(.9f), connected) { keyboardOpen = !keyboardOpen }
         }
 
         // Branded launch pill and secondary shortcuts.
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            RemoteActionButton("RETRO TV", selected = true, enabled = true, modifier = Modifier.weight(1.6f).height(52.dp)) {
-                onSend(RemoteProtocol.CMD_DPAD, "HOME")
-            }
-            RemoteActionButton("▶ YouTube", enabled = false, modifier = Modifier.weight(1f)) {}
-            RemoteActionButton("123", enabled = true, modifier = Modifier.weight(.65f)) { mode = "NUM" }
+            RemoteLaunchPill("RETRO TV", Modifier.weight(1.25f), selected = true,
+                onClick = { onSend(RemoteProtocol.CMD_LAUNCH_RETROTV, RemoteProtocol.TARGET_HOME) },
+                onLongClick = { retroActionsOpen = true })
+            RemoteLaunchPill("YouTube", Modifier.weight(1f), onClick = {
+                onSend(RemoteProtocol.CMD_LAUNCH_RETROTV, RemoteProtocol.TARGET_YOUTUBE)
+            })
+            RemoteLaunchPill("SCORE", Modifier.weight(.8f), onClick = {
+                onSend(RemoteProtocol.CMD_LAUNCH_RETROTV, RemoteProtocol.TARGET_SCORE_CARD)
+            })
         }
         if (retroActionsOpen) {
-            Text("NEWS TICKER", color = Color.White, modifier = Modifier.fillMaxWidth().clickable(enabled = connected) {
-                onSend(RemoteProtocol.CMD_MEDIA, "TICKER_TOGGLE")
-                retroActionsOpen = false
-            }.padding(8.dp))
-            Text("SCORE CARD  ·  FM RADIO (NOT AVAILABLE YET)", color = WarmAshMuted, fontSize = 10.sp)
+            ModalBottomSheet(onDismissRequest = { retroActionsOpen = false }, containerColor = OakSurface) {
+                Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("RETRO TV SHORTCUTS", color = Color.White, fontWeight = FontWeight.Black)
+                    listOf(
+                        "SCORE CARD" to RemoteProtocol.TARGET_SCORE_CARD,
+                        "NEWS TICKER" to RemoteProtocol.TARGET_NEWS_TICKER,
+                        "FM RADIO" to RemoteProtocol.TARGET_FM_RADIO
+                    ).forEach { (label, target) ->
+                        RemoteActionButton(label, modifier = Modifier.fillMaxWidth(), enabled = true) {
+                            onSend(RemoteProtocol.CMD_LAUNCH_RETROTV, target)
+                            retroActionsOpen = false
+                        }
+                    }
+                    Spacer(Modifier.height(16.dp))
+                }
+            }
         }
         Text(
             "RETRO TV  ·  ${if (connected) "SECURELY PAIRED ON LOCAL WI-FI" else "WAITING FOR TV"}",
             color = WarmAshMuted, fontSize = 9.sp, modifier = Modifier.fillMaxWidth().clickable { retroActionsOpen = !retroActionsOpen },
             textAlign = androidx.compose.ui.text.style.TextAlign.Center
         )
+    }
+}
+
+@Composable
+private fun RemoteIconButton(
+    image: ImageVector,
+    description: String,
+    modifier: Modifier = Modifier.size(42.dp),
+    tint: Color = Color(0xFFF4F4F6),
+    enabled: Boolean = true,
+    onClick: () -> Unit
+) {
+    IconButton(onClick = onClick, enabled = enabled, modifier = modifier.background(OakSurfaceElevated, CircleShape)) {
+        Icon(imageVector = image, contentDescription = description, tint = tint, modifier = Modifier.size(24.dp))
+    }
+}
+
+@Composable
+private fun RemoteIconTextButton(
+    image: ImageVector,
+    label: String,
+    modifier: Modifier,
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    Button(onClick = onClick, enabled = enabled, modifier = modifier.height(46.dp),
+        shape = RoundedCornerShape(11.dp),
+        colors = ButtonDefaults.buttonColors(containerColor = OakSurfaceElevated, contentColor = Color.White)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Icon(image, contentDescription = label, tint = Color(0xFFF4F4F6), modifier = Modifier.size(22.dp))
+            Text(label, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+        }
+    }
+}
+
+@Composable
+private fun RemoteLaunchPill(
+    label: String,
+    modifier: Modifier,
+    selected: Boolean = false,
+    onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null
+) {
+    Box(modifier.height(52.dp).background(if (selected) Color(0xFFE11D48) else OakSurfaceElevated, RoundedCornerShape(12.dp))
+        .combinedClickable(onClick = onClick, onLongClick = onLongClick), contentAlignment = Alignment.Center) {
+        Text(label, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
     }
 }
 

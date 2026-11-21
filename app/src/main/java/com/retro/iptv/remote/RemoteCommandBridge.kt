@@ -16,6 +16,8 @@ object RemoteCommandBridge {
         foregroundState = null
     }
 
+    fun hasForegroundHandler(): Boolean = foregroundCommand != null
+
     fun state(): String = runCatching { foregroundState?.invoke() }.getOrNull()
         ?: """{"type":"STATE","playing":false,"currentChannel":-1,"channels":[]}"""
 
@@ -31,6 +33,9 @@ object RemoteCommandBridge {
                 "BACK" -> RetroTvAccessibilityService.performGlobal(context, android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)
             }
             RemoteProtocol.CMD_SEARCH -> RetroTvAccessibilityService.setFocusedText(value)
+            RemoteProtocol.CMD_MEDIA -> if (value == "POWER") {
+                RetroTvAccessibilityService.performGlobal(context, android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME)
+            }
         }
     }
 }

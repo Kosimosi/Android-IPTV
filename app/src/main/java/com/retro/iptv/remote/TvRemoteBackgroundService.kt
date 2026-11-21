@@ -45,7 +45,24 @@ class TvRemoteBackgroundService : Service() {
             pairingCode = pin,
             stateProvider = RemoteCommandBridge::state,
             onCommandReceived = { command, value ->
-                RemoteCommandBridge.dispatch(applicationContext, command, value)
+                if (command == RemoteProtocol.CMD_LAUNCH_RETROTV && value in RemoteProtocol.launchTargets) {
+                    if (value == RemoteProtocol.TARGET_YOUTUBE) {
+                        packageManager.getLaunchIntentForPackage("com.google.android.youtube.tv")?.let { launch ->
+                            launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            runCatching { startActivity(launch) }
+                        }
+                    } else if (RemoteCommandBridge.hasForegroundHandler()) {
+                        RemoteCommandBridge.dispatch(applicationContext, command, value)
+                    } else {
+                        packageManager.getLaunchIntentForPackage(packageName)?.let { launch ->
+                            launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                            launch.putExtra(EXTRA_LAUNCH_TARGET, value)
+                            runCatching { startActivity(launch) }
+                        }
+                    }
+                } else {
+                    RemoteCommandBridge.dispatch(applicationContext, command, value)
+                }
             },
             onStatusChanged = { status -> prefs.edit().putString(KEY_STATUS, status).apply() }
         ).also { it.start() }
@@ -105,6 +122,7 @@ class TvRemoteBackgroundService : Service() {
         const val KEY_PIN = "pairing_pin"
         const val KEY_STATUS = "server_status"
         const val KEY_REMOTE_ENABLED = "remote_enabled"
+        const val EXTRA_LAUNCH_TARGET = "launch_target"
 
         fun regeneratePin(context: android.content.Context): String {
             val prefs = context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)
