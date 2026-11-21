@@ -68,11 +68,11 @@ class IrRemoteManager(context: Context) {
     fun transmitPower(profile: IrProfile = selectedProfile): Boolean {
         if (!hasEmitter) return false
         if (profile == IrProfile.MI_BOX) {
-            val xiaomiSent = transmitValidated(XIAOMI_CARRIER_HZ, buildXiaomi20BitFrame(0x3C, 0xCC))
+            val xiaomiSent = transmitValidated(XIAOMI_CARRIER_HZ, buildXiaomi20BitFrame(0x86, 0xCC))
             return xiaomiSent || transmitValidated(CARRIER_HZ, buildExtendedNecFrame(0x847B, 0x02))
         }
         if (profile == IrProfile.XIAOMI_TV) {
-            return transmitValidated(XIAOMI_CARRIER_HZ, buildXiaomi20BitFrame(0x3C, 0xCC)) ||
+            return transmitValidated(XIAOMI_CARRIER_HZ, buildXiaomi20BitFrame(0x86, 0xCC)) ||
                 transmitValidated(CARRIER_HZ, buildExtendedNecFrame(0x00FF, 0x12))
         }
         val frames = when (profile) {
@@ -120,7 +120,7 @@ class IrRemoteManager(context: Context) {
         val key = action.uppercase()
         if (profile == IrProfile.MI_BOX || profile == IrProfile.XIAOMI_TV) {
             val xiaomiCode = when (key) {
-                "POWER" -> 0x3C to 0xCC
+                "POWER" -> 0x86 to 204
                 "UP" -> 0x86 to 0x05
                 "DOWN" -> 0x86 to 0x06
                 "LEFT" -> 0x86 to 0x0B
@@ -129,8 +129,8 @@ class IrRemoteManager(context: Context) {
                 "BACK" -> 0x86 to 0x07
                 "HOME" -> 0x86 to 0x08
                 "MENU" -> 0x86 to 0x04
-                "VOL_UP" -> 0x86 to 0x0E
-                "VOL_DOWN" -> 0x86 to 0x0F
+                "VOL_UP" -> 0x86 to 115
+                "VOL_DOWN" -> 0x86 to 114
                 "MUTE" -> 0x86 to 0xA1
                 else -> null
             }
@@ -223,8 +223,8 @@ class IrRemoteManager(context: Context) {
 
         fun buildExtendedNecFrame(customCode16Bit: Int, command: Int): IntArray {
             val bytes = intArrayOf(
-                (customCode16Bit ushr 8) and 0xFF,
                 customCode16Bit and 0xFF,
+                (customCode16Bit ushr 8) and 0xFF,
                 command and 0xFF,
                 command.inv() and 0xFF
             )
@@ -411,9 +411,13 @@ class IrdbFetcher(context: Context) {
         return lines.drop(1).mapNotNull { line ->
             val cells = line.split(',').map { it.trim().trim('"') }
             fun cell(index: Int, default: String = "") = cells.getOrNull(index) ?: default
-            val device = cell(deviceIndex).toIntOrNull() ?: return@mapNotNull null
-            val subdevice = if (subdeviceIndex >= 0) cell(subdeviceIndex, "-1").toIntOrNull() ?: -1 else -1
-            val function = cell(functionIndex).toIntOrNull() ?: return@mapNotNull null
+            fun parseCode(raw: String): Int? {
+                val value = raw.trim().removePrefix("$").removePrefix("0x").removePrefix("0X")
+                return value.toIntOrNull() ?: value.toLongOrNull(16)?.takeIf { it <= Int.MAX_VALUE }?.toInt()
+            }
+            val device = parseCode(cell(deviceIndex)) ?: return@mapNotNull null
+            val subdevice = if (subdeviceIndex >= 0) parseCode(cell(subdeviceIndex)) ?: -1 else -1
+            val function = parseCode(cell(functionIndex)) ?: return@mapNotNull null
             IrdbCode(cell(nameIndex), cell(protocolIndex), device, subdevice, function)
         }
     }
