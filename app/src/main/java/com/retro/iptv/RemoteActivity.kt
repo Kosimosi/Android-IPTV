@@ -622,7 +622,7 @@ private fun RemoteControlScreen(
                     RemoteIconButton(Icons.Rounded.KeyboardArrowDown, "Down", Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp), tint = if (dpadEnabled) Color(0xFFF4F4F6) else WarmAshMuted.copy(alpha = .38f), enabled = dpadEnabled) { sendDpad("DOWN") }
                     RemoteIconButton(Icons.Rounded.KeyboardArrowLeft, "Left", Modifier.align(Alignment.CenterStart).padding(start = 8.dp), tint = if (dpadEnabled) Color(0xFFF4F4F6) else WarmAshMuted.copy(alpha = .38f), enabled = dpadEnabled) { sendDpad("LEFT") }
                     RemoteIconButton(Icons.Rounded.KeyboardArrowRight, "Right", Modifier.align(Alignment.CenterEnd).padding(end = 8.dp), tint = if (dpadEnabled) Color(0xFFF4F4F6) else WarmAshMuted.copy(alpha = .38f), enabled = dpadEnabled) { sendDpad("RIGHT") }
-                    Box(Modifier.size(76.dp).background(Color(0xFFE11D48).copy(alpha = if (dpadEnabled) 1f else .35f), CircleShape).clickable(enabled = dpadEnabled) {
+                    Box(Modifier.size(76.dp).background(Color(0xFFE11D48), CircleShape).clickable(enabled = connected || btHidConnected) {
                         view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                         sendDpad("OK")
                     }, contentAlignment = Alignment.Center) {
