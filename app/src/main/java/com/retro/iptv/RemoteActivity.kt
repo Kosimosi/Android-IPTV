@@ -46,6 +46,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import com.retro.iptv.remote.MobileRemoteClient
 import com.retro.iptv.remote.RemoteProtocol
 import com.retro.iptv.remote.RetroTvAccessibilityService
@@ -390,10 +391,7 @@ private fun RemoteControlScreen(
             Text("SCORE CARD  ·  FM RADIO (NOT AVAILABLE YET)", color = WarmAshMuted, fontSize = 10.sp)
         }
         if (accessibilityExplainerOpen) {
-            Box(
-                Modifier.fillMaxSize().background(Color(0xE6000000)).padding(20.dp),
-                contentAlignment = Alignment.Center
-            ) {
+            Dialog(onDismissRequest = { accessibilityExplainerOpen = false }) {
                 Card(
                     colors = CardDefaults.cardColors(containerColor = OakSurface),
                     shape = RoundedCornerShape(20.dp)
