@@ -699,8 +699,9 @@ private fun RemoteControlScreen(
                 value = searchText, onValueChange = {
                     if (btHidConnected) {
                         val common = searchText.zip(it).takeWhile { pair -> pair.first == pair.second }.size
-                        repeat(searchText.length - common) { onHidAction("BACKSPACE") }
-                        if (it.length > common) onTypeText(it.substring(common))
+                        val removed = "\b".repeat(searchText.length - common)
+                        val added = if (it.length > common) it.substring(common) else ""
+                        if (removed.isNotEmpty() || added.isNotEmpty()) onTypeText(removed + added)
                     }
                     searchText = it
                     searchStarted = true
