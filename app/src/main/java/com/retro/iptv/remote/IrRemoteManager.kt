@@ -409,7 +409,7 @@ class IrdbFetcher(context: Context) {
             setRequestProperty("User-Agent", "RetroTV-IRDB/1.0")
         }
         return try {
-            if (connection.responseCode !in 200..299) error("IRDB HTTP \${connection.responseCode}")
+            if (connection.responseCode !in 200..299) error("IRDB HTTP ${connection.responseCode}")
             connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
         } finally {
             connection.disconnect()
