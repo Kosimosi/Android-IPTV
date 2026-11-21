@@ -14,12 +14,14 @@ object RemoteCommandBridge {
     fun detach() {
         foregroundCommand = null
         foregroundState = null
+        // Tell already-paired phones that the TV app is no longer foregrounded.
+        TvRemoteBackgroundService.broadcastState(state())
     }
 
     fun hasForegroundHandler(): Boolean = foregroundCommand != null
 
     fun state(): String = runCatching { foregroundState?.invoke() }.getOrNull()
-        ?: """{"type":"STATE","playing":false,"currentChannel":-1,"channels":[]}"""
+        ?: """{"type":"STATE","playing":false,"inRetroTv":false,"currentChannel":-1,"channels":[]}"""
 
     fun dispatch(context: Context, command: String, value: String) {
         val active = foregroundCommand
