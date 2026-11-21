@@ -75,6 +75,12 @@ object RemoteTls {
             override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) = Unit
             override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) {
                 val certificate = chain.firstOrNull() ?: throw java.security.cert.CertificateException("Missing TV certificate")
+                try {
+                    certificate.checkValidity()
+                    certificate.verify(certificate.publicKey)
+                } catch (error: Exception) {
+                    throw java.security.cert.CertificateException("Invalid RETROTV self-signed certificate", error)
+                }
                 val actual = fingerprint(certificate)
                 if (pinned != null && !MessageDigest.isEqual(
                         pinned.toByteArray(Charsets.US_ASCII), actual.toByteArray(Charsets.US_ASCII)
