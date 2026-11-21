@@ -1409,6 +1409,7 @@ class MainActivity : ComponentActivity() {
     private val isQualityPickerVisible = mutableStateOf(false)
     private val isLinkPickerVisible = mutableStateOf(false)
     private val isEpgOverlayVisible = mutableStateOf(false)
+    private val remoteLaunchTarget = mutableStateOf<String?>(null)
     private val selectedPlaybackAction = mutableIntStateOf(0)
     private val playbackControlsLocked = mutableStateOf(false)
     private val scalingModeIndex = mutableIntStateOf(0)
@@ -1628,6 +1629,7 @@ class MainActivity : ComponentActivity() {
             }
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
         loadSettingsFromStorage()
+        consumeRemoteLaunchIntent(intent)
         // Never trust an APK left in cache across launches: it may belong to an older release.
         File(cacheDir, "updates").listFiles()?.forEach { cached ->
             if (cached.isFile && cached.extension.equals("apk", ignoreCase = true)) cached.delete()
@@ -2446,6 +2448,30 @@ class MainActivity : ComponentActivity() {
                             onOpenMobileRemote = { startActivity(Intent(this@MainActivity, RemoteActivity::class.java)) },
                             onClose = { isSettingsOpen.value = false }
                         )
+                    }
+
+                    remoteLaunchTarget.value?.let { target ->
+                        val title = if (target == RemoteProtocol.TARGET_SCORE_CARD) "SCORE CARD" else "FM RADIO"
+                        val detail = if (target == RemoteProtocol.TARGET_SCORE_CARD) {
+                            "The Score Card overlay is ready, but no live scoreboard data source is configured."
+                        } else {
+                            "The FM Radio overlay is ready, but no radio stream source is configured."
+                        }
+                        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.88f)), contentAlignment = Alignment.Center) {
+                            Column(
+                                Modifier.fillMaxWidth(0.82f).clip(RoundedCornerShape(20.dp))
+                                    .background(OakSurface).border(1.dp, FocusRed.copy(alpha = 0.7f), RoundedCornerShape(20.dp))
+                                    .padding(24.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(14.dp)
+                            ) {
+                                Text(title, color = FocusRed, fontSize = 22.sp, fontWeight = FontWeight.Black)
+                                Text(detail, color = Color.White, fontSize = 13.sp)
+                                Text("CLOSE", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(FocusRed)
+                                        .clickable { remoteLaunchTarget.value = null }.padding(horizontal = 22.dp, vertical = 11.dp))
+                            }
+                        }
                     }
 
                     updateNotice.value?.let { notice ->
@@ -3743,7 +3769,9 @@ class MainActivity : ComponentActivity() {
                 isSearchOpen.value = true
                 isUiVisible.value = false
             }
+            RemoteProtocol.CMD_LAUNCH_RETROTV -> handleRemoteLaunchTarget(value)
             RemoteProtocol.CMD_MEDIA -> when (value) {
+                "POWER" -> moveTaskToBack(true)
                 "VOL_UP" -> audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_RAISE, 0)
                 "VOL_DOWN" -> audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_LOWER, 0)
                 "MUTE" -> audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_TOGGLE_MUTE, 0)
@@ -3754,6 +3782,49 @@ class MainActivity : ComponentActivity() {
                 }
             }
             RemoteProtocol.CMD_SYNC_REQ -> broadcastRemoteState()
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        consumeRemoteLaunchIntent(intent)
+    }
+
+    private fun consumeRemoteLaunchIntent(intent: Intent?) {
+        val target = intent?.getStringExtra(TvRemoteBackgroundService.EXTRA_LAUNCH_TARGET) ?: return
+        intent.removeExtra(TvRemoteBackgroundService.EXTRA_LAUNCH_TARGET)
+        handleRemoteLaunchTarget(target)
+    }
+
+    private fun handleRemoteLaunchTarget(target: String) {
+        if (target !in RemoteProtocol.launchTargets) return
+        when (target) {
+            RemoteProtocol.TARGET_HOME -> {
+                remoteLaunchTarget.value = null
+                isUiVisible.value = true
+                isPlaybackOverlayVisible.value = false
+                isSearchOpen.value = false
+                isSettingsOpen.value = false
+                resetIdleTimer()
+            }
+            RemoteProtocol.TARGET_NEWS_TICKER -> {
+                remoteLaunchTarget.value = null
+                liveNewsTickerMode.value = "ALWAYS ON"
+                getSharedPreferences("retro_iptv_prefs", Context.MODE_PRIVATE).edit()
+                    .putString("live_news_ticker_mode", "ALWAYS ON").apply()
+                isUiVisible.value = false
+                isPlaybackOverlayVisible.value = false
+                isSearchOpen.value = false
+                isSettingsOpen.value = false
+            }
+            RemoteProtocol.TARGET_SCORE_CARD, RemoteProtocol.TARGET_FM_RADIO -> {
+                remoteLaunchTarget.value = target
+                isUiVisible.value = false
+                isPlaybackOverlayVisible.value = false
+                isSearchOpen.value = false
+                isSettingsOpen.value = false
+            }
         }
     }
 
