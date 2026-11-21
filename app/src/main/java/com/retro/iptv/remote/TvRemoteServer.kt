@@ -31,18 +31,18 @@ class TvRemoteServer(
 
     fun start(port: Int = DEFAULT_PORT) {
         if (wsServer != null) return
-        val server = RetroWsServer(InetSocketAddress("0.0.0.0", port))
-        server.setReuseAddr(true)
-        server.setConnectionLostTimeout(25)
-        server.setWebSocketFactory(DefaultSSLWebSocketServerFactory(RemoteTls.serverContext(appContext)))
-        wsServer = server
         try {
+            val server = RetroWsServer(InetSocketAddress("0.0.0.0", port))
+            server.setReuseAddr(true)
+            server.setConnectionLostTimeout(25)
+            server.setWebSocketFactory(DefaultSSLWebSocketServerFactory(RemoteTls.serverContext(appContext)))
+            wsServer = server
             server.start()
             registerNsdService(port)
             onStatusChanged("Starting • port $port")
         } catch (error: Exception) {
             wsServer = null
-            onStatusChanged("Unavailable: ${error.message ?: "server error"}")
+            onStatusChanged("Unavailable: ${error.message ?: "TLS/server error"}")
         }
     }
 
