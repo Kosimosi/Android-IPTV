@@ -241,18 +241,18 @@ private fun RemoteControlScreen(
     val view = LocalView.current
     var mode by androidx.compose.runtime.remember { mutableStateOf("PAD") }
     var isPairingExpanded by androidx.compose.runtime.remember { mutableStateOf(false) }
-    var selectedBrand by androidx.compose.runtime.remember { mutableStateOf(TvBrand.WALTON) }
-    var setupStep by androidx.compose.runtime.remember { mutableIntStateOf(if (irBlasterDetected) 1 else 2) }
-    var manualConnectVisible by androidx.compose.runtime.remember { mutableStateOf(false) }
-    var scanStartedPin by androidx.compose.runtime.remember { mutableStateOf("") }
-    var irFeedback by androidx.compose.runtime.remember { mutableStateOf("") }
-    var irTestFeedback by androidx.compose.runtime.remember { mutableStateOf("") }
     val context = LocalContext.current
     val irRemoteManager = androidx.compose.runtime.remember { IrRemoteManager(context) }
     val irBlasterDetected = irRemoteManager.hasIrBlaster()
     val setupPrefs = androidx.compose.runtime.remember {
         context.getSharedPreferences("retro_mobile_remote_setup", android.content.Context.MODE_PRIVATE)
     }
+    var selectedBrand by androidx.compose.runtime.remember { mutableStateOf(TvBrand.WALTON) }
+    var setupStep by androidx.compose.runtime.remember { mutableIntStateOf(if (irBlasterDetected) 1 else 2) }
+    var manualConnectVisible by androidx.compose.runtime.remember { mutableStateOf(false) }
+    var scanStartedPin by androidx.compose.runtime.remember { mutableStateOf("") }
+    var irFeedback by androidx.compose.runtime.remember { mutableStateOf("") }
+    var irTestFeedback by androidx.compose.runtime.remember { mutableStateOf("") }
     androidx.compose.runtime.LaunchedEffect(Unit) {
         selectedBrand = irRemoteManager.getSelectedBrand()
     }
