@@ -67,8 +67,12 @@ class IrRemoteManager(context: Context) {
 
     fun transmitPower(profile: IrProfile = selectedProfile): Boolean {
         if (!hasEmitter) return false
+        if (profile == IrProfile.MI_BOX) {
+            val xiaomiSent = transmitValidated(XIAOMI_CARRIER_HZ, buildXiaomi20BitFrame(0x86, 0xCC))
+            return xiaomiSent || transmitValidated(CARRIER_HZ, buildExtendedNecFrame(0x847B, 0x02))
+        }
         val frames = when (profile) {
-            IrProfile.SAMSUNG -> listOf(CARRIER_HZ to buildSamsungFrame(0xE0E09966L))
+            IrProfile.SAMSUNG -> listOf(CARRIER_HZ to buildSamsungNecxFrame(0xE0E0, 0x99))
             IrProfile.SONY -> listOf(40_000 to buildSonyFrame(command = 0x15, address = 0x01))
             IrProfile.WALTON, IrProfile.LG -> listOf(CARRIER_HZ to buildNecFrame(0x04FB, 0x08))
             IrProfile.XIAOMI_TV, IrProfile.HISENSE_TCL -> listOf(CARRIER_HZ to buildNecFrame(0x00FF, 0x12))
@@ -76,10 +80,7 @@ class IrRemoteManager(context: Context) {
                 CARRIER_HZ to buildNecFrame(0x00FF, 0x0A),
                 CARRIER_HZ to buildNecFrame(0x807F, 0x4D)
             )
-            IrProfile.MI_BOX -> listOf(
-                CARRIER_HZ to buildNecFrame(0x40BF, 0x0A),
-                CARRIER_HZ to buildNecFrame(0x00FF, 0x18)
-            )
+            IrProfile.MI_BOX -> emptyList()
             IrProfile.MXQ_TX3 -> listOf(CARRIER_HZ to buildNecFrame(0x00FF, 0x12))
             IrProfile.MECOOL -> listOf(CARRIER_HZ to buildNecFrame(0x00FF, 0x0A))
             IrProfile.GENERIC_NEC -> listOf(CARRIER_HZ to buildNecFrame(0x00FF, 0x00))
@@ -90,7 +91,7 @@ class IrRemoteManager(context: Context) {
     /** Best-effort source/input command; exact codes vary by TV model. */
     fun sendSourceInput(profile: IrProfile = selectedProfile): Boolean {
         val frame = when (profile) {
-            IrProfile.SAMSUNG -> CARRIER_HZ to buildSamsungFrame(0xE0E0807FL)
+            IrProfile.SAMSUNG -> CARRIER_HZ to buildSamsungNecxFrame(0xE0E0, 0x80)
             IrProfile.SONY -> 40_000 to buildSonyFrame(command = 0x50, address = 0x01)
             IrProfile.WALTON, IrProfile.LG -> CARRIER_HZ to buildNecFrame(0x04FB, 0x1A)
             else -> CARRIER_HZ to buildNecFrame(0x00FF, 0x1A)
@@ -157,7 +158,7 @@ class IrRemoteManager(context: Context) {
                     "VOL_UP" -> 0x07; "VOL_DOWN" -> 0x0B; "MUTE" -> 0x0F
                     else -> null
                 } ?: return false
-                CARRIER_HZ to buildSamsungNecxFrame(0x0707, command)
+                CARRIER_HZ to buildSamsungNecxFrame(0xE0E0, command)
             }
             else -> return false
         }
