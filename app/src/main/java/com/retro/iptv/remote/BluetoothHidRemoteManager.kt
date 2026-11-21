@@ -32,6 +32,9 @@ class BluetoothHidRemoteManager(
             } else if (pluggedDevice != null) {
                 connectedDevice = pluggedDevice
                 onConnectionChanged(true, pluggedDevice.name ?: "Bluetooth host")
+            } else {
+                // The profile proxy is ready now; retry any host paired before this session.
+                connectFirstPairedHost()
             }
         }
 
