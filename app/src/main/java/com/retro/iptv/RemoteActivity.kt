@@ -398,12 +398,12 @@ private fun RemoteControlScreen(
 
     fun sendDpad(action: String) {
         if (btHidConnected) onHidAction(action)
-        else if (connected) onSend(RemoteProtocol.CMD_DPAD, action)
+        else if (connected && inRetroTv) onSend(RemoteProtocol.CMD_DPAD, action)
         else sendIrAction(action)
     }
     fun sendTransport(hidAction: String, command: String, value: String) {
         if (btHidConnected) onHidAction(hidAction)
-        else if (connected) onSend(command, value)
+        else if (connected && inRetroTv) onSend(command, value)
         else sendIrAction(hidAction)
     }
 
