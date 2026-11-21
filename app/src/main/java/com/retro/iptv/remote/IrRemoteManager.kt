@@ -78,16 +78,16 @@ class IrRemoteManager(context: Context) {
         val frames = when (profile) {
             IrProfile.SAMSUNG -> listOf(CARRIER_HZ to buildSamsungNecxFrame(0xE0E0, 0x99))
             IrProfile.SONY -> listOf(40_000 to buildSonyFrame(command = 0x15, address = 0x01))
-            IrProfile.WALTON, IrProfile.LG -> listOf(CARRIER_HZ to buildNecFrame(0x04FB, 0x08))
-            IrProfile.XIAOMI_TV, IrProfile.HISENSE_TCL -> listOf(CARRIER_HZ to buildNecFrame(0x00FF, 0x12))
+            IrProfile.WALTON, IrProfile.LG -> listOf(CARRIER_HZ to buildExtendedNecFrame(0x04FB, 0x08))
+            IrProfile.XIAOMI_TV, IrProfile.HISENSE_TCL -> listOf(CARRIER_HZ to buildExtendedNecFrame(0x00FF, 0x12))
             IrProfile.AOSP_BOX -> listOf(
-                CARRIER_HZ to buildNecFrame(0x00FF, 0x0A),
-                CARRIER_HZ to buildNecFrame(0x807F, 0x4D)
+                CARRIER_HZ to buildExtendedNecFrame(0x00FF, 0x0A),
+                CARRIER_HZ to buildExtendedNecFrame(0x807F, 0x4D)
             )
             IrProfile.MI_BOX -> emptyList()
             IrProfile.MXQ_TX3 -> listOf(CARRIER_HZ to buildNecFrame(0x00FF, 0x12))
             IrProfile.MECOOL -> listOf(CARRIER_HZ to buildNecFrame(0x00FF, 0x0A))
-            IrProfile.GENERIC_NEC -> listOf(CARRIER_HZ to buildNecFrame(0x00FF, 0x00))
+            IrProfile.GENERIC_NEC -> listOf(CARRIER_HZ to buildExtendedNecFrame(0x00FF, 0x00))
         }
         return frames.map { (frequency, pattern) -> transmitValidated(frequency, pattern) }.any { it }
     }
@@ -98,7 +98,7 @@ class IrRemoteManager(context: Context) {
             IrProfile.SAMSUNG -> CARRIER_HZ to buildSamsungNecxFrame(0xE0E0, 0x80)
             IrProfile.SONY -> 40_000 to buildSonyFrame(command = 0x50, address = 0x01)
             IrProfile.WALTON, IrProfile.LG -> CARRIER_HZ to buildNecFrame(0x04FB, 0x1A)
-            else -> CARRIER_HZ to buildNecFrame(0x00FF, 0x1A)
+            else -> CARRIER_HZ to buildExtendedNecFrame(0x00FF, 0x1A)
         }
         return transmitValidated(frame.first, frame.second)
     }
@@ -153,7 +153,7 @@ class IrRemoteManager(context: Context) {
                     "VOL_UP" -> 0x02; "VOL_DOWN" -> 0x03; "MUTE" -> 0x09
                     else -> null
                 } ?: return false
-                CARRIER_HZ to buildNecFrame(0x04FB, command)
+                CARRIER_HZ to buildExtendedNecFrame(0x04FB, command)
             }
             IrProfile.AOSP_BOX, IrProfile.MXQ_TX3, IrProfile.MECOOL, IrProfile.GENERIC_NEC -> {
                 val command = when (key) {
@@ -163,7 +163,7 @@ class IrRemoteManager(context: Context) {
                     "VOL_UP" -> 0x02; "VOL_DOWN" -> 0x03; "MUTE" -> 0x09
                     else -> null
                 } ?: return false
-                CARRIER_HZ to buildNecFrame(0x00FF, command)
+                CARRIER_HZ to buildExtendedNecFrame(0x00FF, command)
             }
             IrProfile.SAMSUNG -> {
                 val command = when (key) {
@@ -182,13 +182,15 @@ class IrRemoteManager(context: Context) {
     fun transmitIrdbCode(code: IrdbCode): Boolean {
         if (!hasEmitter) return false
         val protocol = code.protocol.uppercase().replace("_", "").replace("-", "")
-        val address16 = (code.device and 0xFF) or
+        val necAddress16 = ((code.device and 0xFF) shl 8) or
+            (if (code.subdevice >= 0) code.subdevice and 0xFF else code.device.inv() and 0xFF)
+        val samsungAddress16 = (code.device and 0xFF) or
             (if (code.subdevice >= 0) (code.subdevice and 0xFF) shl 8 else 0)
         val frame = when (protocol) {
-            "NEC", "NEC1", "NECEXT", "NECEXTENDED", "NECX1" ->
-                CARRIER_HZ to buildNecFrame(address16, code.function)
+            "NEC", "NEC1", "NEC2", "NECEXT", "NECEXTENDED", "NECX1" ->
+                CARRIER_HZ to buildExtendedNecFrame(necAddress16, code.function)
             "NECX2", "SAMSUNG32", "SAMSUNG" ->
-                CARRIER_HZ to buildSamsungNecxFrame(address16, code.function)
+                CARRIER_HZ to buildSamsungNecxFrame(samsungAddress16, code.function)
             "SONY12", "SIRC12" -> 40_000 to buildSonySircFrame(code.function, code.device, 12)
             "SONY15", "SIRC15" -> 40_000 to buildSonySircFrame(code.function, code.device, 15)
             "SONY20", "SIRC20" -> 40_000 to buildSonySircFrame(code.function, code.device, 20)
