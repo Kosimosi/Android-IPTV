@@ -15,7 +15,8 @@ import javax.net.ssl.SSLParameters
 class MobileRemoteClient(
     context: Context,
     private val onConnectionStateChanged: (Boolean, String?) -> Unit,
-    private val onStateReceived: (String) -> Unit
+    private val onStateReceived: (String) -> Unit,
+    private val onConnectionDetails: (host: String, port: Int, pin: String) -> Unit = { _, _, _ -> }
 ) {
     private val appContext = context.applicationContext
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -147,7 +148,10 @@ class MobileRemoteClient(
                         try {
                             tls.persistFirstPair(appContext)
                             paired = true
-                            mainHandler.post { onConnectionStateChanged(true, serviceName) }
+                            mainHandler.post {
+                                onConnectionDetails(host, port, pin)
+                                onConnectionStateChanged(true, serviceName)
+                            }
                         } catch (_: Exception) {
                             paired = false
                             close(1008, "Could not pin RETROTV certificate")
