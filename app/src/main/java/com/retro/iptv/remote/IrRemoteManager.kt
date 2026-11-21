@@ -116,9 +116,13 @@ class IrRemoteManager(context: Context) {
             "SAMSUNG" -> IrProfile.SAMSUNG
             "LG" -> IrProfile.LG
             "SONY" -> IrProfile.SONY
-            "XIAOMI" -> IrProfile.XIAOMI_TV
-            "HISENSE" -> IrProfile.HISENSE_TCL
-            "GENERIC" -> IrProfile.GENERIC_NEC
+            "XIAOMI", "XIAOMI_TV" -> IrProfile.XIAOMI_TV
+            "HISENSE", "HISENSE_TCL" -> IrProfile.HISENSE_TCL
+            "GENERIC", "GENERIC_NEC" -> IrProfile.GENERIC_NEC
+            "AOSP_BOX" -> IrProfile.AOSP_BOX
+            "MI_BOX" -> IrProfile.MI_BOX
+            "MXQ_TX3" -> IrProfile.MXQ_TX3
+            "MECOOL" -> IrProfile.MECOOL
             else -> IrProfile.WALTON
         }
 
