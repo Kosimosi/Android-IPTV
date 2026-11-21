@@ -43,7 +43,7 @@ android {
     }
 
     // Several transitive BouncyCastle JARs ship the same OSGi manifest.
-    // This build-only metadata is not required in the Android APK.
+    // It is build metadata and is not needed in the Android APK.
     packaging {
         resources {
             excludes += "/META-INF/versions/9/OSGI-INF/MANIFEST.MF"
