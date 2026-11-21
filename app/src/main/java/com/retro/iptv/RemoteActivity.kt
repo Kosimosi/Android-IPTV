@@ -382,8 +382,10 @@ private fun RemoteControlScreen(
     var retroActionsOpen by androidx.compose.runtime.remember { mutableStateOf(false) }
     val dpadEnabled = btHidConnected || (connected && inRetroTv) || irBlasterDetected
 
+    // Bluetooth HID is authoritative whenever connected. IR is strictly a fallback,
+    // and the selected IRDB model is checked before the built-in brand profile.
     fun sendIrAction(action: String): Boolean {
-        if (!irBlasterDetected || btHidConnected) return false
+        if (btHidConnected || !irBlasterDetected) return false
         val databaseCode = IrdbFetcher.findCode(irdbCodes, action)
         if (databaseCode != null && irRemoteManager.transmitIrdbCode(databaseCode)) {
             irdbStatus = "IRDB · " + selectedIrdbLabel + " · " + action + " sent"
@@ -632,7 +634,7 @@ private fun RemoteControlScreen(
                             }
                         }
                         RemoteActionButton(
-                            if (irdbLoading && irdbEntries.isEmpty()) "LOADING IRDB…" else "MORE BRANDS (IRDB)",
+                            if (irdbLoading && irdbEntries.isEmpty()) "Loading IRDB…" else "More Brands (IRDB)",
                             modifier = Modifier.fillMaxWidth(), enabled = !irdbLoading
                         ) {
                             irdbLoading = true
