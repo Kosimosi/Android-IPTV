@@ -23,13 +23,13 @@ class RetroTvAccessibilityService : AccessibilityService() {
         @Volatile private var instance: RetroTvAccessibilityService? = null
 
         fun performGlobal(context: Context, action: Int): Boolean {
-            if (action != GLOBAL_ACTION_HOME && action != GLOBAL_ACTION_BACK) return false
+            if (action != AccessibilityService.GLOBAL_ACTION_HOME && action != AccessibilityService.GLOBAL_ACTION_BACK) return false
             return runCatching { instance?.performGlobalAction(action) == true }.getOrDefault(false)
         }
 
-        fun performHome(context: Context): Boolean = performGlobal(context, GLOBAL_ACTION_HOME)
+        fun performHome(context: Context): Boolean = performGlobal(context, AccessibilityService.GLOBAL_ACTION_HOME)
 
-        fun performBack(context: Context): Boolean = performGlobal(context, GLOBAL_ACTION_BACK)
+        fun performBack(context: Context): Boolean = performGlobal(context, AccessibilityService.GLOBAL_ACTION_BACK)
 
         fun setFocusedText(value: String): Boolean {
             val service = instance ?: return false
