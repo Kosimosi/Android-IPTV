@@ -467,7 +467,7 @@ private fun RemoteControlScreen(
                         }
                     }
                     RemoteActionButton("TEST POWER", modifier = Modifier.fillMaxWidth(), enabled = true) {
-                        irTestFeedback = if (irRemoteManager.sendKey("POWER", selectedProfile)) {
+                        irTestFeedback = if (sendIrAction("POWER")) {
                             "IR signal sent. Check whether your TV responds."
                         } else {
                             "IR transmission failed. Check the phone's IR hardware."
