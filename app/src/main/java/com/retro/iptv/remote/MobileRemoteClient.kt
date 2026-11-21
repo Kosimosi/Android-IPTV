@@ -10,6 +10,7 @@ import org.java_websocket.client.WebSocketClient
 import org.java_websocket.handshake.ServerHandshake
 import org.json.JSONObject
 import java.net.URI
+import javax.net.ssl.SSLParameters
 
 class MobileRemoteClient(
     context: Context,
@@ -118,7 +119,7 @@ class MobileRemoteClient(
         if (wsClient?.isOpen == true) return
         val uri = try {
             val uriHost = if (host.contains(":") && !host.startsWith("[")) "[$host]" else host
-            URI("ws://$uriHost:$port")
+            URI("wss://$uriHost:$port")
         } catch (_: Exception) {
             mainHandler.post { onConnectionStateChanged(false, "Invalid TV address") }
             return
@@ -128,7 +129,14 @@ class MobileRemoteClient(
         wsClient = null
         runCatching { old?.close() }
         paired = false
+        val tls = RemoteTls.clientContext(appContext)
         val client = object : WebSocketClient(uri) {
+            // The TV uses a self-signed certificate whose identity is verified by our
+            // persisted SHA-256 pin, not by matching a changing LAN IP to a DNS name.
+            override fun onSetSSLParameters(sslParameters: SSLParameters) {
+                sslParameters.endpointIdentificationAlgorithm = null
+            }
+
             override fun onOpen(handshakedata: ServerHandshake?) {
                 runCatching { send(RemoteProtocol.createCommand(RemoteProtocol.CMD_PAIR, pin)) }
             }
@@ -136,8 +144,15 @@ class MobileRemoteClient(
                 val type = runCatching { JSONObject(message).optString("type") }.getOrDefault("")
                 when (type) {
                     RemoteProtocol.EVT_PAIRED -> {
-                        paired = true
-                        mainHandler.post { onConnectionStateChanged(true, serviceName) }
+                        try {
+                            tls.persistFirstPair(appContext)
+                            paired = true
+                            mainHandler.post { onConnectionStateChanged(true, serviceName) }
+                        } catch (_: Exception) {
+                            paired = false
+                            close(1008, "Could not pin RETROTV certificate")
+                            mainHandler.post { onConnectionStateChanged(false, "Certificate pinning failed. Pair again.") }
+                        }
                     }
                     RemoteProtocol.EVT_STATE -> mainHandler.post { onStateReceived(message) }
                 }
@@ -154,13 +169,14 @@ class MobileRemoteClient(
                 if (wsClient === this) {
                     paired = false
                     mainHandler.post {
-                        if (wsClient === this) onConnectionStateChanged(false, "Could not connect. Check TV PIN and Wi-Fi.")
+                        if (wsClient === this) onConnectionStateChanged(false, "Secure connection failed. Check TV PIN, Wi-Fi, or certificate pin.")
                     }
                 }
             }
         }
+        client.setSocketFactory(tls.context.socketFactory)
         wsClient = client
-        mainHandler.post { onConnectionStateChanged(false, "Connecting to $serviceName…") }
+        mainHandler.post { onConnectionStateChanged(false, "Connecting securely to $serviceName…") }
         runCatching { client.connect() }.onFailure {
             wsClient = null
             mainHandler.post { onConnectionStateChanged(false, "Connection failed. Check IP and PIN.") }

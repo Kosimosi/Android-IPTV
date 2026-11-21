@@ -1,6 +1,8 @@
 package com.retro.iptv
 
 import android.os.Bundle
+import android.content.Intent
+import android.provider.Settings
 import android.view.HapticFeedbackConstants
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -44,8 +46,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import com.retro.iptv.remote.MobileRemoteClient
 import com.retro.iptv.remote.RemoteProtocol
+import com.retro.iptv.remote.RetroTvAccessibilityService
 import kotlinx.coroutines.delay
 import org.json.JSONObject
 
@@ -61,6 +65,7 @@ class RemoteActivity : ComponentActivity() {
     private lateinit var remoteClient: MobileRemoteClient
     private val connectionStatus = mutableStateOf("Enter the TV pairing PIN, then find your TV.")
     private val connected = mutableStateOf(false)
+    private val accessibilityEnabled = mutableStateOf(false)
     private val tvName = mutableStateOf("")
     private val pairingPin = mutableStateOf("")
     private val manualAddress = mutableStateOf("")
@@ -70,6 +75,7 @@ class RemoteActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        accessibilityEnabled.value = RetroTvAccessibilityService.isEnabled(this)
         remoteClient = MobileRemoteClient(
             context = this,
             onConnectionStateChanged = { isConnected, name ->
@@ -83,6 +89,10 @@ class RemoteActivity : ComponentActivity() {
             RemoteControlScreen(
                 connectionStatus = connectionStatus.value,
                 connected = connected.value,
+                accessibilityEnabled = accessibilityEnabled.value,
+                onRequestAccessibility = {
+                    startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                },
                 tvName = tvName.value,
                 pairingPin = pairingPin.value,
                 onPinChange = { pairingPin.value = it.filter(Char::isDigit).take(6) },
@@ -98,6 +108,11 @@ class RemoteActivity : ComponentActivity() {
                 onBack = { finish() }
             )
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        accessibilityEnabled.value = RetroTvAccessibilityService.isEnabled(this)
     }
 
     override fun onStop() {
@@ -139,6 +154,8 @@ class RemoteActivity : ComponentActivity() {
 private fun RemoteControlScreen(
     connectionStatus: String,
     connected: Boolean,
+    accessibilityEnabled: Boolean,
+    onRequestAccessibility: () -> Unit,
     tvName: String,
     pairingPin: String,
     onPinChange: (String) -> Unit,
@@ -160,6 +177,7 @@ private fun RemoteControlScreen(
     var searchText by androidx.compose.runtime.remember { mutableStateOf("") }
     var searchStarted by androidx.compose.runtime.remember { mutableStateOf(false) }
     var retroActionsOpen by androidx.compose.runtime.remember { mutableStateOf(false) }
+    var accessibilityExplainerOpen by androidx.compose.runtime.remember { mutableStateOf(false) }
 
     LaunchedEffect(searchText, connected, searchStarted) {
         if (connected && searchStarted) {
@@ -226,6 +244,17 @@ private fun RemoteControlScreen(
                     RemoteActionButton("CONNECT WITH IP + PIN", enabled = true, modifier = Modifier.fillMaxWidth()) { onManualConnect() }
                     Text("IR power / brand profiles require a compatible phone IR emitter. This control is not enabled on unsupported phones.",
                         color = WarmAshMuted, fontSize = 10.sp)
+                    Text(
+                        if (accessibilityEnabled) "FULL TV CONTROL ACCESS ENABLED" else "FULL TV CONTROL ACCESS OPTIONAL",
+                        color = if (accessibilityEnabled) Color(0xFF45D483) else WarmAshMuted,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    RemoteActionButton(
+                        if (accessibilityEnabled) "ACCESSIBILITY SETTINGS" else "ENABLE FULL TV CONTROL",
+                        enabled = true,
+                        modifier = Modifier.fillMaxWidth()
+                    ) { accessibilityExplainerOpen = true }
                 }
             }
         }
@@ -361,6 +390,35 @@ private fun RemoteControlScreen(
             }.padding(8.dp))
             Text("SCORE CARD  ·  FM RADIO (NOT AVAILABLE YET)", color = WarmAshMuted, fontSize = 10.sp)
         }
+        if (accessibilityExplainerOpen) {
+            Dialog(onDismissRequest = { accessibilityExplainerOpen = false }) {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = OakSurface),
+                    shape = RoundedCornerShape(20.dp)
+                ) {
+                    Column(
+                        Modifier.fillMaxWidth().padding(22.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text("RETROTV ACCESSIBILITY", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Black)
+                        Text(
+                            "RetroTV needs Accessibility access so your phone can act as a full TV remote — navigate Android TV's home screen and type search queries.",
+                            color = WarmAshMuted,
+                            fontSize = 13.sp
+                        )
+                        RemoteActionButton("OPEN ACCESSIBILITY SETTINGS", enabled = true, modifier = Modifier.fillMaxWidth()) {
+                            accessibilityExplainerOpen = false
+                            onRequestAccessibility()
+                        }
+                        RemoteActionButton("NOT NOW", enabled = true, modifier = Modifier.fillMaxWidth()) {
+                            accessibilityExplainerOpen = false
+                        }
+                    }
+                }
+            }
+        }
+
         Text(
             "RETRO TV  ·  ${if (connected) "SECURELY PAIRED ON LOCAL WI-FI" else "WAITING FOR TV"}",
             color = WarmAshMuted, fontSize = 9.sp, modifier = Modifier.fillMaxWidth().clickable { retroActionsOpen = !retroActionsOpen },

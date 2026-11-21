@@ -8,6 +8,7 @@ import android.os.Looper
 import org.java_websocket.WebSocket
 import org.java_websocket.handshake.ClientHandshake
 import org.java_websocket.server.WebSocketServer
+import org.java_websocket.server.DefaultSSLWebSocketServerFactory
 import org.json.JSONObject
 import java.net.InetSocketAddress
 import java.security.MessageDigest
@@ -30,17 +31,18 @@ class TvRemoteServer(
 
     fun start(port: Int = DEFAULT_PORT) {
         if (wsServer != null) return
-        val server = RetroWsServer(InetSocketAddress("0.0.0.0", port))
-        server.setReuseAddr(true)
-        server.setConnectionLostTimeout(25)
-        wsServer = server
         try {
+            val server = RetroWsServer(InetSocketAddress("0.0.0.0", port))
+            server.setReuseAddr(true)
+            server.setConnectionLostTimeout(25)
+            server.setWebSocketFactory(DefaultSSLWebSocketServerFactory(RemoteTls.serverContext(appContext)))
+            wsServer = server
             server.start()
             registerNsdService(port)
             onStatusChanged("Starting • port $port")
         } catch (error: Exception) {
             wsServer = null
-            onStatusChanged("Unavailable: ${error.message ?: "server error"}")
+            onStatusChanged("Unavailable: ${error.message ?: "TLS/server error"}")
         }
     }
 
@@ -51,18 +53,24 @@ class TvRemoteServer(
     }
 
     fun stop() {
+        Thread { stopAndWait() }.apply {
+            name = "RetroTV-Remote-Stop"
+            isDaemon = true
+            start()
+        }
+    }
+
+    /** Blocking variant used only by the service's serialized PIN-rotation worker. */
+    fun stopAndWait() {
         registrationListener?.let { listener ->
             runCatching { nsdManager?.unregisterService(listener) }
         }
         registrationListener = null
+        authenticated.toList().forEach { runCatching { it.close(1008, "Pairing PIN rotated") } }
         authenticated.clear()
         val server = wsServer
         wsServer = null
-        if (server != null) {
-            Thread {
-                runCatching { server.stop(700) }
-            }.apply { name = "RetroTV-Remote-Stop"; isDaemon = true; start() }
-        }
+        if (server != null) runCatching { server.stop(700) }
         onStatusChanged("Stopped")
     }
 
