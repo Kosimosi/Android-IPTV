@@ -10,6 +10,7 @@ import org.java_websocket.client.WebSocketClient
 import org.java_websocket.handshake.ServerHandshake
 import org.json.JSONObject
 import java.net.URI
+import javax.net.ssl.SSLParameters
 
 class MobileRemoteClient(
     context: Context,
@@ -130,6 +131,12 @@ class MobileRemoteClient(
         paired = false
         val tls = RemoteTls.clientContext(appContext)
         val client = object : WebSocketClient(uri) {
+            // The TV uses a self-signed certificate whose identity is verified by our
+            // persisted SHA-256 pin, not by matching a changing LAN IP to a DNS name.
+            override fun onSetSSLParameters(sslParameters: SSLParameters) {
+                sslParameters.endpointIdentificationAlgorithm = null
+            }
+
             override fun onOpen(handshakedata: ServerHandshake?) {
                 runCatching { send(RemoteProtocol.createCommand(RemoteProtocol.CMD_PAIR, pin)) }
             }
