@@ -639,7 +639,7 @@ private fun RemoteControlScreen(
                             coroutineScope.launch {
                                 runCatching { if (irdbEntries.isEmpty()) irdbFetcher.fetchIndex() else irdbEntries }
                                     .onSuccess { irdbEntries = it; irdbPickerOpen = true; irdbSearch = "" }
-                                    .onFailure { irdbStatus = "IRDB index unavailable: \${it.message}" }
+                                    .onFailure { irdbStatus = "IRDB index unavailable: ${it.message}" }
                                 irdbLoading = false
                             }
                         }
@@ -671,11 +671,11 @@ private fun RemoteControlScreen(
                                 focusedLabelColor = FocusRed, unfocusedLabelColor = WarmAshMuted
                             )
                         )
-                        Text("\${irdbEntries.size} IRDB device profiles · select a model CSV", color = WarmAshMuted, fontSize = 10.sp)
+                        Text("${irdbEntries.size} IRDB device profiles · select a model CSV", color = WarmAshMuted, fontSize = 10.sp)
                         LazyColumn(Modifier.fillMaxWidth().height(340.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             items(
                                 irdbEntries.filter {
-                                    "\${it.brand} \${it.deviceType} \${it.model}".contains(irdbSearch, ignoreCase = true)
+                                    "${it.brand} ${it.deviceType} ${it.model}".contains(irdbSearch, ignoreCase = true)
                                 }.take(500),
                                 key = { it.filePath }
                             ) { entry ->
@@ -690,9 +690,9 @@ private fun RemoteControlScreen(
                                             runCatching { irdbFetcher.loadCodes(entry) }
                                                 .onSuccess {
                                                     irdbCodes = it
-                                                    irdbStatus = "Loaded \${it.size} IR codes from \${entry.filePath}"
+                                                    irdbStatus = "Loaded ${it.size} IR codes from ${entry.filePath}"
                                                 }
-                                                .onFailure { irdbStatus = "Could not load IRDB CSV: \${it.message}" }
+                                                .onFailure { irdbStatus = "Could not load IRDB CSV: ${it.message}" }
                                             irdbLoading = false
                                         }
                                     }.padding(vertical = 9.dp, horizontal = 6.dp)
@@ -736,7 +736,7 @@ private fun RemoteControlScreen(
                     RemoteIconButton(Icons.Rounded.KeyboardArrowDown, "Down", Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp), tint = if (dpadEnabled) Color(0xFFF4F4F6) else WarmAshMuted.copy(alpha = .38f), enabled = dpadEnabled) { sendDpad("DOWN") }
                     RemoteIconButton(Icons.Rounded.KeyboardArrowLeft, "Left", Modifier.align(Alignment.CenterStart).padding(start = 8.dp), tint = if (dpadEnabled) Color(0xFFF4F4F6) else WarmAshMuted.copy(alpha = .38f), enabled = dpadEnabled) { sendDpad("LEFT") }
                     RemoteIconButton(Icons.Rounded.KeyboardArrowRight, "Right", Modifier.align(Alignment.CenterEnd).padding(end = 8.dp), tint = if (dpadEnabled) Color(0xFFF4F4F6) else WarmAshMuted.copy(alpha = .38f), enabled = dpadEnabled) { sendDpad("RIGHT") }
-                    Box(Modifier.size(76.dp).background(Color(0xFFE11D48), CircleShape).clickable(enabled = connected || btHidConnected) {
+                    Box(Modifier.size(76.dp).background(Color(0xFFE11D48), CircleShape).clickable(enabled = connected || btHidConnected || irBlasterDetected) {
                         view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                         sendDpad("OK")
                     }, contentAlignment = Alignment.Center) {
