@@ -10,6 +10,7 @@ import android.content.Intent
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import java.util.concurrent.Executor
 import android.util.Log
 
 /** Phone-side Bluetooth HID Device: the Android TV/box is the HID host. */
@@ -72,7 +73,7 @@ class BluetoothHidRemoteManager(
                         BluetoothHidDevice.SUBCLASS1_COMBO,
                         HID_REPORT_DESCRIPTOR
                     ),
-                    null, null, context.mainExecutor, callback
+                    null, null, Executor { command -> Handler(Looper.getMainLooper()).post(command) }, callback
                 )
             }.onFailure { Log.e(TAG, "HID registration failed", it) }
         }
@@ -145,7 +146,7 @@ class BluetoothHidRemoteManager(
         text.forEach { char ->
             val key = asciiToHid(char) ?: return@forEach
             if (sendKey(key.first, key.second)) sent = true
-            Thread.sleep(18)
+            Thread.sleep(45)
         }
         return sent
     }
