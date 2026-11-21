@@ -55,7 +55,7 @@ class TvRemoteBackgroundService : Service() {
                         RemoteCommandBridge.dispatch(applicationContext, command, value)
                     } else {
                         packageManager.getLaunchIntentForPackage(packageName)?.let { launch ->
-                            launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                            launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
                             launch.putExtra(EXTRA_LAUNCH_TARGET, value)
                             runCatching { startActivity(launch) }
                         }
