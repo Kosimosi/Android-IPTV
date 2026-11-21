@@ -22,8 +22,14 @@ class RetroTvAccessibilityService : AccessibilityService() {
     companion object {
         @Volatile private var instance: RetroTvAccessibilityService? = null
 
-        fun performGlobal(context: Context, action: Int): Boolean =
-            runCatching { instance?.performGlobalAction(action) == true }.getOrDefault(false)
+        fun performGlobal(context: Context, action: Int): Boolean {
+            if (action != GLOBAL_ACTION_HOME && action != GLOBAL_ACTION_BACK) return false
+            return runCatching { instance?.performGlobalAction(action) == true }.getOrDefault(false)
+        }
+
+        fun performHome(context: Context): Boolean = performGlobal(context, GLOBAL_ACTION_HOME)
+
+        fun performBack(context: Context): Boolean = performGlobal(context, GLOBAL_ACTION_BACK)
 
         fun setFocusedText(value: String): Boolean {
             val service = instance ?: return false
@@ -33,6 +39,8 @@ class RetroTvAccessibilityService : AccessibilityService() {
                 val args = android.os.Bundle().apply {
                     putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, value)
                 }
+                // ACTION_SET_TEXT is the supported accessibility action for replacing
+                // text in the currently focused editable field of another app.
                 node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
             }.getOrDefault(false)
         }
