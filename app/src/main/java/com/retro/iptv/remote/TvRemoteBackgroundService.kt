@@ -21,6 +21,10 @@ class TvRemoteBackgroundService : Service() {
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, buildNotification())
         val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
+        if (!prefs.getBoolean(KEY_REMOTE_ENABLED, true)) {
+            stopSelf()
+            return
+        }
         val savedPin = prefs.getString(KEY_PIN, null)
         val pin = if (savedPin != null && savedPin.length == 6 && savedPin.all { it.isDigit() }) {
             savedPin
@@ -29,6 +33,13 @@ class TvRemoteBackgroundService : Service() {
                 prefs.edit().putString(KEY_PIN, it).apply()
             }
         }
+        startServer(pin)
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_NOT_STICKY
+
+    private fun startServer(pin: String) {
+        val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
         server = TvRemoteServer(
             context = applicationContext,
             pairingCode = pin,
@@ -36,13 +47,21 @@ class TvRemoteBackgroundService : Service() {
             onCommandReceived = { command, value ->
                 RemoteCommandBridge.dispatch(applicationContext, command, value)
             },
-            onStatusChanged = { status ->
-                prefs.edit().putString(KEY_STATUS, status).apply()
-            }
+            onStatusChanged = { status -> prefs.edit().putString(KEY_STATUS, status).apply() }
         ).also { it.start() }
     }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
+    private fun restartServer(newPin: String) {
+        val previous = server
+        server = null
+        Thread {
+            previous?.stopAndWait()
+            synchronized(this) {
+                if (instance === this && getSharedPreferences(PREFS, MODE_PRIVATE)
+                        .getBoolean(KEY_REMOTE_ENABLED, true)) startServer(newPin)
+            }
+        }.apply { name = "RetroTV-PIN-Rotation"; isDaemon = true; start() }
+    }
 
     override fun onDestroy() {
         if (instance === this) instance = null
@@ -85,6 +104,16 @@ class TvRemoteBackgroundService : Service() {
         const val PREFS = "retro_remote_service"
         const val KEY_PIN = "pairing_pin"
         const val KEY_STATUS = "server_status"
+        const val KEY_REMOTE_ENABLED = "remote_enabled"
+
+        fun regeneratePin(context: android.content.Context): String {
+            val prefs = context.getSharedPreferences(PREFS, MODE_PRIVATE)
+            val pin = (SecureRandom().nextInt(900_000) + 100_000).toString()
+            prefs.edit().putString(KEY_PIN, pin).putBoolean(KEY_REMOTE_ENABLED, true).apply()
+            instance?.restartServer(pin)
+            return pin
+        }
+
         private const val CHANNEL_ID = "retrotv_remote_service"
         private const val NOTIFICATION_ID = 8899
     }
