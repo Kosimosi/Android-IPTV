@@ -37,6 +37,9 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import com.retro.iptv.remote.IrRemoteManager
+import com.retro.iptv.remote.IrdbFetcher
+import com.retro.iptv.remote.IrdbEntry
+import com.retro.iptv.remote.IrdbCode
 import com.retro.iptv.remote.DeviceCategory
 import com.retro.iptv.remote.IrProfile
 import com.retro.iptv.remote.BluetoothHidRemoteManager
@@ -75,6 +78,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -87,6 +91,7 @@ import androidx.compose.ui.window.Dialog
 import com.retro.iptv.remote.MobileRemoteClient
 import com.retro.iptv.remote.RemoteProtocol
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.json.JSONObject
 
 private data class RemoteChannel(
@@ -250,6 +255,7 @@ class RemoteActivity : ComponentActivity() {
             "HOME" -> btHidManager.sendConsumerUsage(0x0223)
             "VOL_UP" -> btHidManager.sendConsumerUsage(0x00E9)
             "VOL_DOWN" -> btHidManager.sendConsumerUsage(0x00EA)
+            "POWER" -> btHidManager.sendConsumerUsage(0x0030)
             "MUTE" -> btHidManager.sendConsumerUsage(0x00E2)
             "ENTER" -> btHidManager.sendEnter()
             "BACKSPACE" -> btHidManager.sendBackspace()
@@ -345,6 +351,15 @@ private fun RemoteControlScreen(
     var scanStartedPin by androidx.compose.runtime.remember { mutableStateOf("") }
     var irFeedback by androidx.compose.runtime.remember { mutableStateOf("") }
     var irTestFeedback by androidx.compose.runtime.remember { mutableStateOf("") }
+    val irdbFetcher = androidx.compose.runtime.remember { IrdbFetcher(context) }
+    val coroutineScope = rememberCoroutineScope()
+    var irdbEntries by androidx.compose.runtime.remember { mutableStateOf<List<IrdbEntry>>(emptyList()) }
+    var irdbCodes by androidx.compose.runtime.remember { mutableStateOf<List<IrdbCode>>(emptyList()) }
+    var irdbPickerOpen by androidx.compose.runtime.remember { mutableStateOf(false) }
+    var irdbSearch by androidx.compose.runtime.remember { mutableStateOf("") }
+    var irdbLoading by androidx.compose.runtime.remember { mutableStateOf(false) }
+    var irdbStatus by androidx.compose.runtime.remember { mutableStateOf("") }
+    var selectedIrdbLabel by androidx.compose.runtime.remember { mutableStateOf("") }
     androidx.compose.runtime.LaunchedEffect(Unit) {
         selectedCategory = irRemoteManager.selectedCategory
         selectedProfile = irRemoteManager.selectedProfile
@@ -365,17 +380,33 @@ private fun RemoteControlScreen(
     var searchText by androidx.compose.runtime.remember { mutableStateOf("") }
     var searchStarted by androidx.compose.runtime.remember { mutableStateOf(false) }
     var retroActionsOpen by androidx.compose.runtime.remember { mutableStateOf(false) }
-    // This build exposes IR Power/Source only; no model-verified IR D-pad codes exist yet.
-    val irDpadActive = false
-    val dpadEnabled = btHidConnected || (connected && inRetroTv)
+    val dpadEnabled = btHidConnected || (connected && inRetroTv) || irBlasterDetected
+
+    // Bluetooth HID is authoritative whenever connected. IR is strictly a fallback,
+    // and the selected IRDB model is checked before the built-in brand profile.
+    fun sendIrAction(action: String): Boolean {
+        if (btHidConnected || !irBlasterDetected) return false
+        val databaseCode = IrdbFetcher.findCode(irdbCodes, action)
+        if (databaseCode != null && irRemoteManager.transmitIrdbCode(databaseCode)) {
+            irdbStatus = "IRDB · " + selectedIrdbLabel + " · " + action + " sent"
+            return true
+        }
+        val sent = irRemoteManager.sendKey(action, selectedProfile)
+        if (sent) irdbStatus = "Built-in " + selectedProfile.label + " IR · " + action + " sent"
+        else if (databaseCode != null) irdbStatus = "IRDB protocol " + databaseCode.protocol + " is not supported yet"
+        else if (irdbCodes.isNotEmpty()) irdbStatus = "No " + action + " code in selected IRDB model"
+        return sent
+    }
 
     fun sendDpad(action: String) {
         if (btHidConnected) onHidAction(action)
-        else if (connected) onSend(RemoteProtocol.CMD_DPAD, action)
+        else if (connected && inRetroTv) onSend(RemoteProtocol.CMD_DPAD, action)
+        else sendIrAction(action)
     }
     fun sendTransport(hidAction: String, command: String, value: String) {
         if (btHidConnected) onHidAction(hidAction)
-        else if (connected) onSend(command, value)
+        else if (connected && inRetroTv) onSend(command, value)
+        else sendIrAction(hidAction)
     }
 
     LaunchedEffect(searchText, connected, searchStarted) {
@@ -438,7 +469,7 @@ private fun RemoteControlScreen(
                         }
                     }
                     RemoteActionButton("TEST POWER", modifier = Modifier.fillMaxWidth(), enabled = true) {
-                        irTestFeedback = if (irRemoteManager.transmitPower(selectedProfile)) {
+                        irTestFeedback = if (sendIrAction("POWER")) {
                             "IR signal sent. Check whether your TV responds."
                         } else {
                             "IR transmission failed. Check the phone's IR hardware."
@@ -519,10 +550,13 @@ private fun RemoteControlScreen(
                 }
             }
             RemoteIconButton(Icons.Rounded.PowerSettingsNew, "Power", tint = Color(0xFFE11D48), enabled = true) {
-                if (irRemoteManager.hasIrBlaster()) {
-                    irFeedback = if (irRemoteManager.transmitPower(selectedProfile)) "IR power signal sent · check TV response" else "IR transmission failed"
+                if (btHidConnected) {
+                    onHidAction("POWER")
+                } else if (connected) {
+                    onSend(RemoteProtocol.CMD_MEDIA, "WAKE_SLEEP")
+                } else {
+                    irFeedback = if (sendIrAction("POWER")) "IR power signal sent · check TV response" else "IR transmission failed"
                 }
-                if (connected) onSend(RemoteProtocol.CMD_MEDIA, "WAKE_SLEEP")
             }
             if (hasIrEmitter) {
                 RemoteIconButton(Icons.Rounded.Menu, "TV source/input", tint = Color(0xFFE5E5EA), enabled = true) {
@@ -599,7 +633,77 @@ private fun RemoteControlScreen(
                                 )
                             }
                         }
+                        RemoteActionButton(
+                            if (irdbLoading && irdbEntries.isEmpty()) "Loading IRDB…" else "More Brands (IRDB)",
+                            modifier = Modifier.fillMaxWidth(), enabled = !irdbLoading
+                        ) {
+                            irdbLoading = true
+                            coroutineScope.launch {
+                                runCatching { if (irdbEntries.isEmpty()) irdbFetcher.fetchIndex() else irdbEntries }
+                                    .onSuccess { irdbEntries = it; irdbPickerOpen = true; irdbSearch = "" }
+                                    .onFailure { irdbStatus = "IRDB index unavailable: ${it.message}" }
+                                irdbLoading = false
+                            }
+                        }
+                        if (selectedIrdbLabel.isNotBlank()) Text("IRDB DEVICE · $selectedIrdbLabel", color = Color(0xFF45D483), fontSize = 10.sp)
+                        if (irdbStatus.isNotBlank()) Text(irdbStatus, color = WarmAshMuted, fontSize = 10.sp)
                         if (irFeedback.isNotBlank()) Text(irFeedback, color = WarmAshMuted, fontSize = 10.sp)
+                    }
+                }
+            }
+        }
+
+        if (irdbPickerOpen) {
+            Dialog(onDismissRequest = { irdbPickerOpen = false }) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = OakSurface),
+                    shape = RoundedCornerShape(18.dp)
+                ) {
+                    Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text("IRDB BRANDS & MODELS", color = Color.White, fontWeight = FontWeight.Black, fontSize = 14.sp)
+                        OutlinedTextField(
+                            value = irdbSearch, onValueChange = { irdbSearch = it },
+                            modifier = Modifier.fillMaxWidth(), singleLine = true,
+                            label = { Text("Search brand, device type or model") },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = Color.White, unfocusedTextColor = Color.White,
+                                cursorColor = FocusRed, focusedBorderColor = FocusRed,
+                                unfocusedBorderColor = Color.White.copy(alpha = .25f),
+                                focusedLabelColor = FocusRed, unfocusedLabelColor = WarmAshMuted
+                            )
+                        )
+                        Text("${irdbEntries.size} IRDB device profiles · select a model CSV", color = WarmAshMuted, fontSize = 10.sp)
+                        LazyColumn(Modifier.fillMaxWidth().height(340.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            items(
+                                irdbEntries.filter {
+                                    "${it.brand} ${it.deviceType} ${it.model}".contains(irdbSearch, ignoreCase = true)
+                                }.take(500),
+                                key = { it.filePath }
+                            ) { entry ->
+                                Text(
+                                    entry.displayName,
+                                    color = Color.White, fontSize = 12.sp,
+                                    modifier = Modifier.fillMaxWidth().clickable {
+                                        irdbPickerOpen = false
+                                        irdbLoading = true
+                                        selectedIrdbLabel = entry.displayName
+                                        coroutineScope.launch {
+                                            runCatching { irdbFetcher.loadCodes(entry) }
+                                                .onSuccess {
+                                                    irdbCodes = it
+                                                    irdbStatus = "Loaded ${it.size} IR codes from ${entry.filePath}"
+                                                }
+                                                .onFailure { irdbStatus = "Could not load IRDB CSV: ${it.message}" }
+                                            irdbLoading = false
+                                        }
+                                    }.padding(vertical = 9.dp, horizontal = 6.dp)
+                                )
+                            }
+                        }
+                        RemoteActionButton("CLOSE", modifier = Modifier.fillMaxWidth(), enabled = true) {
+                            irdbPickerOpen = false
+                        }
                     }
                 }
             }
@@ -634,7 +738,7 @@ private fun RemoteControlScreen(
                     RemoteIconButton(Icons.Rounded.KeyboardArrowDown, "Down", Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp), tint = if (dpadEnabled) Color(0xFFF4F4F6) else WarmAshMuted.copy(alpha = .38f), enabled = dpadEnabled) { sendDpad("DOWN") }
                     RemoteIconButton(Icons.Rounded.KeyboardArrowLeft, "Left", Modifier.align(Alignment.CenterStart).padding(start = 8.dp), tint = if (dpadEnabled) Color(0xFFF4F4F6) else WarmAshMuted.copy(alpha = .38f), enabled = dpadEnabled) { sendDpad("LEFT") }
                     RemoteIconButton(Icons.Rounded.KeyboardArrowRight, "Right", Modifier.align(Alignment.CenterEnd).padding(end = 8.dp), tint = if (dpadEnabled) Color(0xFFF4F4F6) else WarmAshMuted.copy(alpha = .38f), enabled = dpadEnabled) { sendDpad("RIGHT") }
-                    Box(Modifier.size(76.dp).background(Color(0xFFE11D48), CircleShape).clickable(enabled = connected || btHidConnected) {
+                    Box(Modifier.size(76.dp).background(Color(0xFFE11D48), CircleShape).clickable(enabled = connected || btHidConnected || irBlasterDetected) {
                         view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                         sendDpad("OK")
                     }, contentAlignment = Alignment.Center) {
@@ -716,16 +820,16 @@ private fun RemoteControlScreen(
 
         // Ergonomic transport row.
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            RemoteIconTextButton(Icons.Rounded.ArrowBack, "BACK", Modifier.weight(1f), connected || btHidConnected) { sendTransport("BACK", RemoteProtocol.CMD_DPAD, "BACK") }
+            RemoteIconTextButton(Icons.Rounded.ArrowBack, "BACK", Modifier.weight(1f), connected || btHidConnected || irBlasterDetected) { sendTransport("BACK", RemoteProtocol.CMD_DPAD, "BACK") }
             Spacer(Modifier.width(8.dp))
-            RemoteIconTextButton(Icons.Rounded.Home, "HOME", Modifier.weight(1.35f).height(54.dp), connected || btHidConnected) { sendTransport("HOME", RemoteProtocol.CMD_DPAD, "HOME") }
+            RemoteIconTextButton(Icons.Rounded.Home, "HOME", Modifier.weight(1.35f).height(54.dp), connected || btHidConnected || irBlasterDetected) { sendTransport("HOME", RemoteProtocol.CMD_DPAD, "HOME") }
             Spacer(Modifier.width(8.dp))
             RemoteIconTextButton(Icons.Rounded.Menu, "MENU", Modifier.weight(1f), connected) { mode = "LIVE" }
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
-            RemoteIconTextButton(Icons.Rounded.VolumeOff, "MUTE", Modifier.weight(.9f), connected || btHidConnected) { sendTransport("MUTE", RemoteProtocol.CMD_MEDIA, "MUTE") }
-            RemoteIconTextButton(Icons.Rounded.VolumeDown, "VOL −", Modifier.weight(1.1f), connected || btHidConnected) { sendTransport("VOL_DOWN", RemoteProtocol.CMD_MEDIA, "VOL_DOWN") }
-            RemoteIconTextButton(Icons.Rounded.VolumeUp, "VOL +", Modifier.weight(1.1f), connected || btHidConnected) { sendTransport("VOL_UP", RemoteProtocol.CMD_MEDIA, "VOL_UP") }
+            RemoteIconTextButton(Icons.Rounded.VolumeOff, "MUTE", Modifier.weight(.9f), connected || btHidConnected || irBlasterDetected) { sendTransport("MUTE", RemoteProtocol.CMD_MEDIA, "MUTE") }
+            RemoteIconTextButton(Icons.Rounded.VolumeDown, "VOL −", Modifier.weight(1.1f), connected || btHidConnected || irBlasterDetected) { sendTransport("VOL_DOWN", RemoteProtocol.CMD_MEDIA, "VOL_DOWN") }
+            RemoteIconTextButton(Icons.Rounded.VolumeUp, "VOL +", Modifier.weight(1.1f), connected || btHidConnected || irBlasterDetected) { sendTransport("VOL_UP", RemoteProtocol.CMD_MEDIA, "VOL_UP") }
             RemoteIconTextButton(Icons.Rounded.Keyboard, "KEYS", Modifier.weight(.9f), connected || btHidConnected) { keyboardOpen = !keyboardOpen }
         }
 
