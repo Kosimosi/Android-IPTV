@@ -151,6 +151,7 @@ class RemoteActivity : ComponentActivity() {
                 resolution = resolution.value,
                 channels = channelItems,
                 onDiscover = { remoteClient.startDiscovery(pairingPin.value) },
+                onDiscoveryTimeout = { remoteClient.cancelDiscovery() },
                 onManualConnect = { connectManual() },
                 onSend = { command, value -> remoteClient.sendCommand(command, value) },
                 onDisconnect = { remoteClient.stop() },
@@ -231,6 +232,7 @@ private fun RemoteControlScreen(
     resolution: String,
     channels: List<RemoteChannel>,
     onDiscover: () -> Unit,
+    onDiscoveryTimeout: () -> Unit,
     onManualConnect: () -> Unit,
     onSend: (String, String) -> Unit,
     onDisconnect: () -> Unit,
@@ -259,7 +261,10 @@ private fun RemoteControlScreen(
             manualConnectVisible = false
             onDiscover()
             delay(4000)
-            if (!connected) manualConnectVisible = true
+            if (!connected) {
+                onDiscoveryTimeout()
+                manualConnectVisible = true
+            }
         }
     }
     var keyboardOpen by androidx.compose.runtime.remember { mutableStateOf(false) }
