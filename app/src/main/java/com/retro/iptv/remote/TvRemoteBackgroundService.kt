@@ -7,6 +7,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.os.Build
+import android.media.AudioManager
 import android.os.IBinder
 import com.retro.iptv.MainActivity
 import com.retro.iptv.R
@@ -45,7 +46,9 @@ class TvRemoteBackgroundService : Service() {
             pairingCode = pin,
             stateProvider = RemoteCommandBridge::state,
             onCommandReceived = { command, value ->
-                if (command == RemoteProtocol.CMD_LAUNCH_RETROTV && value in RemoteProtocol.launchTargets) {
+                if (command == RemoteProtocol.CMD_MEDIA && value in setOf("VOL_UP", "VOL_DOWN", "MUTE")) {
+                    adjustGlobalMusicVolume(value)
+                } else if (command == RemoteProtocol.CMD_LAUNCH_RETROTV && value in RemoteProtocol.launchTargets) {
                     if (value == RemoteProtocol.TARGET_YOUTUBE) {
                         packageManager.getLaunchIntentForPackage("com.google.android.youtube.tv")?.let { launch ->
                             launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -66,6 +69,18 @@ class TvRemoteBackgroundService : Service() {
             },
             onStatusChanged = { status -> prefs.edit().putString(KEY_STATUS, status).apply() }
         ).also { it.start() }
+    }
+
+    private fun adjustGlobalMusicVolume(command: String) {
+        val audioManager = getSystemService(AUDIO_SERVICE) as? AudioManager ?: return
+        val direction = when (command) {
+            "VOL_UP" -> AudioManager.ADJUST_RAISE
+            "VOL_DOWN" -> AudioManager.ADJUST_LOWER
+            else -> AudioManager.ADJUST_TOGGLE_MUTE
+        }
+        runCatching {
+            audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, direction, 0)
+        }
     }
 
     private fun restartServer(newPin: String) {
