@@ -30,7 +30,8 @@ class IrRemoteManager(context: Context) {
         val frame = when (brand) {
             TvBrand.SAMSUNG -> necFrame(0xE0, 0xE0, 0x40)
             TvBrand.LG -> necFrame(0x20, 0xDF, 0x10)
-            TvBrand.WALTON, TvBrand.XIAOMI, TvBrand.HISENSE -> necFrame(0x00, 0xFF, 0x02)
+            TvBrand.WALTON, TvBrand.XIAOMI -> necFrame(0x00, 0xFF, 0x02)
+            TvBrand.HISENSE -> rc5Frame(address = 0, command = 0x0C)
             TvBrand.SONY -> sonySirc12(0xA90)
         }
         return transmitValidated(frame.first, frame.second)
@@ -59,6 +60,31 @@ class IrRemoteManager(context: Context) {
         }
         pulses += 560
         return 38_000 to pulses.toIntArray()
+    }
+
+    private fun rc5Frame(address: Int, command: Int): Pair<Int, IntArray> {
+        val field = if (command < 0x40) 1 else 0
+        val frame = (1 shl 13) or (1 shl 12) or (field shl 11) or
+            ((address and 0x1F) shl 6) or (command and 0x3F)
+        val levels = ArrayList<Boolean>(28)
+        for (bit in 13 downTo 0) {
+            val one = ((frame shr bit) and 1) == 1
+            levels += one
+            levels += !one
+        }
+        val pulses = ArrayList<Int>(28)
+        var current = levels.first()
+        var duration = 889
+        for (index in 1 until levels.size) {
+            if (levels[index] == current) duration += 889
+            else {
+                pulses += duration
+                duration = 889
+                current = levels[index]
+            }
+        }
+        pulses += duration
+        return 36_000 to pulses.toIntArray()
     }
 
     private fun sonySirc12(command: Int): Pair<Int, IntArray> {
