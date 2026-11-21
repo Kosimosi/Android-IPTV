@@ -107,6 +107,15 @@ class RemoteActivity : ComponentActivity() {
         if (grants.values.all { it }) enableBluetoothHid()
         else btHidStatus.value = "Bluetooth permissions are required for HID remote"
     }
+    private val discoverableLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == RESULT_OK) {
+            btHidManager.initialize()
+            btHidManager.connectFirstPairedHost()
+            btHidStatus.value = "Phone discoverable · select RETROTV Remote in TV Bluetooth settings"
+        } else {
+            btHidStatus.value = "Bluetooth pairing was cancelled"
+        }
+    }
     private val connectionStatus = mutableStateOf("Enter the TV pairing PIN, then find your TV.")
     private val connected = mutableStateOf(false)
     private val hasIrEmitter = mutableStateOf(false)
@@ -225,15 +234,8 @@ class RemoteActivity : ComponentActivity() {
     }
 
     private fun enableBluetoothHid() {
-        val initialized = btHidManager.initialize()
-        if (!initialized) {
-            btHidStatus.value = "Bluetooth HID profile unavailable on this phone"
-            return
-        }
-        runCatching { startActivity(btHidManager.requestDiscoverableIntent()) }
-            .onFailure { btHidStatus.value = "Could not open Bluetooth pairing prompt" }
-        btHidManager.connectFirstPairedHost()
-        btHidStatus.value = "Discoverable for 5 minutes · pair RETROTV Remote from TV Bluetooth settings"
+        runCatching { discoverableLauncher.launch(btHidManager.requestDiscoverableIntent()) }
+            .onFailure { btHidStatus.value = "Bluetooth HID profile or discoverability is unavailable on this phone" }
     }
 
     private fun sendHidAction(action: String): Boolean {
