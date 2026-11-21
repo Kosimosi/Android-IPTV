@@ -196,9 +196,14 @@ private fun RemoteControlScreen(
     var isPairingExpanded by androidx.compose.runtime.remember { mutableStateOf(false) }
     var discoveryAttempt by androidx.compose.runtime.remember { mutableIntStateOf(0) }
     var selectedBrand by androidx.compose.runtime.remember { mutableStateOf(TvBrand.WALTON) }
+    var showBrandPicker by androidx.compose.runtime.remember { mutableStateOf(false) }
+    var irFeedback by androidx.compose.runtime.remember { mutableStateOf("") }
     val context = LocalContext.current
     val irRemoteManager = androidx.compose.runtime.remember { IrRemoteManager(context) }
-    androidx.compose.runtime.LaunchedEffect(Unit) { selectedBrand = irRemoteManager.getSelectedBrand() }
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        selectedBrand = irRemoteManager.getSelectedBrand()
+        showBrandPicker = hasIrEmitter && !irRemoteManager.hasSavedBrand()
+    }
     androidx.compose.runtime.LaunchedEffect(discoveryAttempt) {
         if (discoveryAttempt > 0) {
             delay(3500)
@@ -243,8 +248,14 @@ private fun RemoteControlScreen(
                 }
             }
             RemoteIconButton(Icons.Rounded.PowerSettingsNew, "Power", tint = Color(0xFFE11D48), enabled = true) {
-                if (irRemoteManager.hasIrBlaster()) irRemoteManager.sendPowerToggle()
-                else onSend(RemoteProtocol.CMD_MEDIA, "POWER")
+                if (irRemoteManager.hasIrBlaster()) {
+                    irFeedback = if (irRemoteManager.sendPowerToggle(selectedBrand)) "IR power command sent · check TV response" else "IR transmission failed"
+                } else onSend(RemoteProtocol.CMD_MEDIA, "POWER")
+            }
+            if (hasIrEmitter) {
+                RemoteIconButton(Icons.Rounded.Menu, "TV source/input", tint = Color(0xFFE5E5EA), enabled = true) {
+                    irFeedback = if (irRemoteManager.sendSourceInput(selectedBrand)) "IR source command sent · check TV response" else "IR transmission failed"
+                }
             }
             RemoteIconButton(Icons.Rounded.Tune, "Pairing settings", tint = Color(0xFFE5E5EA), enabled = true) {
                 isPairingExpanded = !isPairingExpanded
@@ -297,9 +308,37 @@ private fun RemoteControlScreen(
                                 )
                             }
                         }
+                        if (irFeedback.isNotBlank()) Text(irFeedback, color = WarmAshMuted, fontSize = 10.sp)
                     }
                 }
             }
+        }
+
+        if (showBrandPicker) {
+            AlertDialog(
+                onDismissRequest = { showBrandPicker = false },
+                title = { Text("Choose your TV brand") },
+                text = { Text("RETROTV detected an IR blaster. Select your television brand to configure Power and Source commands.") },
+                confirmButton = {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        TvBrand.values().toList().chunked(3).forEach { rowBrands ->
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                rowBrands.forEach { brand ->
+                                    FilterChip(
+                                        selected = selectedBrand == brand,
+                                        onClick = {
+                                            selectedBrand = brand
+                                            irRemoteManager.setSelectedBrand(brand)
+                                            showBrandPicker = false
+                                        },
+                                        label = { Text(brand.label, fontSize = 11.sp) }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            )
         }
 
         if (connected) {

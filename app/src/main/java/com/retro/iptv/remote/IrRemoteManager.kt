@@ -5,7 +5,7 @@ import android.hardware.ConsumerIrManager
 
 enum class TvBrand(val label: String) {
     WALTON("Walton"), SAMSUNG("Samsung"), LG("LG"),
-    SONY("Sony"), XIAOMI("Xiaomi"), HISENSE("Hisense")
+    SONY("Sony"), XIAOMI("Xiaomi"), HISENSE("Hisense"), GENERIC("Generic")
 }
 
 class IrRemoteManager(context: Context) {
@@ -21,6 +21,8 @@ class IrRemoteManager(context: Context) {
         return TvBrand.values().firstOrNull { it.name == saved } ?: TvBrand.WALTON
     }
 
+    fun hasSavedBrand(): Boolean = preferences.contains(KEY_BRAND)
+
     fun setSelectedBrand(brand: TvBrand) {
         preferences.edit().putString(KEY_BRAND, brand.name).apply()
     }
@@ -33,6 +35,19 @@ class IrRemoteManager(context: Context) {
             TvBrand.WALTON, TvBrand.XIAOMI -> necFrame(0x00, 0xFF, 0x02)
             TvBrand.HISENSE -> rc5Frame(address = 0, command = 0x0C)
             TvBrand.SONY -> sonySirc12(0xA90)
+            TvBrand.GENERIC -> necFrame(0x00, 0xFF, 0x02)
+        }
+        return transmitValidated(frame.first, frame.second)
+    }
+
+    /** Best-effort source/input key; exact command sets can vary by TV model. */
+    fun sendSourceInput(brand: TvBrand = getSelectedBrand()): Boolean {
+        val frame = when (brand) {
+            TvBrand.SAMSUNG -> necFrame(0xE0, 0xE0, 0x1A)
+            TvBrand.LG -> necFrame(0x20, 0xDF, 0x0B)
+            TvBrand.WALTON, TvBrand.XIAOMI, TvBrand.GENERIC -> necFrame(0x00, 0xFF, 0x1A)
+            TvBrand.HISENSE -> rc5Frame(address = 0, command = 0x38)
+            TvBrand.SONY -> sonySirc12(0xA50)
         }
         return transmitValidated(frame.first, frame.second)
     }
