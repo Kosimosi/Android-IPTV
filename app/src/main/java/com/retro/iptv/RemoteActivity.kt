@@ -99,6 +99,8 @@ class RemoteActivity : ComponentActivity() {
     private val tvName = mutableStateOf("")
     private val pairingPin = mutableStateOf("")
     private val manualAddress = mutableStateOf("")
+    private val isRemoteSetupComplete = mutableStateOf(false)
+    private val inRetroTv = mutableStateOf(true)
     private val currentChannel = mutableIntStateOf(-1)
     private val resolution = mutableStateOf("")
     private val channelItems = mutableStateListOf<RemoteChannel>()
@@ -106,6 +108,14 @@ class RemoteActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         hasIrEmitter.value = (getSystemService(android.content.Context.CONSUMER_IR_SERVICE) as? android.hardware.ConsumerIrManager)?.hasIrEmitter() == true
+        val setupPrefs = getSharedPreferences(REMOTE_SETUP_PREFS, MODE_PRIVATE)
+        isRemoteSetupComplete.value = setupPrefs.getBoolean(KEY_SETUP_COMPLETE, false)
+        pairingPin.value = setupPrefs.getString(KEY_SAVED_TV_PIN, "").orEmpty()
+        val savedIp = setupPrefs.getString(KEY_SAVED_TV_IP, "").orEmpty()
+        val savedPort = setupPrefs.getInt(KEY_SAVED_TV_PORT, 8899)
+        manualAddress.value = savedIp.takeIf { it.isNotBlank() }?.let { host ->
+            if (host.contains(":")) "[$host]:$savedPort" else "$host:$savedPort"
+        }.orEmpty()
         remoteClient = MobileRemoteClient(
             context = this,
             onConnectionStateChanged = { isConnected, name ->
@@ -113,13 +123,25 @@ class RemoteActivity : ComponentActivity() {
                 connectionStatus.value = name ?: if (isConnected) "Connected" else connectionStatus.value
                 if (isConnected) tvName.value = name.orEmpty()
             },
-            onStateReceived = ::applyRemoteState
+            onStateReceived = ::applyRemoteState,
+            onConnectionDetails = { host, port, pin ->
+                setupPrefs.edit()
+                    .putBoolean(KEY_SETUP_COMPLETE, true)
+                    .putString(KEY_SAVED_TV_IP, host)
+                    .putInt(KEY_SAVED_TV_PORT, port)
+                    .putString(KEY_SAVED_TV_PIN, pin)
+                    .putString(KEY_SAVED_TV_BRAND, com.retro.iptv.remote.IrRemoteManager(this).getSelectedBrand().name)
+                    .apply()
+                isRemoteSetupComplete.value = true
+            }
         )
         setContent {
             RemoteControlScreen(
                 connectionStatus = connectionStatus.value,
                 connected = connected.value,
                 hasIrEmitter = hasIrEmitter.value,
+                setupComplete = isRemoteSetupComplete.value,
+                inRetroTv = inRetroTv.value,
                 tvName = tvName.value,
                 pairingPin = pairingPin.value,
                 onPinChange = { pairingPin.value = it.filter(Char::isDigit).take(6) },
@@ -134,6 +156,17 @@ class RemoteActivity : ComponentActivity() {
                 onDisconnect = { remoteClient.stop() },
                 onBack = { finish() }
             )
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        if (isRemoteSetupComplete.value && !connected.value) {
+            val prefs = getSharedPreferences(REMOTE_SETUP_PREFS, MODE_PRIVATE)
+            val host = prefs.getString(KEY_SAVED_TV_IP, "").orEmpty()
+            val port = prefs.getInt(KEY_SAVED_TV_PORT, 8899)
+            val pin = prefs.getString(KEY_SAVED_TV_PIN, "").orEmpty()
+            if (host.isNotBlank() && pin.length == 6) remoteClient.connectManual(host, port, pin)
         }
     }
 
@@ -152,6 +185,7 @@ class RemoteActivity : ComponentActivity() {
     private fun applyRemoteState(raw: String) {
         runCatching {
             val json = JSONObject(raw)
+            inRetroTv.value = json.optBoolean("inRetroTv", true)
             currentChannel.intValue = json.optInt("currentChannel", -1)
             resolution.value = json.optString("resolution").takeIf { it.isNotBlank() }.orEmpty()
             val array = json.optJSONArray("channels") ?: return
@@ -170,6 +204,15 @@ class RemoteActivity : ComponentActivity() {
             channelItems.addAll(updated)
         }
     }
+
+    companion object {
+        private const val REMOTE_SETUP_PREFS = "retro_mobile_remote_setup"
+        private const val KEY_SETUP_COMPLETE = "isRemoteSetupComplete"
+        private const val KEY_SAVED_TV_IP = "savedTvIp"
+        private const val KEY_SAVED_TV_PIN = "savedTvPin"
+        private const val KEY_SAVED_TV_BRAND = "savedTvBrand"
+        private const val KEY_SAVED_TV_PORT = "savedTvPort"
+    }
 }
 
 @Composable
@@ -177,6 +220,8 @@ private fun RemoteControlScreen(
     connectionStatus: String,
     connected: Boolean,
     hasIrEmitter: Boolean,
+    setupComplete: Boolean,
+    inRetroTv: Boolean,
     tvName: String,
     pairingPin: String,
     onPinChange: (String) -> Unit,
