@@ -73,7 +73,7 @@ class IrRemoteManager(context: Context) {
         }
         if (profile == IrProfile.XIAOMI_TV) {
             return transmitValidated(XIAOMI_CARRIER_HZ, buildXiaomi20BitFrame(0x3C, 0xCC)) ||
-                transmitValidated(CARRIER_HZ, buildNecFrame(0x00FF, 0x12))
+                transmitValidated(CARRIER_HZ, buildExtendedNecFrame(0x00FF, 0x12))
         }
         val frames = when (profile) {
             IrProfile.SAMSUNG -> listOf(CARRIER_HZ to buildSamsungNecxFrame(0xE0E0, 0x99))
@@ -85,8 +85,8 @@ class IrRemoteManager(context: Context) {
                 CARRIER_HZ to buildExtendedNecFrame(0x807F, 0x4D)
             )
             IrProfile.MI_BOX -> emptyList()
-            IrProfile.MXQ_TX3 -> listOf(CARRIER_HZ to buildNecFrame(0x00FF, 0x12))
-            IrProfile.MECOOL -> listOf(CARRIER_HZ to buildNecFrame(0x00FF, 0x0A))
+            IrProfile.MXQ_TX3 -> listOf(CARRIER_HZ to buildExtendedNecFrame(0x00FF, 0x12))
+            IrProfile.MECOOL -> listOf(CARRIER_HZ to buildExtendedNecFrame(0x00FF, 0x0A))
             IrProfile.GENERIC_NEC -> listOf(CARRIER_HZ to buildExtendedNecFrame(0x00FF, 0x00))
         }
         return frames.map { (frequency, pattern) -> transmitValidated(frequency, pattern) }.any { it }
@@ -97,7 +97,7 @@ class IrRemoteManager(context: Context) {
         val frame = when (profile) {
             IrProfile.SAMSUNG -> CARRIER_HZ to buildSamsungNecxFrame(0xE0E0, 0x80)
             IrProfile.SONY -> 40_000 to buildSonyFrame(command = 0x50, address = 0x01)
-            IrProfile.WALTON, IrProfile.LG -> CARRIER_HZ to buildNecFrame(0x04FB, 0x1A)
+            IrProfile.WALTON, IrProfile.LG -> CARRIER_HZ to buildExtendedNecFrame(0x04FB, 0x1A)
             else -> CARRIER_HZ to buildExtendedNecFrame(0x00FF, 0x1A)
         }
         return transmitValidated(frame.first, frame.second)
