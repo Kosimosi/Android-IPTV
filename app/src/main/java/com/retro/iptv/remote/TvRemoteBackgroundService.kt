@@ -109,7 +109,7 @@ class TvRemoteBackgroundService : Service() {
         fun regeneratePin(context: android.content.Context): String {
             val prefs = context.getSharedPreferences(PREFS, MODE_PRIVATE)
             val pin = (SecureRandom().nextInt(900_000) + 100_000).toString()
-            prefs.edit().putString(KEY_PIN, pin).putBoolean(KEY_REMOTE_ENABLED, true).apply()
+            prefs.edit().putString(KEY_PIN, pin).apply()
             instance?.restartServer(pin)
             return pin
         }
