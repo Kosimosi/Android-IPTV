@@ -133,21 +133,22 @@ class IrRemoteManager(context: Context) {
         val builtin = when (profile) {
             IrProfile.WALTON, IrProfile.LG -> {
                 val command = when (key) {
-                    "UP" -> 0x40; "DOWN" -> 0x41; "LEFT" -> 0x07; "RIGHT" -> 0x06
+                    "POWER" -> 0x08; "UP" -> 0x40; "DOWN" -> 0x41; "LEFT" -> 0x07; "RIGHT" -> 0x06
                     "OK" -> 0x44; "BACK" -> 0x28; "HOME" -> 0x7C
                     "VOL_UP" -> 0x02; "VOL_DOWN" -> 0x03; "MUTE" -> 0x09
                     else -> null
                 } ?: return false
-                CARRIER_HZ to buildExtendedNecFrame(0x04FB, command)
+                CARRIER_HZ to buildNecFrame(0x04FB, command)
             }
             IrProfile.AOSP_BOX, IrProfile.MXQ_TX3, IrProfile.MECOOL, IrProfile.GENERIC_NEC -> {
                 val command = when (key) {
+                    "POWER" -> if (profile == IrProfile.AOSP_BOX) 0x0A else 0x12
                     "UP" -> 0x40; "DOWN" -> 0x41; "LEFT" -> 0x07; "RIGHT" -> 0x06
                     "OK" -> 0x44; "BACK" -> 0x28; "HOME" -> 0x7C
                     "VOL_UP" -> 0x02; "VOL_DOWN" -> 0x03; "MUTE" -> 0x09
                     else -> null
                 } ?: return false
-                CARRIER_HZ to buildExtendedNecFrame(0x00FF, command)
+                CARRIER_HZ to buildNecFrame(0x00FF, command)
             }
             IrProfile.SAMSUNG -> {
                 val command = when (key) {
@@ -170,7 +171,7 @@ class IrRemoteManager(context: Context) {
             (if (code.subdevice >= 0) (code.subdevice and 0xFF) shl 8 else 0)
         val frame = when (protocol) {
             "NEC", "NEC1", "NECEXT", "NECEXTENDED", "NECX1" ->
-                CARRIER_HZ to buildExtendedNecFrame(address16, code.function)
+                CARRIER_HZ to buildNecFrame(address16, code.function)
             "NECX2", "SAMSUNG32", "SAMSUNG" ->
                 CARRIER_HZ to buildSamsungNecxFrame(address16, code.function)
             "SONY12", "SIRC12" -> 40_000 to buildSonySircFrame(code.function, code.device, 12)
@@ -281,9 +282,8 @@ class IrRemoteManager(context: Context) {
             return pulses.toIntArray()
         }
 
-        fun buildNecFrame(address: Int, command: Int): IntArray = buildExtendedNecFrame(address, command)
-
-        private fun legacyBuildNecFrame(address: Int, command: Int): IntArray {
+        /** Legacy NEC ordering retained for existing device profiles and IRDB device/subdevice fields. */
+        fun buildNecFrame(address: Int, command: Int): IntArray {
             val pulses = ArrayList<Int>(68)
             pulses += 9000
             pulses += 4500
