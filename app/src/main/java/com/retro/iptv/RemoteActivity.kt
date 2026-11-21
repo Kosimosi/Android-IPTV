@@ -818,16 +818,16 @@ private fun RemoteControlScreen(
 
         // Ergonomic transport row.
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            RemoteIconTextButton(Icons.Rounded.ArrowBack, "BACK", Modifier.weight(1f), connected || btHidConnected) { sendTransport("BACK", RemoteProtocol.CMD_DPAD, "BACK") }
+            RemoteIconTextButton(Icons.Rounded.ArrowBack, "BACK", Modifier.weight(1f), connected || btHidConnected || irBlasterDetected) { sendTransport("BACK", RemoteProtocol.CMD_DPAD, "BACK") }
             Spacer(Modifier.width(8.dp))
-            RemoteIconTextButton(Icons.Rounded.Home, "HOME", Modifier.weight(1.35f).height(54.dp), connected || btHidConnected) { sendTransport("HOME", RemoteProtocol.CMD_DPAD, "HOME") }
+            RemoteIconTextButton(Icons.Rounded.Home, "HOME", Modifier.weight(1.35f).height(54.dp), connected || btHidConnected || irBlasterDetected) { sendTransport("HOME", RemoteProtocol.CMD_DPAD, "HOME") }
             Spacer(Modifier.width(8.dp))
             RemoteIconTextButton(Icons.Rounded.Menu, "MENU", Modifier.weight(1f), connected) { mode = "LIVE" }
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
-            RemoteIconTextButton(Icons.Rounded.VolumeOff, "MUTE", Modifier.weight(.9f), connected || btHidConnected) { sendTransport("MUTE", RemoteProtocol.CMD_MEDIA, "MUTE") }
-            RemoteIconTextButton(Icons.Rounded.VolumeDown, "VOL −", Modifier.weight(1.1f), connected || btHidConnected) { sendTransport("VOL_DOWN", RemoteProtocol.CMD_MEDIA, "VOL_DOWN") }
-            RemoteIconTextButton(Icons.Rounded.VolumeUp, "VOL +", Modifier.weight(1.1f), connected || btHidConnected) { sendTransport("VOL_UP", RemoteProtocol.CMD_MEDIA, "VOL_UP") }
+            RemoteIconTextButton(Icons.Rounded.VolumeOff, "MUTE", Modifier.weight(.9f), connected || btHidConnected || irBlasterDetected) { sendTransport("MUTE", RemoteProtocol.CMD_MEDIA, "MUTE") }
+            RemoteIconTextButton(Icons.Rounded.VolumeDown, "VOL −", Modifier.weight(1.1f), connected || btHidConnected || irBlasterDetected) { sendTransport("VOL_DOWN", RemoteProtocol.CMD_MEDIA, "VOL_DOWN") }
+            RemoteIconTextButton(Icons.Rounded.VolumeUp, "VOL +", Modifier.weight(1.1f), connected || btHidConnected || irBlasterDetected) { sendTransport("VOL_UP", RemoteProtocol.CMD_MEDIA, "VOL_UP") }
             RemoteIconTextButton(Icons.Rounded.Keyboard, "KEYS", Modifier.weight(.9f), connected || btHidConnected) { keyboardOpen = !keyboardOpen }
         }
 
