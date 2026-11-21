@@ -336,14 +336,16 @@ private fun RemoteControlScreen(
     val setupPrefs = androidx.compose.runtime.remember {
         context.getSharedPreferences("retro_mobile_remote_setup", android.content.Context.MODE_PRIVATE)
     }
-    var selectedBrand by androidx.compose.runtime.remember { mutableStateOf(TvBrand.WALTON) }
+    var selectedCategory by androidx.compose.runtime.remember { mutableStateOf(irRemoteManager.selectedCategory) }
+    var selectedProfile by androidx.compose.runtime.remember { mutableStateOf(irRemoteManager.selectedProfile) }
     var setupStep by androidx.compose.runtime.remember { mutableIntStateOf(if (irBlasterDetected) 1 else 2) }
     var manualConnectVisible by androidx.compose.runtime.remember { mutableStateOf(false) }
     var scanStartedPin by androidx.compose.runtime.remember { mutableStateOf("") }
     var irFeedback by androidx.compose.runtime.remember { mutableStateOf("") }
     var irTestFeedback by androidx.compose.runtime.remember { mutableStateOf("") }
     androidx.compose.runtime.LaunchedEffect(Unit) {
-        selectedBrand = irRemoteManager.getSelectedBrand()
+        selectedCategory = irRemoteManager.selectedCategory
+        selectedProfile = irRemoteManager.selectedProfile
     }
     androidx.compose.runtime.LaunchedEffect(pairingPin, setupStep, setupComplete, connected) {
         if (!setupComplete && setupStep == 2 && pairingPin.length == 6 && !connected && scanStartedPin != pairingPin) {
@@ -363,10 +365,19 @@ private fun RemoteControlScreen(
     var retroActionsOpen by androidx.compose.runtime.remember { mutableStateOf(false) }
     // This build exposes IR Power/Source only; no model-verified IR D-pad codes exist yet.
     val irDpadActive = false
-    val dpadEnabled = connected && (inRetroTv || irDpadActive)
+    val dpadEnabled = btHidConnected || (connected && inRetroTv)
+
+    fun sendDpad(action: String) {
+        if (btHidConnected) onHidAction(action)
+        else if (connected) onSend(RemoteProtocol.CMD_DPAD, action)
+    }
+    fun sendTransport(hidAction: String, command: String, value: String) {
+        if (btHidConnected) onHidAction(hidAction)
+        else if (connected) onSend(command, value)
+    }
 
     LaunchedEffect(searchText, connected, searchStarted) {
-        if (connected && searchStarted) {
+        if (connected && searchStarted && !btHidConnected) {
             delay(250)
             onSend(RemoteProtocol.CMD_SEARCH, searchText)
         }
@@ -394,20 +405,20 @@ private fun RemoteControlScreen(
                     Text("IR Blaster Detected", color = Color(0xFF45D483), fontSize = 17.sp, fontWeight = FontWeight.Bold)
                     Text("Select your television brand, then test the power signal.", color = WarmAshMuted, fontSize = 12.sp)
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp), modifier = Modifier.fillMaxWidth()) {
-                        items(TvBrand.values().filter { it != TvBrand.GENERIC }) { brand ->
+                        items(irRemoteManager.profilesFor(selectedCategory)) { brand ->
                             FilterChip(
-                                selected = selectedBrand == brand,
+                                selected = selectedProfile == brand,
                                 onClick = {
-                                    selectedBrand = brand
-                                    irRemoteManager.setSelectedBrand(brand)
-                                    setupPrefs.edit().putString("savedTvBrand", brand.name).apply()
+                                    selectedProfile = brand
+                                    selectedCategory = brand.category
+                                    irRemoteManager.selectedProfile = brand
                                 },
                                 label = { Text(brand.label, fontSize = 11.sp) }
                             )
                         }
                     }
                     RemoteActionButton("TEST POWER", modifier = Modifier.fillMaxWidth(), enabled = true) {
-                        irTestFeedback = if (irRemoteManager.sendPowerToggle(selectedBrand)) {
+                        irTestFeedback = if (irRemoteManager.transmitPower(selectedProfile)) {
                             "IR signal sent. Check whether your TV responds."
                         } else {
                             "IR transmission failed. Check the phone's IR hardware."
@@ -417,8 +428,7 @@ private fun RemoteControlScreen(
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         RemoteActionButton("SKIP", modifier = Modifier.weight(1f), enabled = true) { setupStep = 2 }
                         RemoteActionButton("IT WORKED → NEXT", modifier = Modifier.weight(2f), enabled = true) {
-                            irRemoteManager.setSelectedBrand(selectedBrand)
-                            setupPrefs.edit().putString("savedTvBrand", selectedBrand.name).apply()
+                            irRemoteManager.selectedProfile = selectedProfile
                             setupStep = 2
                         }
                     }
@@ -467,6 +477,7 @@ private fun RemoteControlScreen(
                             onManualConnect()
                         }
                     }
+                    RemoteActionButton("BLUETOOTH PAIR TV", modifier = Modifier.fillMaxWidth(), enabled = true, onClick = onEnableBluetooth)
                     Text(connectionStatus, color = WarmAshMuted, fontSize = 10.sp)
                 }
             }
@@ -489,12 +500,12 @@ private fun RemoteControlScreen(
             }
             RemoteIconButton(Icons.Rounded.PowerSettingsNew, "Power", tint = Color(0xFFE11D48), enabled = true) {
                 if (irRemoteManager.hasIrBlaster()) {
-                    irFeedback = if (irRemoteManager.sendPowerToggle(selectedBrand)) "IR power command sent · check TV response" else "IR transmission failed"
+                    irFeedback = if (irRemoteManager.transmitPower(selectedProfile)) "IR power command sent · check TV response" else "IR transmission failed"
                 } else onSend(RemoteProtocol.CMD_MEDIA, "POWER")
             }
             if (hasIrEmitter) {
                 RemoteIconButton(Icons.Rounded.Menu, "TV source/input", tint = Color(0xFFE5E5EA), enabled = true) {
-                    irFeedback = if (irRemoteManager.sendSourceInput(selectedBrand)) "IR source command sent · check TV response" else "IR transmission failed"
+                    irFeedback = if (irRemoteManager.sendSourceInput(selectedProfile)) "IR source command sent · check TV response" else "IR transmission failed"
                 }
             }
             RemoteIconButton(Icons.Rounded.Tune, "Pairing settings", tint = Color(0xFFE5E5EA), enabled = true) {
@@ -538,12 +549,26 @@ private fun RemoteControlScreen(
                         fontWeight = FontWeight.Bold
                     )
                     if (hasIrEmitter) {
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                            items(TvBrand.values().toList()) { brand ->
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            DeviceCategory.values().forEach { option ->
                                 FilterChip(
-                                    selected = selectedBrand == brand,
-                                    onClick = { selectedBrand = brand; irRemoteManager.setSelectedBrand(brand) },
-                                    label = { Text(brand.label, fontSize = 11.sp) }
+                                    selected = selectedCategory == option,
+                                    onClick = {
+                                        selectedCategory = option
+                                        irRemoteManager.selectedCategory = option
+                                        selectedProfile = irRemoteManager.profilesFor(option).first()
+                                        irRemoteManager.selectedProfile = selectedProfile
+                                    },
+                                    label = { Text(option.label, fontSize = 10.sp) }
+                                )
+                            }
+                        }
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                            items(irRemoteManager.profilesFor(selectedCategory)) { profile ->
+                                FilterChip(
+                                    selected = selectedProfile == profile,
+                                    onClick = { selectedProfile = profile; irRemoteManager.selectedProfile = profile },
+                                    label = { Text(profile.label, fontSize = 11.sp) }
                                 )
                             }
                         }
@@ -578,13 +603,13 @@ private fun RemoteControlScreen(
                     Modifier.size(240.dp).background(Color(0xFF16161D), CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
-                    RemoteIconButton(Icons.Rounded.KeyboardArrowUp, "Up", Modifier.align(Alignment.TopCenter).padding(top = 8.dp), tint = if (dpadEnabled) Color(0xFFF4F4F6) else WarmAshMuted.copy(alpha = .38f), enabled = dpadEnabled) { onSend(RemoteProtocol.CMD_DPAD, "UP") }
-                    RemoteIconButton(Icons.Rounded.KeyboardArrowDown, "Down", Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp), tint = if (dpadEnabled) Color(0xFFF4F4F6) else WarmAshMuted.copy(alpha = .38f), enabled = dpadEnabled) { onSend(RemoteProtocol.CMD_DPAD, "DOWN") }
-                    RemoteIconButton(Icons.Rounded.KeyboardArrowLeft, "Left", Modifier.align(Alignment.CenterStart).padding(start = 8.dp), tint = if (dpadEnabled) Color(0xFFF4F4F6) else WarmAshMuted.copy(alpha = .38f), enabled = dpadEnabled) { onSend(RemoteProtocol.CMD_DPAD, "LEFT") }
-                    RemoteIconButton(Icons.Rounded.KeyboardArrowRight, "Right", Modifier.align(Alignment.CenterEnd).padding(end = 8.dp), tint = if (dpadEnabled) Color(0xFFF4F4F6) else WarmAshMuted.copy(alpha = .38f), enabled = dpadEnabled) { onSend(RemoteProtocol.CMD_DPAD, "RIGHT") }
+                    RemoteIconButton(Icons.Rounded.KeyboardArrowUp, "Up", Modifier.align(Alignment.TopCenter).padding(top = 8.dp), tint = if (dpadEnabled) Color(0xFFF4F4F6) else WarmAshMuted.copy(alpha = .38f), enabled = dpadEnabled) { sendDpad("UP") }
+                    RemoteIconButton(Icons.Rounded.KeyboardArrowDown, "Down", Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp), tint = if (dpadEnabled) Color(0xFFF4F4F6) else WarmAshMuted.copy(alpha = .38f), enabled = dpadEnabled) { sendDpad("DOWN") }
+                    RemoteIconButton(Icons.Rounded.KeyboardArrowLeft, "Left", Modifier.align(Alignment.CenterStart).padding(start = 8.dp), tint = if (dpadEnabled) Color(0xFFF4F4F6) else WarmAshMuted.copy(alpha = .38f), enabled = dpadEnabled) { sendDpad("LEFT") }
+                    RemoteIconButton(Icons.Rounded.KeyboardArrowRight, "Right", Modifier.align(Alignment.CenterEnd).padding(end = 8.dp), tint = if (dpadEnabled) Color(0xFFF4F4F6) else WarmAshMuted.copy(alpha = .38f), enabled = dpadEnabled) { sendDpad("RIGHT") }
                     Box(Modifier.size(76.dp).background(Color(0xFFE11D48).copy(alpha = if (dpadEnabled) 1f else .35f), CircleShape).clickable(enabled = dpadEnabled) {
                         view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
-                        onSend(RemoteProtocol.CMD_DPAD, "OK")
+                        sendDpad("OK")
                     }, contentAlignment = Alignment.Center) {
                         Text("OK", color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Black)
                     }
@@ -644,8 +669,16 @@ private fun RemoteControlScreen(
 
         if (keyboardOpen) {
             OutlinedTextField(
-                value = searchText, onValueChange = { searchText = it; searchStarted = true },
-                modifier = Modifier.fillMaxWidth(), enabled = connected, singleLine = true,
+                value = searchText, onValueChange = {
+                    if (btHidConnected) {
+                        val common = searchText.zip(it).takeWhile { pair -> pair.first == pair.second }.size
+                        repeat(searchText.length - common) { onHidAction("BACKSPACE") }
+                        if (it.length > common) onTypeText(it.substring(common))
+                    }
+                    searchText = it
+                    searchStarted = true
+                },
+                modifier = Modifier.fillMaxWidth(), enabled = connected || btHidConnected, singleLine = true,
                 label = { Text("Instant channel search") },
                 colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White,
                     cursorColor = FocusRed, focusedBorderColor = FocusRed, unfocusedBorderColor = Color.White.copy(alpha = .25f),
@@ -655,17 +688,17 @@ private fun RemoteControlScreen(
 
         // Ergonomic transport row.
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            RemoteIconTextButton(Icons.Rounded.ArrowBack, "BACK", Modifier.weight(1f), connected) { onSend(RemoteProtocol.CMD_DPAD, "BACK") }
+            RemoteIconTextButton(Icons.Rounded.ArrowBack, "BACK", Modifier.weight(1f), connected || btHidConnected) { sendTransport("BACK", RemoteProtocol.CMD_DPAD, "BACK") }
             Spacer(Modifier.width(8.dp))
-            RemoteIconTextButton(Icons.Rounded.Home, "HOME", Modifier.weight(1.35f).height(54.dp), true) { onSend(RemoteProtocol.CMD_DPAD, "HOME") }
+            RemoteIconTextButton(Icons.Rounded.Home, "HOME", Modifier.weight(1.35f).height(54.dp), connected || btHidConnected) { sendTransport("HOME", RemoteProtocol.CMD_DPAD, "HOME") }
             Spacer(Modifier.width(8.dp))
             RemoteIconTextButton(Icons.Rounded.Menu, "MENU", Modifier.weight(1f), connected) { mode = "LIVE" }
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
-            RemoteIconTextButton(Icons.Rounded.VolumeOff, "MUTE", Modifier.weight(.9f), connected) { onSend(RemoteProtocol.CMD_MEDIA, "MUTE") }
-            RemoteIconTextButton(Icons.Rounded.VolumeDown, "VOL −", Modifier.weight(1.1f), connected) { onSend(RemoteProtocol.CMD_MEDIA, "VOL_DOWN") }
-            RemoteIconTextButton(Icons.Rounded.VolumeUp, "VOL +", Modifier.weight(1.1f), connected) { onSend(RemoteProtocol.CMD_MEDIA, "VOL_UP") }
-            RemoteIconTextButton(Icons.Rounded.Keyboard, "KEYS", Modifier.weight(.9f), connected) { keyboardOpen = !keyboardOpen }
+            RemoteIconTextButton(Icons.Rounded.VolumeOff, "MUTE", Modifier.weight(.9f), connected || btHidConnected) { sendTransport("MUTE", RemoteProtocol.CMD_MEDIA, "MUTE") }
+            RemoteIconTextButton(Icons.Rounded.VolumeDown, "VOL −", Modifier.weight(1.1f), connected || btHidConnected) { sendTransport("VOL_DOWN", RemoteProtocol.CMD_MEDIA, "VOL_DOWN") }
+            RemoteIconTextButton(Icons.Rounded.VolumeUp, "VOL +", Modifier.weight(1.1f), connected || btHidConnected) { sendTransport("VOL_UP", RemoteProtocol.CMD_MEDIA, "VOL_UP") }
+            RemoteIconTextButton(Icons.Rounded.Keyboard, "KEYS", Modifier.weight(.9f), connected || btHidConnected) { keyboardOpen = !keyboardOpen }
         }
 
         // Branded launch pill and secondary shortcuts.
