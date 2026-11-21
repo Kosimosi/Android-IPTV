@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="retrotv_accessibility_description">Allows RetroTV remote to perform supported global Back and Home actions and enter text into the currently focused field. Enable only if you want these controls while another app is in front.</string>
+</resources>

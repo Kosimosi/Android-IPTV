@@ -124,6 +124,8 @@ import java.security.SecureRandom
 import java.util.Collections
 import com.retro.iptv.remote.RemoteProtocol
 import com.retro.iptv.remote.TvRemoteServer
+import com.retro.iptv.remote.RemoteCommandBridge
+import com.retro.iptv.remote.TvRemoteBackgroundService
 
 // --- YOUR PERSONAL GITHUB PLAYLIST URL ---
 const val DEFAULT_PLAYLIST_URL = "https://raw.githubusercontent.com/Kosimosi/Android-IPTV/main/playlist.m3u"
@@ -1387,10 +1389,13 @@ private fun OverlayIconAction(
 class MainActivity : ComponentActivity() {
 
     private val isTvDevice: Boolean by lazy { packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK) }
-    private val remotePairCode: String by lazy { (SecureRandom().nextInt(900_000) + 100_000).toString() }
+    private val remotePairCode: String by lazy {
+        val prefs = getSharedPreferences(TvRemoteBackgroundService.PREFS, MODE_PRIVATE)
+        prefs.getString(TvRemoteBackgroundService.KEY_PIN, null) ?: (java.security.SecureRandom().nextInt(900_000) + 100_000)
+            .toString().also { prefs.edit().putString(TvRemoteBackgroundService.KEY_PIN, it).apply() }
+    }
     private val remoteServerStatus = mutableStateOf("Not running")
     private val remoteServerAddress = mutableStateOf("Unavailable")
-    private var tvRemoteServer: TvRemoteServer? = null
 
     private lateinit var audioManager: AudioManager
     private lateinit var playerController: PlayerController
@@ -3617,18 +3622,14 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun startTvRemoteServer() {
-        if (!isTvDevice || tvRemoteServer != null) return
+        if (!isTvDevice) return
+        RemoteCommandBridge.attach(::handleMobileRemoteCommand, ::buildRemoteStateJson)
         val ip = findLocalIpv4Address()
         remoteServerAddress.value = if (ip != null) "$ip:${TvRemoteServer.DEFAULT_PORT}" else "IP unavailable • port ${TvRemoteServer.DEFAULT_PORT}"
-        val server = TvRemoteServer(
-            context = this,
-            pairingCode = remotePairCode,
-            stateProvider = ::buildRemoteStateJson,
-            onCommandReceived = ::handleMobileRemoteCommand,
-            onStatusChanged = { status -> remoteServerStatus.value = status }
-        )
-        tvRemoteServer = server
-        server.start()
+        remoteServerStatus.value = getSharedPreferences(TvRemoteBackgroundService.PREFS, MODE_PRIVATE)
+            .getString(TvRemoteBackgroundService.KEY_STATUS, "Starting") ?: "Starting"
+        val serviceIntent = Intent(this, TvRemoteBackgroundService::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(serviceIntent) else startService(serviceIntent)
     }
 
     private fun findLocalIpv4Address(): String? = runCatching {
@@ -3670,7 +3671,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun broadcastRemoteState() {
-        if (isTvDevice) tvRemoteServer?.broadcastState(buildRemoteStateJson())
+        if (isTvDevice) TvRemoteBackgroundService.broadcastState(buildRemoteStateJson())
     }
 
     private fun handleMobileRemoteCommand(command: String, value: String) {
@@ -3736,8 +3737,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onStop() {
-        tvRemoteServer?.stop()
-        tvRemoteServer = null
+        RemoteCommandBridge.detach()
         // Home, app switching, and screen-off must never leave a live stream playing.
         isHostForeground = false
         backgroundNetworkResumeJob?.cancel()
@@ -3755,8 +3755,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        tvRemoteServer?.stop()
-        tvRemoteServer = null
+        RemoteCommandBridge.detach()
         super.onDestroy()
         autoHideJob?.cancel()
         watchdogJob?.cancel()
