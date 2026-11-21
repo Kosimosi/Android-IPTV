@@ -6,6 +6,10 @@
 package com.retro.iptv
 
 import android.os.Bundle
+import android.os.Build
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -33,7 +37,9 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import com.retro.iptv.remote.IrRemoteManager
-import com.retro.iptv.remote.TvBrand
+import com.retro.iptv.remote.DeviceCategory
+import com.retro.iptv.remote.IrProfile
+import com.retro.iptv.remote.BluetoothHidRemoteManager
 import android.view.HapticFeedbackConstants
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -93,6 +99,14 @@ private data class RemoteChannel(
 
 class RemoteActivity : ComponentActivity() {
     private lateinit var remoteClient: MobileRemoteClient
+    private lateinit var irRemoteManager: IrRemoteManager
+    private lateinit var btHidManager: BluetoothHidRemoteManager
+    private val btHidConnected = mutableStateOf(false)
+    private val btHidStatus = mutableStateOf("Bluetooth HID not connected")
+    private val requestBtPermissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
+        if (grants.values.all { it }) enableBluetoothHid()
+        else btHidStatus.value = "Bluetooth permissions are required for HID remote"
+    }
     private val connectionStatus = mutableStateOf("Enter the TV pairing PIN, then find your TV.")
     private val connected = mutableStateOf(false)
     private val hasIrEmitter = mutableStateOf(false)
@@ -107,7 +121,18 @@ class RemoteActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        hasIrEmitter.value = (getSystemService(android.content.Context.CONSUMER_IR_SERVICE) as? android.hardware.ConsumerIrManager)?.hasIrEmitter() == true
+        irRemoteManager = IrRemoteManager(this)
+        hasIrEmitter.value = irRemoteManager.hasIrBlaster()
+        btHidManager = BluetoothHidRemoteManager(this) { active, status ->
+            runOnUiThread {
+                btHidConnected.value = active
+                btHidStatus.value = status
+            }
+        }
+        if (Build.VERSION.SDK_INT < 31 || checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED) {
+            btHidManager.initialize()
+            btHidManager.connectFirstPairedHost()
+        }
         val setupPrefs = getSharedPreferences(REMOTE_SETUP_PREFS, MODE_PRIVATE)
         isRemoteSetupComplete.value = setupPrefs.getBoolean(KEY_SETUP_COMPLETE, false)
         pairingPin.value = setupPrefs.getString(KEY_SAVED_TV_PIN, "").orEmpty()
@@ -142,6 +167,11 @@ class RemoteActivity : ComponentActivity() {
                 connectionStatus = connectionStatus.value,
                 connected = connected.value,
                 hasIrEmitter = hasIrEmitter.value,
+                btHidConnected = btHidConnected.value,
+                btHidStatus = btHidStatus.value,
+                onEnableBluetooth = { requestBluetoothHidPermissions() },
+                onHidAction = { action -> sendHidAction(action) },
+                onTypeText = { text -> if (btHidManager.isConnected()) btHidManager.typeText(text) },
                 setupComplete = isRemoteSetupComplete.value,
                 inRetroTv = inRetroTv.value,
                 tvName = tvName.value,
@@ -170,6 +200,58 @@ class RemoteActivity : ComponentActivity() {
             val port = prefs.getInt(KEY_SAVED_TV_PORT, 8899)
             val pin = prefs.getString(KEY_SAVED_TV_PIN, "").orEmpty()
             if (host.isNotBlank() && pin.length == 6) remoteClient.connectManual(host, port, pin)
+        }
+    }
+
+    override fun onDestroy() {
+        if (::btHidManager.isInitialized) btHidManager.releaseResources()
+        super.onDestroy()
+    }
+
+    private fun requestBluetoothHidPermissions() {
+        if (Build.VERSION.SDK_INT >= 31) {
+            val permissions = arrayOf(
+                Manifest.permission.BLUETOOTH_CONNECT,
+                Manifest.permission.BLUETOOTH_SCAN,
+                Manifest.permission.BLUETOOTH_ADVERTISE
+            )
+            val missing = permissions.filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
+            if (missing.isNotEmpty()) {
+                requestBtPermissions.launch(missing.toTypedArray())
+                return
+            }
+        }
+        enableBluetoothHid()
+    }
+
+    private fun enableBluetoothHid() {
+        val initialized = btHidManager.initialize()
+        if (!initialized) {
+            btHidStatus.value = "Bluetooth HID profile unavailable on this phone"
+            return
+        }
+        runCatching { startActivity(btHidManager.requestDiscoverableIntent()) }
+            .onFailure { btHidStatus.value = "Could not open Bluetooth pairing prompt" }
+        btHidManager.connectFirstPairedHost()
+        btHidStatus.value = "Discoverable for 5 minutes · pair RETROTV Remote from TV Bluetooth settings"
+    }
+
+    private fun sendHidAction(action: String): Boolean {
+        if (!btHidManager.isConnected()) return false
+        return when (action) {
+            "UP" -> btHidManager.sendConsumerUsage(0x0042)
+            "DOWN" -> btHidManager.sendConsumerUsage(0x0043)
+            "LEFT" -> btHidManager.sendConsumerUsage(0x0044)
+            "RIGHT" -> btHidManager.sendConsumerUsage(0x0045)
+            "OK" -> btHidManager.sendConsumerUsage(0x0041)
+            "BACK" -> btHidManager.sendConsumerUsage(0x0224)
+            "HOME" -> btHidManager.sendConsumerUsage(0x0223)
+            "VOL_UP" -> btHidManager.sendConsumerUsage(0x00E9)
+            "VOL_DOWN" -> btHidManager.sendConsumerUsage(0x00EA)
+            "MUTE" -> btHidManager.sendConsumerUsage(0x00E2)
+            "ENTER" -> btHidManager.sendEnter()
+            "BACKSPACE" -> btHidManager.sendBackspace()
+            else -> false
         }
     }
 
@@ -238,7 +320,12 @@ private fun RemoteControlScreen(
     onManualConnect: () -> Unit,
     onSend: (String, String) -> Unit,
     onDisconnect: () -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    btHidConnected: Boolean,
+    btHidStatus: String,
+    onEnableBluetooth: () -> Unit,
+    onHidAction: (String) -> Boolean,
+    onTypeText: (String) -> Unit
 ) {
     val view = LocalView.current
     var mode by androidx.compose.runtime.remember { mutableStateOf("PAD") }
