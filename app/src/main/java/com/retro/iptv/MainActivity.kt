@@ -3717,6 +3717,7 @@ class MainActivity : ComponentActivity() {
         }
         return JSONObject().apply {
             put("type", RemoteProtocol.EVT_STATE)
+            put("inRetroTv", true)
             put("currentChannel", currentChannelIndex.value)
             put("resolution", currentResolution.value ?: "")
             put("playing", player.isPlaying)
@@ -3832,7 +3833,10 @@ class MainActivity : ComponentActivity() {
         super.onStart()
         isHostForeground = true
         liveContentRefreshPending = true
-        if (isTvDevice) startTvRemoteServer()
+        if (isTvDevice) {
+            startTvRemoteServer()
+            broadcastRemoteState()
+        }
         if (player.playbackState == Player.STATE_READY) scheduleBackgroundNetworkWorkAfterReady()
     }
 

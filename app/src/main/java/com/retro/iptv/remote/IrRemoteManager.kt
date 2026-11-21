@@ -12,12 +12,14 @@ class IrRemoteManager(context: Context) {
     private val appContext = context.applicationContext
     private val manager = appContext.getSystemService(Context.CONSUMER_IR_SERVICE) as? ConsumerIrManager
     private val preferences = appContext.getSharedPreferences("retro_ir_remote", Context.MODE_PRIVATE)
+    private val setupPreferences = appContext.getSharedPreferences("retro_mobile_remote_setup", Context.MODE_PRIVATE)
 
     val hasEmitter: Boolean get() = manager?.hasIrEmitter() == true
     fun hasIrBlaster(): Boolean = hasEmitter
 
     fun getSelectedBrand(): TvBrand {
-        val saved = preferences.getString(KEY_BRAND, TvBrand.WALTON.name)
+        val saved = setupPreferences.getString(KEY_SAVED_BRAND, null)
+            ?: preferences.getString(KEY_BRAND, TvBrand.WALTON.name)
         return TvBrand.values().firstOrNull { it.name == saved } ?: TvBrand.WALTON
     }
 
@@ -25,6 +27,7 @@ class IrRemoteManager(context: Context) {
 
     fun setSelectedBrand(brand: TvBrand) {
         preferences.edit().putString(KEY_BRAND, brand.name).apply()
+        setupPreferences.edit().putString(KEY_SAVED_BRAND, brand.name).apply()
     }
 
     // Generic manufacturer-family power frames. Model-specific IR addresses can differ.
@@ -113,5 +116,8 @@ class IrRemoteManager(context: Context) {
         return 40_000 to pulses.toIntArray()
     }
 
-    companion object { private const val KEY_BRAND = "selected_tv_brand" }
+    companion object {
+        private const val KEY_BRAND = "selected_tv_brand"
+        private const val KEY_SAVED_BRAND = "savedTvBrand"
+    }
 }
