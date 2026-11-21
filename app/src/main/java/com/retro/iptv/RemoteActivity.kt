@@ -154,9 +154,12 @@ private fun RemoteControlScreen(
     onBack: () -> Unit
 ) {
     val view = LocalView.current
-    var selectedTab by androidx.compose.runtime.remember { mutableStateOf("PAD") }
+    var mode by androidx.compose.runtime.remember { mutableStateOf("PAD") }
+    var settingsOpen by androidx.compose.runtime.remember { mutableStateOf(false) }
+    var keyboardOpen by androidx.compose.runtime.remember { mutableStateOf(false) }
     var searchText by androidx.compose.runtime.remember { mutableStateOf("") }
     var searchStarted by androidx.compose.runtime.remember { mutableStateOf(false) }
+    var retroActionsOpen by androidx.compose.runtime.remember { mutableStateOf(false) }
 
     LaunchedEffect(searchText, connected, searchStarted) {
         if (connected && searchStarted) {
@@ -165,149 +168,148 @@ private fun RemoteControlScreen(
         }
     }
 
+    @Composable
+    fun circle(label: String, size: androidx.compose.ui.unit.Dp = 62.dp, active: Boolean = false, action: () -> Unit) {
+        RemoteActionButton(label, selected = active, enabled = connected, modifier = Modifier.size(size), onClick = action)
+    }
+
     Column(
-        Modifier.fillMaxSize().background(OakDarkBackground).padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        Modifier.fillMaxSize().background(OakDarkBackground).padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(9.dp)
     ) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Column {
-                Text("RETROTV", color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Black, letterSpacing = 1.2.sp)
-                Text(if (connected) "Connected • ${tvName.ifBlank { "RETROTV" }}" else connectionStatus,
-                    color = if (connected) Color(0xFF45D483) else WarmAshMuted, fontSize = 11.sp)
-            }
-            RemoteActionButton("BACK", enabled = true, modifier = Modifier.width(74.dp)) { onBack() }
-        }
-
-        Card(colors = CardDefaults.cardColors(containerColor = OakSurface), shape = RoundedCornerShape(12.dp)) {
-            Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("PAIR WITH YOUR TV", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(
-                        value = pairingPin,
-                        onValueChange = onPinChange,
-                        modifier = Modifier.weight(1f),
-                        label = { Text("6-digit TV PIN") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White,
-                            disabledTextColor = WarmAshMuted,
-                            cursorColor = FocusRed,
-                            focusedBorderColor = FocusRed,
-                            unfocusedBorderColor = Color.White.copy(alpha = 0.28f),
-                            focusedLabelColor = FocusRed,
-                            unfocusedLabelColor = WarmAshMuted
-                        )
+        // Compact status bar: pairing details stay out of the way once connected.
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp), modifier = Modifier.weight(1f)) {
+                Box(Modifier.size(40.dp).background(FocusRed, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+                    Text("▣", color = Color.White, fontSize = 23.sp, fontWeight = FontWeight.Black)
+                }
+                Column {
+                    Text("RETRO TV", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
+                    Text(
+                        if (connected) "● Connected · ${tvName.ifBlank { "RETROTV" }}" else connectionStatus,
+                        color = if (connected) Color(0xFF45D483) else WarmAshMuted,
+                        fontSize = 10.sp,
+                        maxLines = 1
                     )
-                    RemoteActionButton("FIND TV", enabled = true, modifier = Modifier.width(100.dp)) { onDiscover() }
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(
-                        value = manualAddress,
-                        onValueChange = onAddressChange,
-                        modifier = Modifier.weight(1f),
-                        label = { Text("TV IP:port (fallback)") },
-                        singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White,
-                            disabledTextColor = WarmAshMuted,
-                            cursorColor = FocusRed,
-                            focusedBorderColor = FocusRed,
-                            unfocusedBorderColor = Color.White.copy(alpha = 0.28f),
-                            focusedLabelColor = FocusRed,
-                            unfocusedLabelColor = WarmAshMuted
-                        )
-                    )
-                    RemoteActionButton("CONNECT", enabled = true, modifier = Modifier.width(100.dp)) { onManualConnect() }
-                }
-                if (connected) {
-                    Text("Playing: ${channels.getOrNull(currentChannel)?.title ?: "Live TV"} ${if (resolution.isNotBlank()) "• $resolution" else ""}",
-                        color = Color.White, fontSize = 11.sp)
-                    RemoteActionButton("DISCONNECT", enabled = true, modifier = Modifier.fillMaxWidth()) { onDisconnect() }
                 }
             }
+            RemoteActionButton("⏻", enabled = false, modifier = Modifier.size(42.dp)) {}
+            RemoteActionButton("⋮", enabled = true, modifier = Modifier.size(42.dp)) { settingsOpen = !settingsOpen }
         }
 
-        OutlinedTextField(
-            value = searchText,
-            onValueChange = { searchText = it; searchStarted = true },
-            modifier = Modifier.fillMaxWidth(),
-            enabled = connected,
-            label = { Text("Search channels on TV") },
-            singleLine = true,
-            colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White,
-                            disabledTextColor = WarmAshMuted,
-                            cursorColor = FocusRed,
-                            focusedBorderColor = FocusRed,
-                            unfocusedBorderColor = Color.White.copy(alpha = 0.28f),
-                            focusedLabelColor = FocusRed,
-                            unfocusedLabelColor = WarmAshMuted
-                        )
-        )
-
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-            listOf("PAD" to "D-PAD", "NUM" to "123 PAD", "CHANNELS" to "CHANNELS").forEach { (key, label) ->
-                RemoteActionButton(label, selected = selectedTab == key, enabled = connected, modifier = Modifier.weight(1f)) { selectedTab = key }
-            }
-        }
-
-        Box(Modifier.weight(1f).fillMaxWidth()) {
-            when (selectedTab) {
-                "PAD" -> Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-                    RemoteActionButton("▲", selected = true, enabled = connected, modifier = Modifier.size(76.dp)) { onSend(RemoteProtocol.CMD_DPAD, "UP") }
-                    Spacer(Modifier.height(8.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                        RemoteActionButton("◀", enabled = connected, modifier = Modifier.size(76.dp)) { onSend(RemoteProtocol.CMD_DPAD, "LEFT") }
-                        RemoteActionButton("OK", selected = true, enabled = connected, modifier = Modifier.size(84.dp)) { onSend(RemoteProtocol.CMD_DPAD, "OK") }
-                        RemoteActionButton("▶", enabled = connected, modifier = Modifier.size(76.dp)) { onSend(RemoteProtocol.CMD_DPAD, "RIGHT") }
+        if (settingsOpen || !connected) {
+            Card(colors = CardDefaults.cardColors(containerColor = OakSurface), shape = RoundedCornerShape(14.dp)) {
+                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        Text("CONNECTION & IR SETTINGS", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text("CLOSE", color = FocusRed, fontSize = 10.sp, modifier = Modifier.clickable { settingsOpen = false })
                     }
-                    Spacer(Modifier.height(8.dp))
-                    RemoteActionButton("▼", enabled = connected, modifier = Modifier.size(76.dp)) { onSend(RemoteProtocol.CMD_DPAD, "DOWN") }
+                    OutlinedTextField(
+                        value = pairingPin, onValueChange = onPinChange, modifier = Modifier.fillMaxWidth(),
+                        label = { Text("6-digit TV pairing PIN") }, singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White,
+                            cursorColor = FocusRed, focusedBorderColor = FocusRed, unfocusedBorderColor = Color.White.copy(alpha = .25f),
+                            focusedLabelColor = FocusRed, unfocusedLabelColor = WarmAshMuted)
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        RemoteActionButton("AUTO DISCOVER", modifier = Modifier.weight(1f), enabled = true) { onDiscover() }
+                        RemoteActionButton("DISCONNECT", modifier = Modifier.weight(1f), enabled = connected) { onDisconnect() }
+                    }
+                    OutlinedTextField(
+                        value = manualAddress, onValueChange = onAddressChange, modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Manual TV IP:port (fallback)") }, singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White,
+                            cursorColor = FocusRed, focusedBorderColor = FocusRed, unfocusedBorderColor = Color.White.copy(alpha = .25f),
+                            focusedLabelColor = FocusRed, unfocusedLabelColor = WarmAshMuted)
+                    )
+                    RemoteActionButton("CONNECT WITH IP + PIN", enabled = true, modifier = Modifier.fillMaxWidth()) { onManualConnect() }
+                    Text("IR power / brand profiles require a compatible phone IR emitter. This control is not enabled on unsupported phones.",
+                        color = WarmAshMuted, fontSize = 10.sp)
                 }
-                "NUM" -> Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-                    (1..3).forEach { row ->
-                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(vertical = 5.dp)) {
+            }
+        }
+
+        if (connected) {
+            Text(
+                "NOW PLAYING  ·  ${channels.getOrNull(currentChannel)?.title ?: "Live TV"}${if (resolution.isNotBlank()) "  ·  $resolution" else ""}",
+                color = WarmAshMuted, fontSize = 10.sp, maxLines = 1
+            )
+        }
+
+        // Mode switch controls the centre area without moving the rest of the remote.
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+            listOf("PAD" to "D-PAD", "NUM" to "123", "LIVE" to "LIVE CHANNELS").forEach { (key, label) ->
+                Box(
+                    Modifier.padding(horizontal = 3.dp).background(if (mode == key) FocusRed else OakSurfaceElevated, CircleShape)
+                        .clickable { mode = key }.padding(horizontal = 15.dp, vertical = 8.dp)
+                ) {
+                    Text(label, color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+
+        Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+            when (mode) {
+                "PAD" -> Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                    circle("⌃", 62.dp) { onSend(RemoteProtocol.CMD_DPAD, "UP") }
+                    Row(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
+                        circle("‹", 68.dp) { onSend(RemoteProtocol.CMD_DPAD, "LEFT") }
+                        Box(Modifier.size(78.dp).background(FocusRed, CircleShape).clickable(enabled = connected) {
+                            view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                            onSend(RemoteProtocol.CMD_DPAD, "OK")
+                        }, contentAlignment = Alignment.Center) {
+                            Text("OK", color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Black)
+                        }
+                        circle("›", 68.dp) { onSend(RemoteProtocol.CMD_DPAD, "RIGHT") }
+                    }
+                    circle("⌄", 62.dp) { onSend(RemoteProtocol.CMD_DPAD, "DOWN") }
+                }
+                "NUM" -> Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    (0..3).forEach { row ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             (0..2).forEach { col ->
-                                val digit = (row - 1) * 3 + col + 1
-                                RemoteActionButton(digit.toString(), enabled = connected, modifier = Modifier.size(68.dp)) {
-                                    onSend(RemoteProtocol.CMD_NUMBER, digit.toString())
+                                val digit = when {
+                                    row < 3 -> row * 3 + col + 1
+                                    col == 0 -> -1
+                                    col == 1 -> 0
+                                    else -> -2
+                                }
+                                RemoteActionButton(if (digit == -1) "⌫" else if (digit == -2) "↵" else digit.toString(),
+                                    enabled = connected, modifier = Modifier.size(62.dp)) {
+                                    when (digit) {
+                                        -1 -> onSend(RemoteProtocol.CMD_DPAD, "BACK")
+                                        -2 -> onSend(RemoteProtocol.CMD_DPAD, "OK")
+                                        else -> onSend(RemoteProtocol.CMD_NUMBER, digit.toString())
+                                    }
                                 }
                             }
                         }
                     }
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(vertical = 5.dp)) {
-                        RemoteActionButton("⌫", enabled = connected, modifier = Modifier.size(68.dp)) { onSend(RemoteProtocol.CMD_DPAD, "BACK") }
-                        RemoteActionButton("0", enabled = connected, modifier = Modifier.size(68.dp)) { onSend(RemoteProtocol.CMD_NUMBER, "0") }
-                        RemoteActionButton("↵", enabled = connected, modifier = Modifier.size(68.dp)) { onSend(RemoteProtocol.CMD_DPAD, "OK") }
-                    }
                 }
                 else -> {
                     if (channels.isEmpty()) {
-                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text(if (connected) "Waiting for channel list…" else "Connect to a RETROTV first", color = WarmAshMuted)
-                        }
+                        Text(if (connected) "Waiting for live channel list…" else "Connect to RETRO TV", color = WarmAshMuted)
                     } else {
                         LazyColumn(verticalArrangement = Arrangement.spacedBy(5.dp)) {
                             items(channels, key = { it.number }) { channel ->
                                 Row(
-                                    Modifier.fillMaxWidth().background(if (channel.number - 1 == currentChannel) ChannelCardFocusedFill else OakSurface, RoundedCornerShape(9.dp))
-                                        .clickable(enabled = connected) {
-                                            view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
-                                            onSend(RemoteProtocol.CMD_CHANNEL_ID, channel.number.toString())
-                                        }.padding(10.dp),
+                                    Modifier.fillMaxWidth().background(
+                                        if (channel.number - 1 == currentChannel) ChannelCardFocusedFill else OakSurface,
+                                        RoundedCornerShape(10.dp)
+                                    ).clickable(enabled = connected) {
+                                        view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                                        onSend(RemoteProtocol.CMD_CHANNEL_ID, channel.number.toString())
+                                    }.padding(horizontal = 12.dp, vertical = 10.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text(channel.number.toString().padStart(3, '0'), color = FocusRed, fontSize = 12.sp, fontWeight = FontWeight.Black)
+                                    Text(channel.number.toString().padStart(3, '0'), color = FocusRed, fontSize = 11.sp, fontWeight = FontWeight.Black)
                                     Spacer(Modifier.width(10.dp))
                                     Column(Modifier.weight(1f)) {
                                         Text(channel.title, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                                         Text(channel.group, color = WarmAshMuted, fontSize = 10.sp)
                                     }
-                                    if (channel.number - 1 == currentChannel) Text("PLAYING", color = FocusRed, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                    if (channel.number - 1 == currentChannel) Text("LIVE", color = FocusRed, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
@@ -316,15 +318,54 @@ private fun RemoteControlScreen(
             }
         }
 
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-            RemoteActionButton("BACK", enabled = connected, modifier = Modifier.weight(1f)) { onSend(RemoteProtocol.CMD_DPAD, "BACK") }
-            RemoteActionButton("VOL −", enabled = connected, modifier = Modifier.weight(1f)) { onSend(RemoteProtocol.CMD_MEDIA, "VOL_DOWN") }
-            RemoteActionButton("VOL +", enabled = connected, modifier = Modifier.weight(1f)) { onSend(RemoteProtocol.CMD_MEDIA, "VOL_UP") }
-            RemoteActionButton("MUTE", enabled = connected, modifier = Modifier.weight(1f)) { onSend(RemoteProtocol.CMD_MEDIA, "MUTE") }
+        if (keyboardOpen) {
+            OutlinedTextField(
+                value = searchText, onValueChange = { searchText = it; searchStarted = true },
+                modifier = Modifier.fillMaxWidth(), enabled = connected, singleLine = true,
+                label = { Text("Instant channel search") },
+                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White,
+                    cursorColor = FocusRed, focusedBorderColor = FocusRed, unfocusedBorderColor = Color.White.copy(alpha = .25f),
+                    focusedLabelColor = FocusRed, unfocusedLabelColor = WarmAshMuted)
+            )
         }
-        RemoteActionButton("NEWS TICKER", enabled = connected, modifier = Modifier.fillMaxWidth()) {
-            onSend(RemoteProtocol.CMD_MEDIA, "TICKER_TOGGLE")
+
+        // Ergonomic transport row.
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            RemoteActionButton("←", modifier = Modifier.weight(1f), enabled = connected) { onSend(RemoteProtocol.CMD_DPAD, "BACK") }
+            Spacer(Modifier.width(8.dp))
+            RemoteActionButton("⌂", modifier = Modifier.weight(1.35f).height(54.dp), enabled = true) {
+                onSend(RemoteProtocol.CMD_DPAD, "HOME")
+            }
+            Spacer(Modifier.width(8.dp))
+            RemoteActionButton("≡", modifier = Modifier.weight(1f), enabled = connected) { mode = "LIVE" }
         }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
+            RemoteActionButton("🔇", modifier = Modifier.weight(.8f), enabled = connected) { onSend(RemoteProtocol.CMD_MEDIA, "MUTE") }
+            RemoteActionButton("🔉  VOL −", modifier = Modifier.weight(1.2f), enabled = connected) { onSend(RemoteProtocol.CMD_MEDIA, "VOL_DOWN") }
+            RemoteActionButton("VOL +  🔊", modifier = Modifier.weight(1.2f), enabled = connected) { onSend(RemoteProtocol.CMD_MEDIA, "VOL_UP") }
+            RemoteActionButton("⌨", modifier = Modifier.weight(.8f), enabled = connected) { keyboardOpen = !keyboardOpen }
+        }
+
+        // Branded launch pill and secondary shortcuts.
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            RemoteActionButton("RETRO TV", selected = true, enabled = true, modifier = Modifier.weight(1.6f).height(52.dp)) {
+                onSend(RemoteProtocol.CMD_DPAD, "HOME")
+            }
+            RemoteActionButton("▶ YouTube", enabled = false, modifier = Modifier.weight(1f)) {}
+            RemoteActionButton("123", enabled = true, modifier = Modifier.weight(.65f)) { mode = "NUM" }
+        }
+        if (retroActionsOpen) {
+            Text("NEWS TICKER", color = Color.White, modifier = Modifier.fillMaxWidth().clickable(enabled = connected) {
+                onSend(RemoteProtocol.CMD_MEDIA, "TICKER_TOGGLE")
+                retroActionsOpen = false
+            }.padding(8.dp))
+            Text("SCORE CARD  ·  FM RADIO (NOT AVAILABLE YET)", color = WarmAshMuted, fontSize = 10.sp)
+        }
+        Text(
+            "RETRO TV  ·  ${if (connected) "SECURELY PAIRED ON LOCAL WI-FI" else "WAITING FOR TV"}",
+            color = WarmAshMuted, fontSize = 9.sp, modifier = Modifier.fillMaxWidth().clickable { retroActionsOpen = !retroActionsOpen },
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+        )
     }
 }
 
