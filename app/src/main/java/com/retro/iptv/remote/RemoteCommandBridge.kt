@@ -16,6 +16,8 @@ object RemoteCommandBridge {
         foregroundState = null
     }
 
+    fun hasForegroundHandler(): Boolean = foregroundCommand != null
+
     fun state(): String = runCatching { foregroundState?.invoke() }.getOrNull()
         ?: """{"type":"STATE","playing":false,"currentChannel":-1,"channels":[]}"""
 
