@@ -100,6 +100,10 @@ class MobileRemoteClient(
         connectToTv(cleanHost, port, "RETROTV", cleanPin)
     }
 
+    fun cancelDiscovery() {
+        stopDiscovery()
+    }
+
     fun sendCommand(command: String, value: String = "") {
         val client = wsClient
         if (paired && client?.isOpen == true) {
