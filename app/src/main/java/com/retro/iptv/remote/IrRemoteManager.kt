@@ -18,7 +18,7 @@ enum class IrProfile(val category: DeviceCategory, val label: String) {
     AOSP_BOX(DeviceCategory.TV_BOX, "AOSP / X96 / H96"),
     MI_BOX(DeviceCategory.TV_BOX, "Xiaomi Mi Box"),
     MXQ_TX3(DeviceCategory.TV_BOX, "MXQ / TX3 / T95"),
-    MECOOL(DeviceCategory.TV_BOX, "Mecool / Certified"),
+    MECOOL(DeviceCategory.TV_BOX, "Mecool"),
     GENERIC_NEC(DeviceCategory.TV_BOX, "Generic NEC")
 }
 
