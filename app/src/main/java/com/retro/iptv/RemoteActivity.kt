@@ -266,6 +266,9 @@ private fun RemoteControlScreen(
     var searchText by androidx.compose.runtime.remember { mutableStateOf("") }
     var searchStarted by androidx.compose.runtime.remember { mutableStateOf(false) }
     var retroActionsOpen by androidx.compose.runtime.remember { mutableStateOf(false) }
+    // This build exposes IR Power/Source only; no model-verified IR D-pad codes exist yet.
+    val irDpadActive = false
+    val dpadEnabled = connected && (inRetroTv || irDpadActive)
 
     LaunchedEffect(searchText, connected, searchStarted) {
         if (connected && searchStarted) {
@@ -421,7 +424,6 @@ private fun RemoteControlScreen(
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         RemoteActionButton("AUTO DISCOVER", modifier = Modifier.weight(1f), enabled = true) {
-                            discoveryAttempt++
                             onDiscover()
                         }
                         RemoteActionButton("DISCONNECT", modifier = Modifier.weight(1f), enabled = connected) { onDisconnect() }
@@ -481,11 +483,11 @@ private fun RemoteControlScreen(
                     Modifier.size(240.dp).background(Color(0xFF16161D), CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
-                    RemoteIconButton(Icons.Rounded.KeyboardArrowUp, "Up", Modifier.align(Alignment.TopCenter).padding(top = 8.dp)) { onSend(RemoteProtocol.CMD_DPAD, "UP") }
-                    RemoteIconButton(Icons.Rounded.KeyboardArrowDown, "Down", Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp)) { onSend(RemoteProtocol.CMD_DPAD, "DOWN") }
-                    RemoteIconButton(Icons.Rounded.KeyboardArrowLeft, "Left", Modifier.align(Alignment.CenterStart).padding(start = 8.dp)) { onSend(RemoteProtocol.CMD_DPAD, "LEFT") }
-                    RemoteIconButton(Icons.Rounded.KeyboardArrowRight, "Right", Modifier.align(Alignment.CenterEnd).padding(end = 8.dp)) { onSend(RemoteProtocol.CMD_DPAD, "RIGHT") }
-                    Box(Modifier.size(76.dp).background(Color(0xFFE11D48), CircleShape).clickable(enabled = connected) {
+                    RemoteIconButton(Icons.Rounded.KeyboardArrowUp, "Up", Modifier.align(Alignment.TopCenter).padding(top = 8.dp), enabled = dpadEnabled) { onSend(RemoteProtocol.CMD_DPAD, "UP") }
+                    RemoteIconButton(Icons.Rounded.KeyboardArrowDown, "Down", Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp), enabled = dpadEnabled) { onSend(RemoteProtocol.CMD_DPAD, "DOWN") }
+                    RemoteIconButton(Icons.Rounded.KeyboardArrowLeft, "Left", Modifier.align(Alignment.CenterStart).padding(start = 8.dp), enabled = dpadEnabled) { onSend(RemoteProtocol.CMD_DPAD, "LEFT") }
+                    RemoteIconButton(Icons.Rounded.KeyboardArrowRight, "Right", Modifier.align(Alignment.CenterEnd).padding(end = 8.dp), enabled = dpadEnabled) { onSend(RemoteProtocol.CMD_DPAD, "RIGHT") }
+                    Box(Modifier.size(76.dp).background(Color(0xFFE11D48), CircleShape).clickable(enabled = dpadEnabled) {
                         view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                         onSend(RemoteProtocol.CMD_DPAD, "OK")
                     }, contentAlignment = Alignment.Center) {
