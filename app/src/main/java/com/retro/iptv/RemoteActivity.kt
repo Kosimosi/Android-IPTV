@@ -239,20 +239,27 @@ private fun RemoteControlScreen(
     val view = LocalView.current
     var mode by androidx.compose.runtime.remember { mutableStateOf("PAD") }
     var isPairingExpanded by androidx.compose.runtime.remember { mutableStateOf(false) }
-    var discoveryAttempt by androidx.compose.runtime.remember { mutableIntStateOf(0) }
     var selectedBrand by androidx.compose.runtime.remember { mutableStateOf(TvBrand.WALTON) }
-    var showBrandPicker by androidx.compose.runtime.remember { mutableStateOf(false) }
+    var setupStep by androidx.compose.runtime.remember { mutableIntStateOf(if (hasIrEmitter) 1 else 2) }
+    var manualConnectVisible by androidx.compose.runtime.remember { mutableStateOf(false) }
+    var scanStartedPin by androidx.compose.runtime.remember { mutableStateOf("") }
     var irFeedback by androidx.compose.runtime.remember { mutableStateOf("") }
+    var irTestFeedback by androidx.compose.runtime.remember { mutableStateOf("") }
     val context = LocalContext.current
     val irRemoteManager = androidx.compose.runtime.remember { IrRemoteManager(context) }
+    val setupPrefs = androidx.compose.runtime.remember {
+        context.getSharedPreferences("retro_mobile_remote_setup", android.content.Context.MODE_PRIVATE)
+    }
     androidx.compose.runtime.LaunchedEffect(Unit) {
         selectedBrand = irRemoteManager.getSelectedBrand()
-        showBrandPicker = hasIrEmitter && !irRemoteManager.hasSavedBrand()
     }
-    androidx.compose.runtime.LaunchedEffect(discoveryAttempt) {
-        if (discoveryAttempt > 0) {
-            delay(3500)
-            if (!connected) isPairingExpanded = true
+    androidx.compose.runtime.LaunchedEffect(pairingPin, setupStep, setupComplete, connected) {
+        if (!setupComplete && setupStep == 2 && pairingPin.length == 6 && !connected && scanStartedPin != pairingPin) {
+            scanStartedPin = pairingPin
+            manualConnectVisible = false
+            onDiscover()
+            delay(4000)
+            if (!connected) manualConnectVisible = true
         }
     }
     var keyboardOpen by androidx.compose.runtime.remember { mutableStateOf(false) }
@@ -276,6 +283,96 @@ private fun RemoteControlScreen(
         Modifier.fillMaxSize().background(OakDarkBackground).navigationBarsPadding().padding(horizontal = 16.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(9.dp)
     ) {
+        if (!setupComplete) {
+            Column(
+                Modifier.fillMaxWidth().weight(1f),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text("RETRO TV REMOTE SETUP", color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Black)
+                Text("STEP $setupStep OF 2", color = FocusRed, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(12.dp))
+                if (setupStep == 1 && hasIrEmitter) {
+                    Text("IR Blaster Detected", color = Color(0xFF45D483), fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                    Text("Select your television brand, then test the power signal.", color = WarmAshMuted, fontSize = 12.sp)
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp), modifier = Modifier.fillMaxWidth()) {
+                        items(TvBrand.values().filter { it != TvBrand.GENERIC }) { brand ->
+                            FilterChip(
+                                selected = selectedBrand == brand,
+                                onClick = {
+                                    selectedBrand = brand
+                                    irRemoteManager.setSelectedBrand(brand)
+                                    setupPrefs.edit().putString("savedTvBrand", brand.name).apply()
+                                },
+                                label = { Text(brand.label, fontSize = 11.sp) }
+                            )
+                        }
+                    }
+                    RemoteActionButton("TEST POWER", modifier = Modifier.fillMaxWidth(), enabled = true) {
+                        irTestFeedback = if (irRemoteManager.sendPowerToggle(selectedBrand)) {
+                            "IR signal sent. Check whether your TV responds."
+                        } else {
+                            "IR transmission failed. Check the phone's IR hardware."
+                        }
+                    }
+                    if (irTestFeedback.isNotBlank()) Text(irTestFeedback, color = WarmAshMuted, fontSize = 11.sp)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        RemoteActionButton("SKIP", modifier = Modifier.weight(1f), enabled = true) { setupStep = 2 }
+                        RemoteActionButton("IT WORKED → NEXT", modifier = Modifier.weight(2f), enabled = true) {
+                            irRemoteManager.setSelectedBrand(selectedBrand)
+                            setupPrefs.edit().putString("savedTvBrand", selectedBrand.name).apply()
+                            setupStep = 2
+                        }
+                    }
+                } else {
+                    Text("Connect your TV", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        "Keep your phone and TV on the same Wi-Fi. Open Retro TV on the television.",
+                        color = WarmAshMuted, fontSize = 12.sp
+                    )
+                    OutlinedTextField(
+                        value = pairingPin,
+                        onValueChange = onPinChange,
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("6-digit PIN shown in Retro TV settings") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.White, unfocusedTextColor = Color.White,
+                            cursorColor = FocusRed, focusedBorderColor = FocusRed,
+                            unfocusedBorderColor = Color.White.copy(alpha = .25f),
+                            focusedLabelColor = FocusRed, unfocusedLabelColor = WarmAshMuted
+                        )
+                    )
+                    Text(
+                        if (connected) "Pairing successful. Saving your TV…" else if (pairingPin.length == 6 && !manualConnectVisible)
+                            "Searching for RETROTV over Wi-Fi for 4 seconds…"
+                        else "Enter the TV's 6-digit pairing PIN to start automatic discovery.",
+                        color = if (connected) Color(0xFF45D483) else WarmAshMuted, fontSize = 11.sp
+                    )
+                    if (manualConnectVisible && !connected) {
+                        Text("Automatic discovery timed out. Enter the TV address and PIN manually.", color = Color(0xFFFFC46B), fontSize = 11.sp)
+                        OutlinedTextField(
+                            value = manualAddress,
+                            onValueChange = onAddressChange,
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("TV IP:port (example 192.168.1.20:8899)") },
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = Color.White, unfocusedTextColor = Color.White,
+                                cursorColor = FocusRed, focusedBorderColor = FocusRed,
+                                unfocusedBorderColor = Color.White.copy(alpha = .25f),
+                                focusedLabelColor = FocusRed, unfocusedLabelColor = WarmAshMuted
+                            )
+                        )
+                        RemoteActionButton("CONNECT WITH IP + PIN", modifier = Modifier.fillMaxWidth(), enabled = pairingPin.length == 6) {
+                            onManualConnect()
+                        }
+                    }
+                    Text(connectionStatus, color = WarmAshMuted, fontSize = 10.sp)
+                }
+            }
+        } else {
         // Compact status bar: pairing details stay out of the way once connected.
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp), modifier = Modifier.weight(1f)) {
@@ -357,33 +454,6 @@ private fun RemoteControlScreen(
                     }
                 }
             }
-        }
-
-        if (showBrandPicker) {
-            AlertDialog(
-                onDismissRequest = { showBrandPicker = false },
-                title = { Text("Choose your TV brand") },
-                text = { Text("RETROTV detected an IR blaster. Select your television brand to configure Power and Source commands.") },
-                confirmButton = {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        TvBrand.values().toList().chunked(3).forEach { rowBrands ->
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                rowBrands.forEach { brand ->
-                                    FilterChip(
-                                        selected = selectedBrand == brand,
-                                        onClick = {
-                                            selectedBrand = brand
-                                            irRemoteManager.setSelectedBrand(brand)
-                                            showBrandPicker = false
-                                        },
-                                        label = { Text(brand.label, fontSize = 11.sp) }
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            )
         }
 
         if (connected) {
@@ -532,10 +602,14 @@ private fun RemoteControlScreen(
             }
         }
         Text(
-            "RETRO TV  ·  ${if (connected) "SECURELY PAIRED ON LOCAL WI-FI" else "WAITING FOR TV"}",
-            color = WarmAshMuted, fontSize = 9.sp, modifier = Modifier.fillMaxWidth().clickable { retroActionsOpen = !retroActionsOpen },
+            if (!inRetroTv) "External app • Tap RETRO TV to return"
+            else "RETRO TV  ·  ${if (connected) "SECURELY PAIRED ON LOCAL WI-FI" else "WAITING FOR TV"}",
+            color = if (!inRetroTv) Color(0xFFFFC46B) else WarmAshMuted,
+            fontSize = 9.sp,
+            modifier = Modifier.fillMaxWidth().clickable { retroActionsOpen = !retroActionsOpen },
             textAlign = androidx.compose.ui.text.style.TextAlign.Center
         )
+        }
     }
 }
 
