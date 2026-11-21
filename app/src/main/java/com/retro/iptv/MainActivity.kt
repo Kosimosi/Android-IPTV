@@ -1276,7 +1276,7 @@ fun SettingsModal(
                     Text("Pairing PIN: $remotePairCode", color = FocusRed, fontSize = 18.sp, fontWeight = FontWeight.Black, letterSpacing = 2.sp)
                     Text("Server: $remoteStatus", color = WarmAshMuted, fontSize = 10.sp)
                     SettingToggleRow("Turn off remote server", remoteEnabled, onToggleRemote)
-                    SettingsOption("Regenerate PIN", selected = true, onClick = onRegenerateRemotePin,
+                    SettingsOption("Regenerate PIN", selected = true, enabled = remoteEnabled, onClick = onRegenerateRemotePin,
                         modifier = Modifier.fillMaxWidth(), fontSize = 12.sp)
                 } else {
                     SettingsOption("Open Smart Remote", selected = true, onClick = onOpenMobileRemote,
