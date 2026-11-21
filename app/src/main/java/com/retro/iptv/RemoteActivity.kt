@@ -406,14 +406,22 @@ private fun RemoteControlScreen(
                 if (setupStep == 1 && irBlasterDetected) {
                     Text("IR Blaster Detected", color = Color(0xFF45D483), fontSize = 17.sp, fontWeight = FontWeight.Bold)
                     Text("Choose device type and brand, then test the power signal.", color = WarmAshMuted, fontSize = 12.sp)
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(Modifier.fillMaxWidth().background(OakDarkBackground, RoundedCornerShape(10.dp)).padding(4.dp)) {
                         DeviceCategory.values().forEach { option ->
-                            FilterChip(selected = selectedCategory == option, onClick = {
-                                selectedCategory = option
-                                irRemoteManager.selectedCategory = option
-                                selectedProfile = irRemoteManager.profilesFor(option).first()
-                                irRemoteManager.selectedProfile = selectedProfile
-                            }, label = { Text(option.label, fontSize = 10.sp) })
+                            Box(
+                                Modifier.weight(1f).background(
+                                    if (selectedCategory == option) FocusRed else Color.Transparent,
+                                    RoundedCornerShape(8.dp)
+                                ).clickable {
+                                    selectedCategory = option
+                                    irRemoteManager.selectedCategory = option
+                                    selectedProfile = irRemoteManager.profilesFor(option).first()
+                                    irRemoteManager.selectedProfile = selectedProfile
+                                }.padding(vertical = 10.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(option.label, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp), modifier = Modifier.fillMaxWidth()) {
@@ -564,18 +572,22 @@ private fun RemoteControlScreen(
                         fontWeight = FontWeight.Bold
                     )
                     if (hasIrEmitter) {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(Modifier.fillMaxWidth().background(OakDarkBackground, RoundedCornerShape(10.dp)).padding(4.dp)) {
                             DeviceCategory.values().forEach { option ->
-                                FilterChip(
-                                    selected = selectedCategory == option,
-                                    onClick = {
+                                Box(
+                                    Modifier.weight(1f).background(
+                                        if (selectedCategory == option) FocusRed else Color.Transparent,
+                                        RoundedCornerShape(8.dp)
+                                    ).clickable {
                                         selectedCategory = option
                                         irRemoteManager.selectedCategory = option
                                         selectedProfile = irRemoteManager.profilesFor(option).first()
                                         irRemoteManager.selectedProfile = selectedProfile
-                                    },
-                                    label = { Text(option.label, fontSize = 10.sp) }
-                                )
+                                    }.padding(vertical = 10.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(option.label, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
                             }
                         }
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
