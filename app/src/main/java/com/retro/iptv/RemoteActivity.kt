@@ -242,13 +242,14 @@ private fun RemoteControlScreen(
     var mode by androidx.compose.runtime.remember { mutableStateOf("PAD") }
     var isPairingExpanded by androidx.compose.runtime.remember { mutableStateOf(false) }
     var selectedBrand by androidx.compose.runtime.remember { mutableStateOf(TvBrand.WALTON) }
-    var setupStep by androidx.compose.runtime.remember { mutableIntStateOf(if (hasIrEmitter) 1 else 2) }
+    var setupStep by androidx.compose.runtime.remember { mutableIntStateOf(if (irBlasterDetected) 1 else 2) }
     var manualConnectVisible by androidx.compose.runtime.remember { mutableStateOf(false) }
     var scanStartedPin by androidx.compose.runtime.remember { mutableStateOf("") }
     var irFeedback by androidx.compose.runtime.remember { mutableStateOf("") }
     var irTestFeedback by androidx.compose.runtime.remember { mutableStateOf("") }
     val context = LocalContext.current
     val irRemoteManager = androidx.compose.runtime.remember { IrRemoteManager(context) }
+    val irBlasterDetected = irRemoteManager.hasIrBlaster()
     val setupPrefs = androidx.compose.runtime.remember {
         context.getSharedPreferences("retro_mobile_remote_setup", android.content.Context.MODE_PRIVATE)
     }
@@ -300,7 +301,7 @@ private fun RemoteControlScreen(
                 Text("RETRO TV REMOTE SETUP", color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Black)
                 Text("STEP $setupStep OF 2", color = FocusRed, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(12.dp))
-                if (setupStep == 1 && hasIrEmitter) {
+                if (setupStep == 1 && irBlasterDetected) {
                     Text("IR Blaster Detected", color = Color(0xFF45D483), fontSize = 17.sp, fontWeight = FontWeight.Bold)
                     Text("Select your television brand, then test the power signal.", color = WarmAshMuted, fontSize = 12.sp)
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp), modifier = Modifier.fillMaxWidth()) {
