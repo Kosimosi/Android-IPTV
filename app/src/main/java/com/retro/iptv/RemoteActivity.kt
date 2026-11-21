@@ -155,7 +155,7 @@ class RemoteActivity : ComponentActivity() {
                     .putString(KEY_SAVED_TV_IP, host)
                     .putInt(KEY_SAVED_TV_PORT, port)
                     .putString(KEY_SAVED_TV_PIN, pin)
-                    .putString(KEY_SAVED_TV_BRAND, com.retro.iptv.remote.IrRemoteManager(this).getSelectedBrand().name)
+                    .putString(KEY_SAVED_TV_BRAND, irRemoteManager.selectedProfile.name)
                     .apply()
                 pairingPin.value = pin
                 manualAddress.value = if (host.contains(":")) "[$host]:$port" else "$host:$port"
@@ -500,8 +500,9 @@ private fun RemoteControlScreen(
             }
             RemoteIconButton(Icons.Rounded.PowerSettingsNew, "Power", tint = Color(0xFFE11D48), enabled = true) {
                 if (irRemoteManager.hasIrBlaster()) {
-                    irFeedback = if (irRemoteManager.transmitPower(selectedProfile)) "IR power command sent · check TV response" else "IR transmission failed"
-                } else onSend(RemoteProtocol.CMD_MEDIA, "POWER")
+                    irFeedback = if (irRemoteManager.transmitPower(selectedProfile)) "IR power signal sent · check TV response" else "IR transmission failed"
+                }
+                if (connected) onSend(RemoteProtocol.CMD_MEDIA, "WAKE_SLEEP")
             }
             if (hasIrEmitter) {
                 RemoteIconButton(Icons.Rounded.Menu, "TV source/input", tint = Color(0xFFE5E5EA), enabled = true) {
