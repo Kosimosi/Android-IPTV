@@ -11,6 +11,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import java.util.concurrent.Executor
+import java.util.concurrent.Executors
 import android.util.Log
 
 /** Phone-side Bluetooth HID Device: the Android TV/box is the HID host. */
@@ -22,6 +23,7 @@ class BluetoothHidRemoteManager(
     @Volatile private var hidDevice: BluetoothHidDevice? = null
     @Volatile private var connectedDevice: BluetoothDevice? = null
     @Volatile private var registered = false
+    private val typingExecutor = Executors.newSingleThreadExecutor()
 
     private val callback = object : BluetoothHidDevice.Callback() {
         override fun onAppStatusChanged(pluggedDevice: BluetoothDevice?, registeredNow: Boolean) {
@@ -145,16 +147,20 @@ class BluetoothHidRemoteManager(
 
     fun typeText(text: String): Boolean {
         if (!isConnected()) return false
-        var sent = false
-        text.forEach { char ->
-            val key = asciiToHid(char) ?: return@forEach
-            if (sendKey(key.first, key.second)) sent = true
-            Thread.sleep(45)
-        }
-        return sent
+        return runCatching {
+            typingExecutor.execute {
+                text.forEach { char ->
+                    val key = asciiToHid(char) ?: return@forEach
+                    sendKey(key.first, key.second)
+                    Thread.sleep(45)
+                }
+            }
+            true
+        }.getOrDefault(false)
     }
 
     fun releaseResources() {
+        typingExecutor.shutdownNow()
         if (!hasConnectPermission()) return
         runCatching { hidDevice?.unregisterApp() }
         runCatching { hidDevice?.let { adapter?.closeProfileProxy(BluetoothProfile.HID_DEVICE, it) } }
