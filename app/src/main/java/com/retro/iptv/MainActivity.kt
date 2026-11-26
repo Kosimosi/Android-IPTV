@@ -174,6 +174,12 @@ data class Channel(
     }
 }
 
+private fun keepSomoyTvSecond(channels: List<Channel>): List<Channel> {
+    val somoyIndex = channels.indexOfFirst { it.title.contains("Somoy", ignoreCase = true) }
+    if (somoyIndex != 0 || channels.size < 2) return channels
+    return channels.toMutableList().apply { add(1, removeAt(0)) }
+}
+
 data class Programme(val channelId: String, val title: String, val startTimeMs: Long, val stopTimeMs: Long)
 
 @Composable
@@ -2798,8 +2804,8 @@ class MainActivity : ComponentActivity() {
             val cachedText = runCatching {
                 if (cacheFile.exists() && cacheFile.length() <= MAX_PLAYLIST_BYTES) cacheFile.readText() else ""
             }.getOrDefault("")
-            val cachedList = parseM3u(cachedText).distinctBy { it.url }
-            val initialList = cachedList.ifEmpty { fallbackChannels }
+            val cachedList = keepSomoyTvSecond(parseM3u(cachedText).distinctBy { it.url })
+            val initialList = keepSomoyTvSecond(cachedList.ifEmpty { fallbackChannels })
 
             withContext(Dispatchers.Main) {
                 channels.clear()
@@ -2830,7 +2836,7 @@ class MainActivity : ComponentActivity() {
             }
             val failedCount = fetched.count { it.second == null } + rejectedOversizeSources
             val combinedText = boundedTexts.joinToString("\n")
-            val freshList = if (combinedText.isNotBlank()) parseM3u(combinedText).distinctBy { it.url } else emptyList()
+            val freshList = if (combinedText.isNotBlank()) keepSomoyTvSecond(parseM3u(combinedText).distinctBy { it.url }) else emptyList()
 
             withContext(Dispatchers.Main) {
                 if (freshList.isNotEmpty()) {
