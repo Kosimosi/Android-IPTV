@@ -10,7 +10,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
@@ -66,21 +65,18 @@ fun rememberRetroTvFocusStyle(
             selected -> Color(0xFF1D2027)
             else -> RetroTvFocusKit.CardIdleFill
         },
-        animationSpec = if (rapidNavigation) tween(65) else spring(
-            dampingRatio = Spring.DampingRatioNoBouncy,
-            stiffness = Spring.StiffnessMedium
-        ),
+        animationSpec = if (rapidNavigation) tween(65) else tween(110),
         label = "retroTvFocusFill"
     )
     val stroke by animateColorAsState(
         targetValue = if (focused) RetroTvFocusKit.CardFocusedStroke else RetroTvFocusKit.CardIdleStroke,
-        animationSpec = if (rapidNavigation) tween(65) else tween(200),
+        animationSpec = if (rapidNavigation) tween(65) else tween(110),
         label = "retroTvFocusStroke"
     )
     val scale by animateFloatAsState(
-        targetValue = if (focused) 1.07f else 1f,
+        targetValue = if (focused) 1.04f else 1f,
         animationSpec = if (rapidNavigation) tween(65, easing = Easing { 1f - (1f - it) * (1f - it) })
-        else spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+        else tween(110),
         label = "retroTvFocusScale"
     )
     return RetroTvFocusStyle(fill, stroke, if (focused) 2.dp else 1.dp, scale)
@@ -90,17 +86,12 @@ fun rememberRetroTvFocusStyle(
 fun Modifier.retroTvFocusLayer(focused: Boolean, scale: Float): Modifier =
     this
         .zIndex(if (focused) 1f else 0f)
-        .shadow(
-            elevation = if (focused) 12.dp else 0.dp,
-            shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
-            clip = false,
-            ambientColor = RetroTvFocusKit.CardFocusGlow,
-            spotColor = RetroTvFocusKit.CardFocusGlow
-        )
+        
         .graphicsLayer {
             scaleX = scale
             scaleY = scale
-            shadowElevation = if (focused) 12.dp.toPx() else 0f
+            shadowElevation = if (focused) 8.dp.toPx() else 0f
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
             clip = false
         }
 
@@ -145,8 +136,8 @@ fun Modifier.retroTvCenterOnFocus(
                     val deltaPx = targetItem.offset + targetItem.size / 2f - viewportHeight / 2f
                     if (kotlin.math.abs(deltaPx) > 1f) {
                         val distanceDp = kotlin.math.abs(deltaPx) / density.density
-                        val msPerInch = if (rapidNavigation) 50f else 110f
-                        val durationMs = (distanceDp / 160f * msPerInch).toInt().coerceIn(50, 1200)
+                        val msPerInch = if (rapidNavigation) 35f else 60f
+                        val durationMs = (distanceDp / 160f * msPerInch).toInt().coerceIn(60, 450)
                         listState.animateScrollBy(
                             deltaPx,
                             animationSpec = tween(durationMillis = durationMs)
